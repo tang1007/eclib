@@ -10,21 +10,20 @@
 #ifndef C_TYPE_H_
 #define C_TYPE_H_
 
-typedef char					T_I8;
-typedef unsigned char			T_U8;
+typedef char                T_I8;
+typedef unsigned char       T_U8;
 
-typedef short int				T_I16;
-typedef unsigned short int		T_U16;
+typedef short int           T_I16;
+typedef unsigned short int  T_U16;
 
-typedef int						T_I32;
-typedef unsigned int			T_U32;
+typedef int                 T_I32;
+typedef unsigned int        T_U32;
 
-typedef long long			    T_I64;
-typedef unsigned long long	    T_U64;
+typedef long long           T_I64;
+typedef unsigned long long  T_U64;
 
-
-typedef float					T_F32;
-typedef double					T_F64;
+typedef float               T_F32;
+typedef double              T_F64;
 
 #ifndef _WIN32
 
