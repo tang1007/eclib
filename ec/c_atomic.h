@@ -18,50 +18,50 @@
 
 namespace ec
 {
-	inline long atomic_addlong(long* pv, long iv) //return old value
-	{
+    inline long atomic_addlong(long* pv, long iv) //return old value
+    {
 #ifdef _WIN32         
-		return InterlockedExchangeAdd(pv, iv);
+        return InterlockedExchangeAdd(pv, iv);
 #else
-		return __sync_fetch_and_add(pv, iv);
+        return __sync_fetch_and_add(pv, iv);
 #endif
-	}
+    }
 
-	inline long atomic_setlong(long* pv, long iv) //return old value
-	{
+    inline long atomic_setlong(long* pv, long iv) //return old value
+    {
 #ifdef _WIN32
-		return InterlockedExchange(pv, iv);
+        return InterlockedExchange(pv, iv);
 #else
-		return __sync_lock_test_and_set(pv, iv);
+        return __sync_lock_test_and_set(pv, iv);
 #endif
-	}
+    }
 
-	inline int atomic_addint(int* pv, int iv) //return old value
-	{
+    inline int atomic_addint(int* pv, int iv) //return old value
+    {
 #ifdef _WIN32         
-		return InterlockedExchangeAdd((long*)pv, iv);
+        return InterlockedExchangeAdd((long*)pv, iv);
 #else
-		return __sync_fetch_and_add(pv, iv);
+        return __sync_fetch_and_add(pv, iv);
 #endif
-	}
+    }
 
-	inline int atomic_setint(int* pv, int iv) //return old value
-	{
+    inline int atomic_setint(int* pv, int iv) //return old value
+    {
 #ifdef _WIN32
-		return InterlockedExchange((long*)pv, iv);
+        return InterlockedExchange((long*)pv, iv);
 #else
-		return __sync_lock_test_and_set(pv, iv);
+        return __sync_lock_test_and_set(pv, iv);
 #endif
-	}
+    }
 
-	inline void* atomic_setptr(void** ppv, void* pv) //return old value
-	{
+    inline void* atomic_setptr(void** ppv, void* pv) //return old value
+    {
 #ifdef _WIN32
-		return (void*)InterlockedExchangePointer(ppv, pv);
+        return (void*)InterlockedExchangePointer(ppv, pv);
 #else
-		return (void*)__sync_lock_test_and_set(ppv, pv);
+        return (void*)__sync_lock_test_and_set(ppv, pv);
 #endif
-	}
+    }
 
 }; // ec
 #endif // C_ATOMIC_H
