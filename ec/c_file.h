@@ -326,7 +326,7 @@ namespace ec
 
         bool FastGrown(int nsize)
         {
-            if (Seek(nsize - 1, seek_end) < 0)
+            if (nsize < 0 || Seek(nsize - 1, seek_end) < 0)
                 return false;
             char c = 0;
             if (1 != Write(&c, 1))
