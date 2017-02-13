@@ -42,7 +42,7 @@ namespace ec
         char stmp[4096];
         int nr = 0, nc = 0, nstr = 0, nerr = 0;
 
-        char c, cnext;
+        int c, cnext;
         unsigned int np = 0;
 
         while ((c = fgetc(pf)) != EOF)
@@ -116,7 +116,7 @@ namespace ec
         char stmp[4096];
         int nr = 0, nc = 0, nstr = 0, nerr = 0;
 
-        char c, cnext;
+        int c, cnext;
         unsigned int np = 0;
 
         while ((c = fgetc(pf)) != EOF)
@@ -198,10 +198,11 @@ namespace ec
 
             OnReadFile();
 
-            char c, *pc = m_szLine;
+            int c;
+	        char *pc = m_szLine;
             int npos = 0;
             *pc = '\0';
-            while ((c = (char)fgetc(pf)) != EOF)
+            while ((c = fgetc(pf)) != EOF)
             {
                 if (c != '\n' && c != '\r')
                 {
@@ -209,6 +210,7 @@ namespace ec
                     {
                         *pc = c;
                         pc++;
+			            npos++;
                     }
                 }
                 else
@@ -216,6 +218,7 @@ namespace ec
                     if (m_szLine[0])
                         DoLine();
                     pc = m_szLine;
+		            npos = 0;
                 }
                 *pc = '\0';
             }
@@ -241,6 +244,7 @@ namespace ec
                     {
                         *pc = c;
                         pc++;
+			            npos++;
                     }
                 }
                 else
@@ -248,6 +252,7 @@ namespace ec
                     if (m_szLine[0])
                         DoLine();
                     pc = m_szLine;
+		               npos = 0;
                 }
                 *pc = '\0';
             }
