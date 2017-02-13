@@ -63,6 +63,24 @@ namespace ec
 #endif
     }
 
+    inline bool atomic_casint(int *ptr, int oldval, int newval)
+    {
+#ifdef _WIN32
+        return oldval == (int)InterlockedCompareExchange((long volatile *)ptr, newval, oldval);
+#else
+        return __sync_bool_compare_and_swap(ptr, oldval, newval);
+#endif
+    }
+
+    inline bool atomic_caslong(long *ptr, long oldval, long newval)
+    {
+#ifdef _WIN32
+        return oldval == InterlockedCompareExchange((long volatile *)ptr,newval,oldval );
+#else
+        return __sync_bool_compare_and_swap(ptr, oldval, newval);
+#endif
+    }
+
 }; // ec
 #endif // C_ATOMIC_H
 
