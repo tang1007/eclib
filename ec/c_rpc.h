@@ -1,6 +1,6 @@
 ﻿/*!
 \file c_rpc.h
-\brief 基于TCP的安全远程调用，request/reply (C/S)模型
+\brief 基于TCP的安全消息传输，支持request/reply和服务器publish发布推送
 
 ec library is free C++ library.
 
