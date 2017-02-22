@@ -324,6 +324,34 @@ namespace ec
             return Write(buf, ucount);
         };
 
+#ifdef FILE_GROWN_FILLZERO
+        bool FastGrown(int nsize)
+        {
+            char stmp[32768];
+            if (nsize < 0 || Seek(0, seek_end) < 0)
+                return false;
+            memset(stmp, 0, sizeof(stmp));
+            int n = nsize;
+            while (n > 0)
+            {
+                if (n >= (int)sizeof(stmp))
+                {
+                    if (Write(stmp, (unsigned int)sizeof(stmp)) != (int)sizeof(stmp))
+                        return false;
+                }
+                else
+                {
+                    if (Write(stmp, (unsigned int)n) != n)
+                        return false;
+                }
+                n -= (int)sizeof(stmp);
+            }
+#ifndef _WIN32
+            fsync(m_hFile);
+#endif
+            return true;
+        }
+#else
         bool FastGrown(int nsize)
         {
             if (nsize < 0 || Seek(nsize - 1, seek_end) < 0)
@@ -334,16 +362,17 @@ namespace ec
 #ifdef _WIN32
             if (!::SetEndOfFile(m_hFile))
                 return false;
+#else
+            fsync(m_hFile);
 #endif
             return true;
-        }
+            }
+#endif
+        };//CFile
 
-
-    };//CFile
-
-    /*!
-    \brief safe use file lock
-    */
+        /*!
+        \brief safe use file lock
+        */
     class cSafeFileLock
     {
     public:
@@ -368,7 +397,7 @@ namespace ec
         bool _bExc;
     };
 
-};//ec
+    };//ec
 
 
 #endif // C_FILE_H
