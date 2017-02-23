@@ -346,7 +346,10 @@ namespace ec
                 }
                 n -= (int)sizeof(stmp);
             }
-#ifndef _WIN32
+#ifdef _WIN32
+            if (!::SetEndOfFile(m_hFile))
+                return false;
+#else            
             fsync(m_hFile);
 #endif
             return true;
