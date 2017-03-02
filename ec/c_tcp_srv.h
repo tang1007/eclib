@@ -605,12 +605,13 @@ namespace ec
 
         virtual	void dojob()
         {
+            CheckNotLogin();
             int nRet;
             SOCKET	sAccept;
             struct  sockaddr_in		 addrClient;
             int		nClientAddrLen = sizeof(addrClient);
 
-            TIMEVAL tv01 = { 0,1000 * 100 };
+            TIMEVAL tv01 = { 1,0 };
             fd_set fdr;
             FD_ZERO(&fdr);
             FD_SET(m_sListen, &fdr);
@@ -663,7 +664,7 @@ namespace ec
         virtual void    OnConnected(unsigned int ucid, const char* sip) = 0;
         virtual void	OnRemovedUCID(unsigned int ucid) = 0;
         virtual ec::cTcpSvrWorkThread* CreateWorkThread() = 0;
-
+        virtual void    CheckNotLogin() = 0; //chech not login 
     protected:
         void	StopAndDeleteThreads()
         {

@@ -842,13 +842,13 @@ namespace ec
         */
         bool DoHttpRequest(unsigned int ucid)
         {
-            _plog->AddLog("MSG:read from ucid %u:", ucid);
+            /*_plog->AddLog("MSG:read from ucid %u:", ucid);
             _plog->AddLog2("   %s %s %s\r\n", _httppkg._method, _httppkg._request, _httppkg._version);
             int i, n = _httppkg._headers.GetNum();
             t_httpfileds* pa = _httppkg._headers.GetBuf();
             for (i = 0; i < n; i++)
                 _plog->AddLog2("    %s:%s\r\n", pa[i].name, pa[i].args);
-            _plog->AddLog2("\r\n");
+            _plog->AddLog2("\r\n");*/
 
             if (!stricmp("GET", _httppkg._method)) //GET
             {
@@ -1070,7 +1070,7 @@ namespace ec
 
         virtual void    OnConnected(unsigned int  ucid, const char* sip)
         {
-            _log.AddLog("MSG:ucid %u connected!", ucid);
+            _log.AddLog("MSG:ucid %u TCP connected from IP:%s!", ucid,sip);
             _clients.Add(ucid, sip);
         };
         virtual void	OnRemovedUCID(unsigned int ucid)
@@ -1078,6 +1078,7 @@ namespace ec
             if (_clients.Del(ucid))
                 _log.AddLog("MSG:ucid %u disconnected!", ucid);
         };
+        virtual void    CheckNotLogin() {}; 
     public:
         virtual ec::cTcpSvrWorkThread* CreateWorkThread()
         {
