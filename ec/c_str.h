@@ -256,11 +256,42 @@ namespace ec
         return strcasecmp(a, b);
 #endif
     }
+
     inline   char chr_upr(char c)
     {
         if (c >= 'a' && c <= 'z')
             return c - 'a' + 'A';
         return c;
+    }
+
+    inline char *str_upr(char *str)
+    {
+#ifdef _WIN32
+        return _strupr(str);
+#else
+        char *ptr = str;
+        while (*ptr != '\0 ') {
+            if (*ptr >= 'a' && *ptr <= 'z')
+                *ptr -= 'a' - 'A';
+            ptr++;
+        }
+        return str;
+#endif
+    }
+
+    inline char *str_lwr(char *str)
+    {
+#ifdef _WIN32
+        return _strlwr(str);
+#else
+        char *ptr = str;
+        while (*ptr != '\0 ') {
+            if (*ptr >= 'A' && *ptr <= 'Z')
+                *ptr += 'a' - 'A';
+            ptr++;
+        }
+        return str;
+#endif
     }
 
     /*!
@@ -306,11 +337,13 @@ namespace ec
         return sizeutf8 > 0;
 #endif
     }
+
     inline bool gb2utf8_s(const char* sgb, size_t sizegb, char *sutf8, size_t sizeout)
     {
         size_t sz = sizeout;
         return gb2utf8(sgb, sizegb, sutf8, sz);
     }
+
 };//namespace ec
 #endif //C_STR_H
 
