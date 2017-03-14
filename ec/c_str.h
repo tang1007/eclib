@@ -270,7 +270,7 @@ namespace ec
         return _strupr(str);
 #else
         char *ptr = str;
-        while (*ptr != '\0 ') {
+        while (*ptr) {
             if (*ptr >= 'a' && *ptr <= 'z')
                 *ptr -= 'a' - 'A';
             ptr++;
@@ -285,7 +285,7 @@ namespace ec
         return _strlwr(str);
 #else
         char *ptr = str;
-        while (*ptr != '\0 ') {
+        while (*ptr) {
             if (*ptr >= 'A' && *ptr <= 'Z')
                 *ptr += 'a' - 'A';
             ptr++;
