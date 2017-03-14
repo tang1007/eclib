@@ -858,9 +858,7 @@ namespace ec
             if (presult && sizeresult) //有应答，自动按照发送数据长度选择压缩方式
             {
                 RPCCOMPRESS cp = rpccomp_none;
-                if (sizeresult > 512 * 1024)
-                    cp = rpccomp_zlib;
-                else if (sizeresult > 512)
+                if (sizeresult > 1024)
                     cp = rpccomp_lz4;
                 MakePkg(presult, sizeresult, rpcmsg_reply, cp, seqno, usrinfo._pswsha1, pout);//加密打包
             }
@@ -997,6 +995,9 @@ namespace ec
         inline void SetSrvName(const char* sname)
         {
             strncpy(_sname, sname, sizeof(_sname) - 1);
+        }
+        inline const char* GetSrvName() {
+            return _sname;
         }
     protected:
         virtual int _OnNotify(t_rpcnotify* pnotify) = 0; //只处理logout

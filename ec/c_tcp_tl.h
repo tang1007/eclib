@@ -174,6 +174,53 @@ namespace ec
 		return s;
 	}
 
+    //return send bytes size or -1 for error,use for block or nonblocking  mode
+    inline int tcp_send(SOCKET s, void* pbuf,  int nsize)
+    {
+        char *ps = (char*)pbuf;
+        int  nsend = 0;
+        int  nret;
+        while (nsend < nsize)
+        {
+#ifdef _WIN32            
+            nret = ::send(s, ps + nsend, nsize - nsend, 0);            
+            if (SOCKET_ERROR == nret)
+                return SOCKET_ERROR;
+            else if (0 == nret)//for nonblocking  mode
+            {
+                TIMEVAL tv01 = { 0,1000 * 100 };
+                fd_set fdw;
+                FD_ZERO(&fdw);
+                FD_SET(s, &fdw);
+                if (-1 == ::select(0, NULL, &fdw, NULL, &tv01))
+                    return SOCKET_ERROR;                
+            }
+            else
+                nsend += nret;            
+#else
+            nret = ::send(s, ps + nsend, nsize - nsend, MSG_DONTWAIT | MSG_NOSIGNAL);
+            if (SOCKET_ERROR == nret)
+            {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) // nonblocking  mode
+                {
+                    TIMEVAL tv01 = { 0,1000 * 100 };
+                    fd_set fdw;
+                    FD_ZERO(&fdw);
+                    FD_SET(s, &fdw);
+                    if (-1 == ::select(s + 1, NULL, &fdw, NULL, &tv01))                    
+                        return SOCKET_ERROR;
+                    continue;
+                }
+                else
+                    return SOCKET_ERROR;
+            }
+            else
+                nsend += nret;
+#endif
+        }
+        return nsend;
+    };
+    /*
 	inline int   tcp_send(SOCKET s, void *pd, int nsize)
 	{
 		if (s == INVALID_SOCKET)
@@ -202,7 +249,7 @@ namespace ec
 			return SOCKET_ERROR;
 		return nRet;
 	}	
-
+    */
 	inline  int tcp_read(SOCKET s, void* pbuf, int nbufsize, int nTimeOutMsec)
 	{
 		if (s == INVALID_SOCKET)

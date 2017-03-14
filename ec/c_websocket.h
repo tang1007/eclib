@@ -213,7 +213,7 @@ namespace ec
                 }
                 sout[pos++] = *_ps++;
                 if (pos >= outsize)
-                    return false;
+                    return 0;
             }
             sout[pos] = '\0';
             return pos;

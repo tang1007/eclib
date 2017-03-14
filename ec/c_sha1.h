@@ -20,7 +20,7 @@ namespace sha1
 		\param pout [out] Not less than 20 bytes
 		\remark CAL function add by kipway@outlook.com
 		*/
-		bool CAL(void* pd, unsigned size, void* pout)
+		bool CAL(const void* pd, unsigned size, void* pout)
 		{
 			Reset();
 			Input((unsigned char *)pd, size);
@@ -380,7 +380,7 @@ namespace sha1
 
 namespace ec
 {
-	inline bool encode_sha1(void* pd, unsigned size, void* pout)
+	inline bool encode_sha1(const void* pd, unsigned int size, void* pout)
 	{
 		sha1::cSha1 sh;
 		return sh.CAL(pd, size, pout);
