@@ -46,26 +46,34 @@ namespace ec
         }
     }
 
-    inline char* str_ncpy(char* sd, const char* ss, size_t nsize)
+    inline char* str_ncpy(char* sd, const char* ss, size_t nsize)//like strncpy,add null to the end of sd
     {
-        size_t ns;
-        if (!sd)
-            return 0;
+        size_t n = 0;
+        char* sret = sd;
+        if (!sret)
+            return sret;
+        *sd = 0;
         if (!ss || !(*ss) || !nsize)
-        {
-            *sd = 0;
             return sd;
-        }
-        ns = strlen(ss) + 1;
-        if (ns > nsize) {
-            ns = nsize - 1;
-            memcpy(sd, ss, ns);
-            sd[ns] = 0;
-        }
-        else
-            memcpy(sd, ss, ns);
-        return sd;
+        while (++n < nsize && *ss)
+            *sd++ = *ss++;
+        *sd = 0;
+        return sret;
+    };
 
+    inline size_t str_lcpy(char* sd, const char* ss, size_t nsize)// like strlcpy for linux
+    {        
+        size_t n = 0;
+        char* sret = sd;
+        if (!sret)
+            return 0;
+        *sd = 0;
+        if (!ss || !(*ss) || !nsize)
+            return 0;
+        while (++n < nsize && *ss)
+            *sd++ = *ss++;
+        *sd = 0;
+        return --n;
     };
 
     ///\brief filter string
