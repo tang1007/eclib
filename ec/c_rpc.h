@@ -42,16 +42,20 @@ ec library is free C++ library.
 #endif
 
 #include "c_array.h"
+#include "c_str.h"
+#include "c_log.h"
 #include "c_tcp_srv.h"
 #include "c_crc32.h"
 #include "c_sha1.h"
-#include "c_str.h"
 #include "c_thread.h"
 #include "c_trace.h"
 #include "c_atomic.h"
 
 #include "c_lz4s.h"   //LZ4 src
+
+#ifdef RPC_USE_ZLIB
 #include "c_zlibs.h"  //ZLIB src
+#endif
 
 /*!
 \brief 消息类型
@@ -74,7 +78,9 @@ enum RPCCOMPRESS
 {
     rpccomp_none = 0, //!<不压缩
     rpccomp_lz4 = 1, //!<LZ4压缩,压缩率和LZO一样,但速度更快
+#ifdef RPC_USE_ZLIB
     rpccomp_zlib = 2, //!<ZLIB压缩
+#endif
 };
 
 /*!
@@ -590,6 +596,7 @@ namespace ec
                     ulen = size;
                 }
             }
+#ifdef RPC_USE_ZLIB
             else if (compress == rpccomp_zlib)
             {
                 ulen = size + (size / 1024) * 32 + 1024;
@@ -603,6 +610,7 @@ namespace ec
                     ulen = size;
                 }
             }
+#endif
             else
             {
                 pdata = (void*)pd;
@@ -678,6 +686,8 @@ namespace ec
                 pmsg = pdes;
                 ulen = udn;
             }
+
+#ifdef RPC_USE_ZLIB
             else if (pkg->comp == rpccomp_zlib)
             {
                 size_t uen = CNetInt::NetUInt(pkg->size_en), udn = CNetInt::NetUInt(pkg->size_dn);
@@ -690,6 +700,7 @@ namespace ec
                 pmsg = pdes;
                 ulen = udn;
             }
+#endif
             else
             {
                 MakeSysMsg("msgsys,-1,unkown compress type!", CNetInt::NetUInt(pkg->seqno), pout);
@@ -1242,6 +1253,7 @@ namespace ec
                     ulen = size;
                 }
             }
+#ifdef RPC_USE_ZLIB
             else if (compress == rpccomp_zlib)
             {
                 ulen = size + (size / 1024) * 32 + 1024;
@@ -1255,6 +1267,7 @@ namespace ec
                     ulen = size;
                 }
             }
+#endif
             else
             {
                 pdata = (void*)pd;
@@ -1474,6 +1487,7 @@ namespace ec
                 pmsg = pdes;
                 ulen = udn;
             }
+#ifdef RPC_USE_ZLIB
             else if (pkg->comp == rpccomp_zlib)
             {
                 size_t uen = CNetInt::NetUInt(pkg->size_en), udn = CNetInt::NetUInt(pkg->size_dn);
@@ -1483,6 +1497,7 @@ namespace ec
                 pmsg = pdes;
                 ulen = udn;
             }
+#endif
             else
                 return roc_c_disconnected_msgerr;
 
