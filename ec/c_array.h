@@ -152,6 +152,58 @@ namespace ec {
             _ubufsize = itemsize;
         }
 
+        bool InsertAt(size_t pos, const T *pbuf, size_t usize)// insert before
+        {
+            if (!pbuf || !usize)
+                return false;
+            if (pos >= _usize)
+                return Add(pbuf, usize);
+            if (!Grown(usize))
+                return false;                        
+            memmove(_pbuf + pos + usize, _pbuf + pos, (_usize - pos) * sizeof(T));
+            memcpy(_pbuf + pos, pbuf, usize * sizeof(T));
+            _usize += usize;
+            return true;            
+        }
+        bool Replace(size_t pos, size_t rsize, const T *pbuf, size_t usize)
+        {                       
+            if (!rsize)
+                return InsertAt(pos, pbuf, usize);  // insert
+                
+            if (!pbuf || !usize) //delete
+            {
+                if (pos + rsize >= _usize) {
+                    _usize = pos;
+                    return true;
+                }
+                memmove(_pbuf + pos, _pbuf + pos + rsize, (_usize - (pos + rsize)) * sizeof(T));
+                _usize = _usize - rsize;
+                return true;
+            }
+            if (pos >= _usize) // add
+                return Add(pbuf, usize);
+           
+            if (pos + rsize >= _usize)//outof end
+            {
+                _usize = pos;
+                return Add(pbuf, usize);
+            }
+           
+            if (usize > rsize) {
+                if (!Grown(usize - rsize))
+                    return false;
+            }
+            if(rsize != usize)
+                memmove(_pbuf + pos + usize, _pbuf + pos + rsize, (_usize - (pos + rsize)) * sizeof(T));
+            memcpy(_pbuf + pos, pbuf, usize * sizeof(T));
+            _usize = _usize + usize - rsize;
+            return true;
+        }
+
+        inline bool Delete(size_t pos, size_t rsize)
+        {
+            return Replace(pos,rsize,0,0);
+        }
 
 #ifdef _WIN32
         static int  compare(void* pParam, const void *p1, const void* p2);

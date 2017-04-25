@@ -18,10 +18,6 @@ ec library is free C++ library.
 #include <mstcpip.h>
 #else
 #include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <pthread.h>
-#include <fcntl.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -29,9 +25,7 @@ ec library is free C++ library.
 #include <sys/select.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
-#include <string.h>
 #include <errno.h>
-#include <sys/epoll.h>
 
 #ifndef SOCKET
 #define SOCKET int
@@ -179,7 +173,7 @@ namespace ec
     {
         char *ps = (char*)pbuf;
         int  nsend = 0;
-        int  nret;
+        int  nret;        
         while (nsend < nsize)
         {
 #ifdef _WIN32            
@@ -220,36 +214,7 @@ namespace ec
         }
         return nsend;
     };
-    /*
-	inline int   tcp_send(SOCKET s, void *pd, int nsize)
-	{
-		if (s == INVALID_SOCKET)
-			return SOCKET_ERROR;
-
-		TIMEVAL tv01 = { 2,0 };
-		fd_set fdw;
-		FD_ZERO(&fdw);
-		FD_SET(s, &fdw);
-
-#ifdef _WIN32
-		int nRet = ::select(0, NULL, &fdw, NULL, &tv01);
-#else
-		int nRet = ::select(s + 1, NULL, &fdw, NULL, &tv01);
-#endif
-		if (SOCKET_ERROR == nRet)
-			return SOCKET_ERROR;
-		if (nRet == 0)
-			return 0;
-#ifdef _WIN32
-		nRet = ::send(s, (char*)pd, nsize, 0);
-#else
-		nRet = ::send(s, (char*)pd, nsize, MSG_NOSIGNAL);
-#endif
-		if (SOCKET_ERROR == nRet)
-			return SOCKET_ERROR;
-		return nRet;
-	}	
-    */
+    
 	inline  int tcp_read(SOCKET s, void* pbuf, int nbufsize, int nTimeOutMsec)
 	{
 		if (s == INVALID_SOCKET)

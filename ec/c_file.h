@@ -109,7 +109,7 @@ namespace ec
                 if (nOpenFlags & OF_TRUNC)
                     dwCreateFlag = CREATE_ALWAYS;// create file,if exits create it
                 else
-                    dwCreateFlag = OPEN_ALWAYS;// open file,if not exist create it
+                    dwCreateFlag = CREATE_NEW;// Creates a new file, only if it does not already exist.
             }
             else
                 dwCreateFlag = OPEN_EXISTING;
@@ -173,11 +173,16 @@ namespace ec
             return (int)dwRead;
         }
 
-        bool Lock(long long offset, long long lsize, bool bExc)
+        bool Lock(long long offset, long long lsize, bool bExc) // lsize 0 means to EOF
         {
             UV pos, sz;
             pos.v = offset;
-            sz.v = lsize;
+            if (!lsize) {
+                sz.h = 0xffffffff;
+                sz.l = 0xffffffff;
+            }
+            else
+                sz.v = lsize;
 
             OVERLAPPED	op;
             memset(&op, 0, sizeof(op));
@@ -189,11 +194,16 @@ namespace ec
                 uf = LOCKFILE_EXCLUSIVE_LOCK;
             return LockFileEx(m_hFile, uf, 0, sz.l, sz.h, &op) != 0;
         }
-        bool Unlock(long long offset, long long lsize)
+        bool Unlock(long long offset, long long lsize) // lsize 0 means to EOF
         {
             UV pos, sz;
             pos.v = offset;
-            sz.v = lsize;
+            if (!lsize) {
+                sz.h = 0xffffffff;
+                sz.l = 0xffffffff;
+            }
+            else
+                sz.v = lsize;
 
             OVERLAPPED	op;
             memset(&op, 0, sizeof(op));
@@ -229,7 +239,7 @@ namespace ec
                 break;
             }
             if (nOpenFlags & OF_CREAT)
-                oflags |= O_CREAT;
+                oflags |= O_CREAT | O_EXCL;
 
             if (nOpenFlags & OF_TRUNC)
                 oflags |= O_TRUNC;
@@ -281,7 +291,7 @@ namespace ec
             return (int)nr;
         }
 
-        bool Lock(long long offset, long long lsize, bool bExc)
+        bool Lock(long long offset, long long lsize, bool bExc) // lsize 0 means to EOF
         {
             struct flock    lock;
 
@@ -297,7 +307,7 @@ namespace ec
             return !(fcntl(m_hFile, F_SETLKW, &lock) < 0);
         }
 
-        bool Unlock(long long offset, long long lsize)
+        bool Unlock(long long offset, long long lsize) // lsize 0 means to EOF
         {
             struct flock    lock;
 

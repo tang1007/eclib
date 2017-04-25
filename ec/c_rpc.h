@@ -45,6 +45,7 @@ ec library is free C++ library.
 #include "c_str.h"
 #include "c_log.h"
 #include "c_tcp_srv.h"
+#include "c_tcp_cli.h"
 #include "c_crc32.h"
 #include "c_sha1.h"
 #include "c_thread.h"
@@ -158,7 +159,7 @@ namespace ec
         unsigned char sync;      //!<起始固定字符,0xA9
         char          type;      //!<msg类型,
         char          comp;      //!<压缩方式,0:不压缩;1:LZ4;2:ZLIB;
-        unsigned char cres;      //!<保留,0
+        unsigned char cflag;     //!< D0=1:没加密
         unsigned int  seqno;     //!<消息序列号(网络字节顺序),应答时使用请求的序列号
 
         unsigned int  size_en;   //!<压缩后的长度(网络字节顺序),用于消息重组,如果不压缩,则和size_dn相同
@@ -287,13 +288,15 @@ namespace ec
             if (pkg->type >= rpcmsg_request) //应用层消息需要解密
             {
                 register unsigned int i;
-                unsigned int *pu4 = (unsigned int*)puc, u4 = sizemsg / 4;//先解密
-                unsigned int *pmk4 = (unsigned int*)_pswsha1;
-                for (i = 0; i < u4; i++) //先按照4字节对齐解
-                    pu4[i] ^= pmk4[i % 5];
-                for (i = u4 * 4; i < sizemsg; i++)//剩下的单字节解
-                    puc[i] ^= _pswsha1[i % 20];
-
+                if (!(pkg->cflag & 0x01))
+                {
+                    unsigned int *pu4 = (unsigned int*)puc, u4 = sizemsg / 4;//先解密
+                    unsigned int *pmk4 = (unsigned int*)_pswsha1;
+                    for (i = 0; i < u4; i++) //先按照4字节对齐解
+                        pu4[i] ^= pmk4[i % 5];
+                    for (i = u4 * 4; i < sizemsg; i++)//剩下的单字节解
+                        puc[i] ^= _pswsha1[i % 20];
+                }
                 register unsigned int	crc = 0xffffffff;
                 for (i = 0; i < sizemsg; i++) //计算CRC32
                     crc = (crc >> 8) ^ crc32_table[(crc & 0xFF) ^ puc[i]]; //解密后计算数据CRC32
@@ -333,12 +336,22 @@ namespace ec
     public:
         cRpcClientMap() : _map(1024 * 16)
         {
+            _bEncryptData = true;
             _tks = ::time(NULL);
             _tks <<= 24;
             _lseqno = 1;
         }
         long _lseqno;
+        inline void SetEncryptData(bool bEncrypt)
+        {
+            _bEncryptData = bEncrypt;
+        }
+        inline bool IsEncryptData()
+        {
+            return _bEncryptData;
+        }
     protected:
+        bool _bEncryptData;
         unsigned long long _tks;
         cCritical _cs;
         tMap<unsigned int, cRpcCon*> _map;
@@ -617,7 +630,10 @@ namespace ec
                 ph->comp = rpccomp_none; //不压缩
                 ulen = size;
             }
-            ph->cres = 0;
+            if (_pcli->IsEncryptData())
+                ph->cflag = 0;
+            else
+                ph->cflag = 1;
 
             ph->seqno = CNetInt::NetUInt(seqno);
             ph->size_en = CNetInt::NetUInt((unsigned int)ulen);
@@ -639,13 +655,15 @@ namespace ec
                 for (i = 0; i < ul; i++) //加密同时计算CRC32
                     crc = (crc >> 8) ^ crc32_table[(crc & 0xFF) ^ puc[i]];//加密前验证数据
                 ph->crc32msg = CNetInt::NetUInt(crc ^ 0xffffffff);
-
-                unsigned int *pu4 = (unsigned int *)puc, ul4 = ul / 4; //加密
-                unsigned int *pmk4 = (unsigned int*)pmask;
-                for (i = 0; i < ul4; i++)
-                    pu4[i] ^= pmk4[i % 5];
-                for (i = ul4 * 4; i < ul; i++)
-                    puc[i] ^= pmask[i % 20];
+                if (_pcli->IsEncryptData())
+                {
+                    unsigned int *pu4 = (unsigned int *)puc, ul4 = ul / 4; //加密
+                    unsigned int *pmk4 = (unsigned int*)pmask;
+                    for (i = 0; i < ul4; i++)
+                        pu4[i] ^= pmk4[i % 5];
+                    for (i = ul4 * 4; i < ul; i++)
+                        puc[i] ^= pmask[i % 20];
+                }
             }
             else
                 ph->crc32msg = CNetInt::NetUInt(crc32(puc, (unsigned int)ulen));
@@ -901,11 +919,11 @@ namespace ec
                 ntf.out[0] = 0;
                 _OnNotify(&ntf);
                 if (_plog)
-                    _plog->AddLog("MSG: Server(%s) UCID %u TCP disconnected from %s", _srvname,ucid, usrinfo._sip);
+                    _plog->AddLog("MSG: Server(%s) UCID %u TCP disconnected from %s", _srvname, ucid, usrinfo._sip);
                 return;
             }
             if (_plog)
-                _plog->AddLog("MSG: Server(%s) UCID %u TCP disconnected from %s", _srvname,ucid, usrinfo._sip);
+                _plog->AddLog("MSG: Server(%s) UCID %u TCP disconnected from %s", _srvname, ucid, usrinfo._sip);
         }
         virtual bool	OnReadBytes(unsigned int ucid, const void* pdata, unsigned int usize) //返回false表示要断开客户端连接.
         {
@@ -1010,6 +1028,14 @@ namespace ec
         inline const char* GetSrvName() {
             return _sname;
         }
+        inline void SetEncryptData(bool bEncrypt)
+        {
+            _clients.SetEncryptData(bEncrypt);
+        }
+        inline bool IsEncryptData()
+        {
+            return _clients.IsEncryptData();
+        }
     protected:
         virtual int _OnNotify(t_rpcnotify* pnotify) = 0; //只处理logout
         virtual void    OnConnected(unsigned int ucid, const char* sip)
@@ -1037,7 +1063,7 @@ namespace ec
                     _plog->AddLog("MSG: Server(%s) UCID %u TCP disconnected from %s", _sname, ucid, usrinfo._sip);
                 return;
             }
-            if(_plog)
+            if (_plog)
                 _plog->AddLog("MSG: Server(%s) UCID %u TCP disconnected from %s", _sname, ucid, usrinfo._sip);
         };
 
@@ -1177,6 +1203,7 @@ namespace ec
     {
     public:
         cRpc_C() : _rbuf(256 * 1024), _msgs(256 * 1024), _msgr(256 * 1024), _msgput(256 * 1024) {
+            _bEncryptData = true;
             _wport = 0;
             _sip[0] = 0;
             _usr[0] = 0;
@@ -1196,6 +1223,17 @@ namespace ec
 
         virtual ~cRpc_C() {
         }
+
+        inline void SetEncryptData(bool bEncrypt)
+        {
+            _bEncryptData = bEncrypt;
+        }
+        inline bool IsEncryptData()
+        {
+            return _bEncryptData;
+        }
+    protected:
+        bool _bEncryptData;
     protected:
         unsigned short _wport;
         char _sip[16];
@@ -1274,7 +1312,10 @@ namespace ec
                 ph->comp = rpccomp_none; //不压缩
                 ulen = size;
             }
-            ph->cres = 0;
+            if (_bEncryptData)
+                ph->cflag = 0;
+            else
+                ph->cflag = 1;
 
             ph->seqno = CNetInt::NetUInt(seqno);
             ph->size_en = CNetInt::NetUInt((unsigned int)ulen);
@@ -1297,12 +1338,15 @@ namespace ec
                     crc = (crc >> 8) ^ crc32_table[(crc & 0xFF) ^ puc[i]];//加密前验证数据
                 ph->crc32msg = CNetInt::NetUInt(crc ^ 0xffffffff);
 
-                unsigned int *pu4 = (unsigned int *)puc, ul4 = ul / 4; //加密
-                unsigned int *pmk4 = (unsigned int*)pmask;
-                for (i = 0; i < ul4; i++)
-                    pu4[i] ^= pmk4[i % 5];
-                for (i = ul4 * 4; i < ul; i++)
-                    puc[i] ^= pmask[i % 20];
+                if (_bEncryptData)
+                {
+                    unsigned int *pu4 = (unsigned int *)puc, ul4 = ul / 4; //加密
+                    unsigned int *pmk4 = (unsigned int*)pmask;
+                    for (i = 0; i < ul4; i++)
+                        pu4[i] ^= pmk4[i % 5];
+                    for (i = ul4 * 4; i < ul; i++)
+                        puc[i] ^= pmask[i % 20];
+                }
             }
             else
                 ph->crc32msg = CNetInt::NetUInt(crc32(puc, (unsigned int)ulen));
@@ -1446,13 +1490,15 @@ namespace ec
             if (pkg->type >= rpcmsg_request) //应用层消息需要解密
             {
                 register unsigned int i;
-                unsigned int *pu4 = (unsigned int*)puc, u4 = sizemsg / 4;//先解密
-                unsigned int *pmk4 = (unsigned int*)_pswsha1;
-                for (i = 0; i < u4; i++) //先按照4字节对齐解
-                    pu4[i] ^= pmk4[i % 5];
-                for (i = u4 * 4; i < sizemsg; i++)//剩下的单字节解
-                    puc[i] ^= _pswsha1[i % 20];
-
+                if (!(pkg->cflag & 0x01))
+                {
+                    unsigned int *pu4 = (unsigned int*)puc, u4 = sizemsg / 4;//先解密
+                    unsigned int *pmk4 = (unsigned int*)_pswsha1;
+                    for (i = 0; i < u4; i++) //先按照4字节对齐解
+                        pu4[i] ^= pmk4[i % 5];
+                    for (i = u4 * 4; i < sizemsg; i++)//剩下的单字节解
+                        puc[i] ^= _pswsha1[i % 20];
+                }
                 register unsigned int	crc = 0xffffffff;
                 for (i = 0; i < sizemsg; i++) //计算CRC32
                     crc = (crc >> 8) ^ crc32_table[(crc & 0xFF) ^ puc[i]]; //解密后计算数据CRC32
@@ -1613,6 +1659,389 @@ namespace ec
         inline void SetDisConnect() //设置重连,由外部调用
         {
             _bdisconnect = 1;
+        }
+
+        /*!
+        \brief 返回状态,-1:未连接; 0:握手中; 1:已连接
+        */
+        inline int GetStatus()
+        {
+            return _nstatus;
+        }
+        inline bool IsConnect()
+        {
+            return _nstatus == 1;
+        }
+    };
+
+    /*!
+    \breif RPC auto reconnect client
+    */
+    class cRpcAutoClient : public cTcpCli
+    {
+    public:
+        cRpcAutoClient() : _rbuf(256 * 1024), _msgs(256 * 1024), _msgr(256 * 1024), _msgput(256 * 1024) {
+            _bEncryptData = true;
+            _wport = 0;
+            _sip[0] = 0;
+            _usr[0] = 0;
+            _psw[0] = 0;
+
+            _sock = INVALID_SOCKET;
+            _nstatus = -1;
+            _seqno = 0;
+        };
+
+        virtual ~cRpcAutoClient() {
+            Close();
+        }
+        inline void SetEncryptData(bool bEncrypt)
+        {
+            _bEncryptData = bEncrypt;
+        }
+        inline bool IsEncryptData()
+        {
+            return _bEncryptData;
+        }
+    protected:
+        bool _bEncryptData;
+    protected:
+        virtual void OnLoginEvent(RPC_CLINET_EVT nEvent) = 0;
+        virtual void OnClientMsg(RPCMSGTYPE type, unsigned int seqno, const unsigned char *pmsg, size_t msglen) = 0;
+
+        virtual void OnConnected()
+        {
+            _rbuf.ClearData();
+            _msgs.ClearData();
+            _msgr.ClearData();
+
+            SetSocketKeepAlive(_sock, false);
+            sprintf(_msgsh, "connect,%s", _usr);
+            MakePkg(_msgsh, strlen(_msgsh), rpcmsg_sh, rpccomp_none, _seqno++, 0, &_msgs);
+            Send(_msgs.GetBuf(), _msgs.GetNum());
+            _nstatus = 0;
+        }
+        virtual void OnDisConnected(int where, int nerrcode) {
+            _nstatus = -1;
+            if (where > 0)
+                OnLoginEvent(roc_c_disconnected_tcp);
+            else if (where < 0)
+                OnLoginEvent(rpc_c_connect_tcperr);
+        };
+        virtual void OnRead(const void* pd, int nsize)
+        {
+            const unsigned char* s = (const unsigned char*)pd;
+            _rbuf.Add(s, nsize);
+            int nr = DoLeftData(&_msgr);
+            while (nr > 0)
+            {
+                DoMsg();
+                nr = DoLeftData(&_msgr);
+            };
+            _cpbufu.Free();
+            _msgs.ClearAndFree(1024 * 1024 * 2);
+            _msgr.ClearAndFree(1024 * 1024 * 2);
+        }
+    protected:
+        unsigned short _wport;
+        char _sip[16];
+        char _usr[32];
+        char _psw[40];
+        unsigned char _pswsha1[20]; //密码的sha1摘要，用于解密
+
+        volatile  int   _nstatus;//!<状态,-1,未连接,0已连接,1已登录
+        tArray<unsigned char> _rbuf;//!<未处理字符数组
+        tArray<unsigned char> _msgs;//!<发送缓冲区
+        tArray<unsigned char> _msgr;//!<接收到的完整消息
+
+        tArray<unsigned char> _msgput;//!<发送缓冲区
+
+        cReUseMem _cpbufc;//压缩内存
+        cReUseMem _cpbufu;//解压内存
+
+        char _msgsh[1024];//握手消息用
+        volatile unsigned int _seqno;
+
+        cCritical _csmk;
+    private:
+        bool MakePkg(const void* pd, size_t size, RPCMSGTYPE msgtype, RPCCOMPRESS compress, unsigned int seqno, const unsigned char* pmask, tArray<unsigned char>* pPkg)
+        {
+            ec::cSafeLock Lck(&_csmk);//打包公用,发送和应答公用
+
+            unsigned char shead[sizeof(t_rpcpkg)] = { 0 };
+            pPkg->ClearData();
+            pPkg->Add(shead, sizeof(t_rpcpkg));
+            t_rpcpkg* ph = (t_rpcpkg*)pPkg->GetBuf();
+
+            ph->sync = 0xA9;
+            ph->type = (char)msgtype;
+
+            void* pdata;
+            size_t ulen = size;
+            if (compress == rpccomp_lz4)
+            {
+                ulen = size + (size / 1024) * 32 + 1024;
+                pdata = _cpbufc.Alloc(ulen);
+                if (pdata && encode_lz4(pd, size, pdata, &ulen))
+                    ph->comp = rpccomp_lz4; //lz4压缩
+                else //压缩失败
+                {
+                    pdata = (void*)pd;
+                    ph->comp = rpccomp_none; //不压缩
+                    ulen = size;
+                }
+            }
+#ifdef RPC_USE_ZLIB
+            else if (compress == rpccomp_zlib)
+            {
+                ulen = size + (size / 1024) * 32 + 1024;
+                pdata = _cpbufc.Alloc(ulen);
+                if (pdata && encode_zlib(pd, size, pdata, &ulen))
+                    ph->comp = rpccomp_zlib; //zlib压缩
+                else //压缩失败
+                {
+                    pdata = (void*)pd;
+                    ph->comp = rpccomp_none; //不压缩
+                    ulen = size;
+                }
+            }
+#endif
+            else
+            {
+                pdata = (void*)pd;
+                ph->comp = rpccomp_none; //不压缩
+                ulen = size;
+            }
+            if (_bEncryptData)
+                ph->cflag = 0;
+            else
+                ph->cflag = 1;
+
+            ph->seqno = CNetInt::NetUInt(seqno);
+            ph->size_en = CNetInt::NetUInt((unsigned int)ulen);
+            ph->size_dn = CNetInt::NetUInt((unsigned int)size);
+
+            if (!pPkg->Add((const unsigned char*)pdata, ulen))
+                return false;
+
+            ph = (t_rpcpkg*)pPkg->GetBuf(); //必须重新读取头部
+
+            _cpbufc.Free();//释放大内存
+            unsigned char* puc = pPkg->GetBuf() + sizeof(t_rpcpkg);
+            if (pmask && msgtype >= rpcmsg_request)//应用层消息需要加密
+            {
+                unsigned int ul = (unsigned int)ulen;
+                register unsigned int	crc = 0xffffffff;
+                register unsigned int i;
+
+                for (i = 0; i < ul; i++) //先计算CRC32
+                    crc = (crc >> 8) ^ crc32_table[(crc & 0xFF) ^ puc[i]];//加密前验证数据
+                ph->crc32msg = CNetInt::NetUInt(crc ^ 0xffffffff);
+
+                if (_bEncryptData)
+                {
+                    unsigned int *pu4 = (unsigned int *)puc, ul4 = ul / 4; //加密
+                    unsigned int *pmk4 = (unsigned int*)pmask;
+                    for (i = 0; i < ul4; i++)
+                        pu4[i] ^= pmk4[i % 5];
+                    for (i = ul4 * 4; i < ul; i++)
+                        puc[i] ^= pmask[i % 20];
+                }
+            }
+            else
+                ph->crc32msg = CNetInt::NetUInt(crc32(puc, (unsigned int)ulen));
+            ph->crc32head = CNetInt::NetUInt(crc32(ph, 20));
+            return true;
+        }
+    protected:
+
+
+        int DoLeftData(tArray<unsigned char>* pout)//处理生效的报文
+        {
+            pout->ClearData();
+            unsigned int   ulen = _rbuf.GetSize();
+            unsigned char* pu = _rbuf.GetBuf();
+            if (ulen < sizeof(t_rpcpkg))
+            {
+                _rbuf.ReduceMem(1024 * 128);//回收多余的内存
+                return 0;
+            }
+            //验证
+            t_rpcpkg* pkg = (t_rpcpkg*)pu;
+            unsigned int c1 = crc32(pu, 20);
+            if (pkg->sync != 0xA9 || c1 != CNetInt::NetUInt(pkg->crc32head))
+                return roc_c_disconnected_msgerr;//报文错误
+            unsigned int sizemsg = CNetInt::NetUInt(pkg->size_en);
+
+            if (ulen < sizemsg + sizeof(t_rpcpkg))
+                return 0;
+            pout->Add(pu, sizemsg + sizeof(t_rpcpkg));
+            _rbuf.LeftMove(sizemsg + sizeof(t_rpcpkg));
+            unsigned char* puc = pout->GetBuf() + sizeof(t_rpcpkg);
+            if (pkg->type >= rpcmsg_request) //应用层消息需要解密
+            {
+                register unsigned int i;
+                if (!(pkg->cflag & 0x01)) {
+                    unsigned int *pu4 = (unsigned int*)puc, u4 = sizemsg / 4;//先解密
+                    unsigned int *pmk4 = (unsigned int*)_pswsha1;
+                    for (i = 0; i < u4; i++) //先按照4字节对齐解
+                        pu4[i] ^= pmk4[i % 5];
+                    for (i = u4 * 4; i < sizemsg; i++)//剩下的单字节解
+                        puc[i] ^= _pswsha1[i % 20];
+                }
+                register unsigned int	crc = 0xffffffff;
+                for (i = 0; i < sizemsg; i++) //计算CRC32
+                    crc = (crc >> 8) ^ crc32_table[(crc & 0xFF) ^ puc[i]]; //解密后计算数据CRC32
+                if (pkg->crc32msg != CNetInt::NetUInt(crc ^ 0xffffffff))
+                    return -1;
+            }
+            else
+            {
+                if (pkg->crc32msg != CNetInt::NetUInt(crc32(puc, sizemsg)))
+                    return roc_c_disconnected_msgerr;
+            }
+            return 1;
+        }
+
+        int DoMsg() //处理存放于_msgr中的消息,返回<0 为断开错误码,要断开连接
+        {
+            t_rpcpkg* pkg = (t_rpcpkg*)_msgr.GetBuf();
+            void* pmsg;
+            size_t ulen;
+
+            if (pkg->comp == rpccomp_none)
+            {
+                pmsg = pkg->msg;
+                ulen = CNetInt::NetUInt(pkg->size_en);
+            }
+            else if (pkg->comp == rpccomp_lz4)
+            {
+                size_t uen = CNetInt::NetUInt(pkg->size_en), udn = CNetInt::NetUInt(pkg->size_dn);
+                void *pdes = _cpbufu.Alloc(udn);
+                if (!decode_lz4(pkg->msg, uen, pdes, &udn))
+                    return roc_c_disconnected_msgerr;
+                pmsg = pdes;
+                ulen = udn;
+            }
+#ifdef RPC_USE_ZLIB
+            else if (pkg->comp == rpccomp_zlib)
+            {
+                size_t uen = CNetInt::NetUInt(pkg->size_en), udn = CNetInt::NetUInt(pkg->size_dn);
+                void *pdes = _cpbufu.Alloc(udn);
+                if (!decode_zlib(pkg->msg, uen, pdes, &udn))
+                    return roc_c_disconnected_msgerr;
+                pmsg = pdes;
+                ulen = udn;
+            }
+#endif
+            else
+                return roc_c_disconnected_msgerr;
+
+            if (pkg->type == rpcmsg_sh) //握手消息
+                return  DoMsgSh((char*)pmsg, ulen);
+            else if (pkg->type == rpcmsg_sys) //系统消息
+                _msgr.Add((unsigned char)0);
+            else
+            {
+                OnClientMsg((RPCMSGTYPE)pkg->type, CNetInt::NetUInt(pkg->seqno), (unsigned char*)pmsg, ulen);
+                return 0;
+            }
+            return 0;
+        }
+
+        int DoMsgSh(char* ps, size_t len)//返回小于0表示要断开连接，并通知
+        {
+            char sod[32];
+            size_t pos = 0;
+            if (!str_getnextstring(',', ps, len, pos, sod, sizeof(sod)))
+            {
+                OnLoginEvent(roc_c_disconnected_msgerr);
+                return roc_c_disconnected_msgerr;
+            }
+            if (!strcmp(sod, "onconnect"))
+            {
+                char sarg[128];
+                if (!str_getnextstring(',', ps, len, pos, sarg, sizeof(sarg)))
+                {
+                    OnLoginEvent(roc_c_disconnected_msgerr);
+                    return roc_c_disconnected_msgerr;
+                }
+                if (atoi(sarg))
+                {
+                    OnLoginEvent(rpc_c_login_usrerr);
+                    return rpc_c_login_usrerr;
+                }
+                if (!str_getnextstring(',', ps, len, pos, sarg, sizeof(sarg)))
+                {
+                    OnLoginEvent(roc_c_disconnected_msgerr);
+                    return roc_c_disconnected_msgerr;
+                }
+
+                unsigned char  hex[20], uc, sha[44];
+                strcat(sarg, _psw);
+
+                encode_sha1(sarg, (unsigned int)strlen(sarg), hex);
+
+                int i;
+                for (i = 0; i < 20; i++)
+                {
+                    uc = hex[i] >> 4;
+                    sha[i * 2] = (uc >= 0x0A) ? 'A' + (uc - 0x0A) : '0' + uc;
+                    uc = hex[i] & 0x0F;
+                    sha[i * 2 + 1] = (uc >= 0x0A) ? 'A' + (uc - 0x0A) : '0' + uc;
+                }
+                sha[40] = 0;
+                sprintf(sarg, "sha1,%s", sha);
+
+                MakePkg(sarg, strlen(sarg), rpcmsg_sh, rpccomp_none, _seqno++, _pswsha1, &_msgs);
+                Send(_msgs.GetBuf(), _msgs.GetNum());
+            }
+            else if (!strcmp(sod, "onsha1"))
+            {
+                char sarg[128];
+                if (!str_getnextstring(',', ps, len, pos, sarg, sizeof(sarg)))
+                    return roc_c_disconnected_msgerr;
+                if (atoi(sarg))
+                    return rpc_c_login_pswerr;
+                _nstatus = 1;//已login成功
+                OnLoginEvent(rpc_c_login_ok);
+            }
+            return 0;
+        }
+
+    public:
+        bool Connect(const char* sip, unsigned short wport, const char* usr, const char* password)
+        {
+            if (!sip || !wport)
+                return false;
+            str_ncpy(_usr, usr, sizeof(_usr));
+            str_ncpy(_psw, password, sizeof(_psw));
+            if (!_psw[0])
+                strcpy(_psw, "123456");//默认密码
+            encode_sha1(_psw, (unsigned int)strlen(_psw), _pswsha1);
+            return Open(sip, wport);
+
+        }
+        inline void Disconnect()
+        {
+            Close();
+        }
+
+        /*!
+        \brief 应用层发送
+        \param pseqno [out] 当前发送的消息的序列号,如果是rpsmsg_call或rpcmsg_put，服务端会使用rpcmsg_ans以相同的seqno应答
+        \return 0表示成功，其他为错误码,如果短线，则不会通知应用层,由线程的keepalive负责重连
+        \remark 可以在回调中发送，也可以在应用层主动发送
+        */
+        int  SendMsg(const void* pd, size_t size, RPCMSGTYPE msgtype, RPCCOMPRESS compress, unsigned int seqno) //返回0表示成功，其他为错误码
+        {
+            if (_nstatus != 1 || INVALID_SOCKET == _sock)
+                return rpc_c_login_usrerr; //未登录
+            MakePkg(pd, size, msgtype, compress, seqno, _pswsha1, &_msgput);
+            int nw = Send(_msgput.GetBuf(), _msgput.GetNum());
+            if (nw <= 0)
+                return roc_c_disconnected_tcp;
+            return 0;
         }
 
         /*!

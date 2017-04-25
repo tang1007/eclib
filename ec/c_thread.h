@@ -29,7 +29,6 @@ namespace ec {
             _pdoarg = NULL;
         };
         virtual ~cThread() {
-
         }
         bool IsRun() { return 0 != atomic_addlong(&_lThreadRun, 0); };
     protected:
@@ -38,7 +37,7 @@ namespace ec {
 
         cEvent*		_pevt;
         void		*_pdoarg;
-        bool(*_pdojob)(void *); //return false will stop thread
+        bool(*_pdojob)(void *); //return false will stop thread    
     public:
         void	StartThread(cEvent* pevt, bool(*dojob)(void *) = NULL, void*  pargs = NULL)
         {
@@ -62,7 +61,7 @@ namespace ec {
         static void ThreadProcess(void* pargs)
         {
             cThread* pt = (cThread*)pargs;
-            pt->mainloop();
+            pt->mainloop();            
         }
     public:
         void	mainloop()

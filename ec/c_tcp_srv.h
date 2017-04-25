@@ -27,8 +27,6 @@ ec library is free C++ library.
 
 #ifndef _WIN32
 #include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <pthread.h>
 
 #include <sys/time.h>
