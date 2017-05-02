@@ -23,7 +23,7 @@ namespace ec
 #else
         struct sysinfo info;
         if (!sysinfo(&info))
-            return info.freeram / (1024 * 1024));
+            return info.freeram / (1024 * 1024);
 #endif
             return 0;
     }
