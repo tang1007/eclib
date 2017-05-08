@@ -1,6 +1,6 @@
 ﻿/*!
 \file w_websocket.h
-\brief websocket protocol,http protocol only support get,head ; websocket protocol support Sec-WebSocket-Version:13 
+\brief websocket protocol,http protocol only support get,head ; websocket protocol support Sec-WebSocket-Version:13
 \date 2016.8.14
 
 \author	 kipway@outlook.com
@@ -47,14 +47,14 @@ namespace ec
 {
     enum HTTPERROR
     {
-        he_ok = 0,  
+        he_ok = 0,
         he_waitdata,
         he_failed,
         he_method,
         he_url,
         he_ver,
     };
-    
+
     struct t_mime
     {
         char sext[16];
@@ -79,13 +79,18 @@ namespace ec
     public:
 
     public:
-        cHttpCfg() :_mime(1024) {};
+        cHttpCfg() :_mime(1024) {
+            _wport = 0;
+            _blogdetail = false;
+            _sroot[0] = 0;
+            _slogpath[0] = 0;        
+        };
         virtual ~cHttpCfg() {};
     public:
         unsigned short _wport;//!< server port
         char _sroot[512];     //!< http root , utf8
         char _slogpath[512];
-
+        bool _blogdetail;     //!< save detail log
         tMap<const char*, t_mime> _mime;
     public:
         bool GetMime(const char* sext, char *sout, size_t outsize)
@@ -122,6 +127,11 @@ namespace ec
                     if (lpszKeyVal && *lpszKeyVal)
                         _wport = (unsigned short)atoi(lpszKeyVal);
                 }
+                else if (!stricmp("logdetail", lpszKeyName))
+                {
+                    if (lpszKeyVal && *lpszKeyVal && (str_icmp("true", lpszKeyVal) || str_icmp("yes", lpszKeyVal)))
+                        _blogdetail = true;
+                }
             }
             else  if (!stricmp("mime", lpszBlkName))
             {
@@ -139,15 +149,16 @@ namespace ec
         virtual void OnReadFile()
         {
             _wport = 0;
+            _blogdetail = false;
             memset(_sroot, 0, sizeof(_sroot));
             memset(_slogpath, 0, sizeof(_slogpath));
         }
     };
-    
+
     struct t_httpfileds
     {
-        char name[32];
-        char args[128];
+        char name[48];
+        char args[208];
     };
 
     /*!
@@ -165,7 +176,7 @@ namespace ec
     public:
         const char* _ps, *_pe;
     public:
-        
+
         bool GetNextWord(char* sout, size_t outsize) // \n as one word
         {
             size_t pos = 0;
@@ -194,7 +205,7 @@ namespace ec
             sout[pos] = '\0';
             return (pos > 0);
         }
-        
+
         size_t GetNextLine(char* sout, size_t outsize) // include the end \n
         {
             size_t pos = 0;
@@ -224,7 +235,7 @@ namespace ec
 
     /*!
     \brief http packet from clinet
-    
+
     */
     class cHttpPacket
     {
@@ -248,7 +259,7 @@ namespace ec
         int  _fin;   //!< end
         int  _opcode;//!< operator code
     protected:
-        
+
         int  ParseFirstLine(cParseText* pwp)
         {
             size_t ul = pwp->GetNextLine(_sline, sizeof(_sline));
@@ -269,7 +280,7 @@ namespace ec
         }
 
         /*!
-        \brief Parse head fileds 
+        \brief Parse head fileds
         \breturn he_ok or he_failed
         */
         int ParseHeadFiled(const char* s)
@@ -347,7 +358,7 @@ namespace ec
         }
 
     public:
-        
+
         int  HttpParse(const char* stxt, size_t usize, size_t &sizedo)
         {
             if (usize < 1)
@@ -463,20 +474,20 @@ namespace ec
         }
 
         inline bool HasKeepAlive()
-        {			
-			return CheckHeadFiled("Connection", "keep-alive");
+        {
+            return CheckHeadFiled("Connection", "keep-alive");
         }
 
         /*!
         \brief get Sec-WebSocket-Key
         */
         bool GetWebSocketKey(char sout[], int nsize)
-        {            
-			if (!CheckHeadFiled("Connection", "Upgrade") || !CheckHeadFiled("Upgrade", "websocket"))
-				return false;
+        {
+            if (!CheckHeadFiled("Connection", "Upgrade") || !CheckHeadFiled("Upgrade", "websocket"))
+                return false;
 
-			unsigned int i, n = _headers.GetSize();
-			t_httpfileds* pf = _headers.GetBuf();
+            unsigned int i, n = _headers.GetSize();
+            t_httpfileds* pf = _headers.GetBuf();
             for (i = 0; i < n; i++)
             {
                 if (!stricmp(pf[i].name, "Sec-WebSocket-Key"))
@@ -488,7 +499,7 @@ namespace ec
             }
             return false;
         }
-        
+
         bool GetHeadFiled(const char* sname, char sval[], size_t size)
         {
             unsigned int i, n = _headers.GetSize();
@@ -504,27 +515,27 @@ namespace ec
             }
             return false;
         }
-		bool CheckHeadFiled(const char* sname, const char* sval)
-		{
-			char stmp[128];
-			unsigned int i, n = _headers.GetSize();
-			t_httpfileds* pf = _headers.GetBuf();
-			size_t len, pos;
-			for (i = 0; i < n; i++)
-			{
-				if (!stricmp(pf[i].name, sname))
-				{					
-					len = strlen(pf[i].args);
-					pos = 0;
-					while (ec::str_getnextstring(',', pf[i].args, len, pos, stmp, sizeof(stmp)))
-					{
-						if (!stricmp(stmp, sval))
-							return true;
-					}
-				}
-			}
-			return false;
-		}
+        bool CheckHeadFiled(const char* sname, const char* sval)
+        {
+            char stmp[128];
+            unsigned int i, n = _headers.GetSize();
+            t_httpfileds* pf = _headers.GetBuf();
+            size_t len, pos;
+            for (i = 0; i < n; i++)
+            {
+                if (!stricmp(pf[i].name, sname))
+                {
+                    len = strlen(pf[i].args);
+                    pos = 0;
+                    while (ec::str_getnextstring(',', pf[i].args, len, pos, stmp, sizeof(stmp)))
+                    {
+                        if (!stricmp(stmp, sval))
+                            return true;
+                    }
+                }
+            }
+            return false;
+        }
     };
 
     /*!
@@ -697,7 +708,7 @@ namespace ec
             pcli->_protocol = PROTOCOL_WS;
             pcli->_txt.ClearData();
         }
-    };    
+    };
 
     /*!
     \brief Http工作线程
@@ -734,8 +745,8 @@ namespace ec
             _answer.ClearData();
             MakeWsSend(pdata, size, (unsigned char)wsopcode, &_answer);
             SendToUcid(ucid, _answer.GetBuf(), _answer.GetSize(), true);
-
-            _plog->AddLog("MSG:ws read:ucid=%d,Final=%d,opcode=%d,size=%d ", ucid, bFinal, wsopcode, size);            
+            if (_pcfg->_blogdetail)
+                _plog->AddLog("MSG:ws read:ucid=%d,Final=%d,opcode=%d,size=%d ", ucid, bFinal, wsopcode, size);
             return true;
         }
     private:
@@ -784,9 +795,11 @@ namespace ec
             _pclis->UpgradeWebSocket(ucid);//升级协议为websocket
 
             SendToUcid(ucid, _answer.GetBuf(), _answer.GetSize(), true);//发送
-            _answer.Add((char)0);
 
-            _plog->AddLog("MSG:Write ucid %d\r\n%s", ucid, _answer.GetBuf());
+            if (_pcfg->_blogdetail) {
+                _answer.Add((char)0);
+                _plog->AddLog("MSG:Write ucid %d\r\n%s", ucid, _answer.GetBuf());
+            }
             return true;
         }
 
@@ -816,11 +829,11 @@ namespace ec
             {
                 uc = 127;
                 pout->Add((char)uc);
-                pout->Add((char)0); pout->Add((char)0); pout->Add((char)0); pout->Add((char)0);//高4字节填写0
-                pout->Add((char)((size & 0xFF000000) >> 24)); //高字节
-                pout->Add((char)((size & 0x00FF0000) >> 16)); //高字节
-                pout->Add((char)((size & 0x0000FF00) >> 8));  //高字节
-                pout->Add((char)(size & 0xFF)); //低字节
+                pout->Add((char)0); pout->Add((char)0); pout->Add((char)0); pout->Add((char)0);//high 4 bytes 0
+                pout->Add((char)((size & 0xFF000000) >> 24));
+                pout->Add((char)((size & 0x00FF0000) >> 16));
+                pout->Add((char)((size & 0x0000FF00) >> 8));
+                pout->Add((char)(size & 0xFF));
             }
             pout->Add((const char*)pdata, size);
             return true;
@@ -842,17 +855,19 @@ namespace ec
         */
         bool DoHttpRequest(unsigned int ucid)
         {
-            /*_plog->AddLog("MSG:read from ucid %u:", ucid);
-            _plog->AddLog2("   %s %s %s\r\n", _httppkg._method, _httppkg._request, _httppkg._version);
-            int i, n = _httppkg._headers.GetNum();
-            t_httpfileds* pa = _httppkg._headers.GetBuf();
-            for (i = 0; i < n; i++)
-                _plog->AddLog2("    %s:%s\r\n", pa[i].name, pa[i].args);
-            _plog->AddLog2("\r\n");*/
-
+            if (_pcfg->_blogdetail)
+            {
+                _plog->AddLog("MSG:read from ucid %u:", ucid);
+                _plog->AddLog2("   %s %s %s\r\n", _httppkg._method, _httppkg._request, _httppkg._version);
+                int i, n = _httppkg._headers.GetNum();
+                t_httpfileds* pa = _httppkg._headers.GetBuf();
+                for (i = 0; i < n; i++)
+                    _plog->AddLog2("    %s:%s\r\n", pa[i].name, pa[i].args);
+                _plog->AddLog2("\r\n");
+            }
             if (!stricmp("GET", _httppkg._method)) //GET
             {
-                char skey[128];               
+                char skey[128];
                 if (_httppkg.GetWebSocketKey(skey, sizeof(skey))) //web_socket升级
                     return DoUpgradeWebSocket(ucid, skey); //处理Upgrade中的Get
                 else
@@ -960,10 +975,14 @@ namespace ec
             sprintf(tmp, "Content-Length: %d\r\n\r\n", _filetmp.GetNum());
             _answer.Add(tmp, strlen(tmp));
 
-            memcpy(tmp, _answer.GetBuf(), _answer.GetSize());
-            tmp[_answer.GetSize()] = 0;
-            _plog->AddLog("MSG:write ucid %u:", ucid);
-            _plog->AddLog2("%s", tmp);
+            if (_pcfg->_blogdetail)
+            {
+                tArray<char> atmp(4096);
+                atmp.Add(_answer.GetBuf(), _answer.GetSize());
+                atmp.Add((char)0);
+                _plog->AddLog("MSG:write ucid %u:", ucid);
+                _plog->AddLog2("%s", atmp.GetBuf());
+            }
 
             if (bGet) //get
                 _answer.Add(_filetmp.GetBuf(), _filetmp.GetSize());
@@ -979,24 +998,21 @@ namespace ec
         */
         void DoNotFount(unsigned int ucid)
         {
-            char tmp[512];
-            strcpy(tmp, "http/1.1 404  not found!\r\nServer: httpsrv1.0\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:9\r\n\r\nnot found");
-            SendToUcid(ucid, (void*)tmp, (unsigned int)strlen(tmp), true);
-            _plog->AddLog("MSG:write ucid %u:", ucid);
-            _plog->AddLog2("%s\r\n", tmp);
+            const char* sret = "http/1.1 404  not found!\r\nServer: httpsrv1.0\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:9\r\n\r\nnot found";
+            SendToUcid(ucid, (void*)sret, (unsigned int)strlen(sret), true);
+            if (_pcfg->_blogdetail)
+                _plog->AddLog("MSG:write ucid %u:%s", ucid, sret);
         }
 
         /*!
         \brief 应答400错误,错误的方法
         */
-        bool DoBadRequest(unsigned int ucid)
+        void DoBadRequest(unsigned int ucid)
         {
-            char tmp[512];
-            strcpy(tmp, "http/1.1 400  Bad Request!\r\nServer: httpsrv1.0\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:11\r\n\r\nBad Request");
-            SendToUcid(ucid, (void*)tmp, (unsigned int)strlen(tmp), true);
-            _plog->AddLog("MSG:write ucid %u:", ucid);
-            _plog->AddLog2("%s\r\n", tmp);
-            return true;
+            const char* sret = "http/1.1 400  Bad Request!\r\nServer: httpsrv1.0\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:11\r\n\r\nBad Request";
+            SendToUcid(ucid, (void*)sret, (unsigned int)strlen(sret), true);
+            if (_pcfg->_blogdetail)
+                _plog->AddLog("MSG:write ucid %u:%s", ucid, sret);
         }
 
     protected:
@@ -1020,7 +1036,6 @@ namespace ec
             {
                 if (_httppkg._nprotocol == PROTOCOL_HTTP)
                 {
-
                     bret = DoHttpRequest(ucid);
                 }
                 else if (_httppkg._nprotocol == PROTOCOL_WS)
@@ -1036,7 +1051,8 @@ namespace ec
                     else if (_httppkg._opcode == WS_OP_PING)
                     {
                         OnWsPing(ucid, _httppkg._body.GetBuf(), _httppkg._body.GetSize());
-                        _plog->AddLog("MSG:ucid %d WS_OP_PING!", ucid);
+                        if (_pcfg->_blogdetail)
+                            _plog->AddLog("MSG:ucid %d WS_OP_PING!", ucid);
                         bret = true;
                     }
                 }
@@ -1048,11 +1064,7 @@ namespace ec
         virtual	void	DoSelfMsg(unsigned int dwMsg) {};	// dwMsg = TCPIO_MSG_XXXX
         virtual	void	OnOptComplete(unsigned int ucid, unsigned int uopt) {};//uopt = TCPIO_OPT_XXXX
         virtual	void	OnOptError(unsigned int ucid, unsigned int uopt) {};	//uopt = TCPIO_OPT_XXXX        
-
-    public:
-
     };
-
 
     /*!
     \brief httpserver
@@ -1070,7 +1082,7 @@ namespace ec
 
         virtual void    OnConnected(unsigned int  ucid, const char* sip)
         {
-            _log.AddLog("MSG:ucid %u TCP connected from IP:%s!", ucid,sip);
+            _log.AddLog("MSG:ucid %u TCP connected from IP:%s!", ucid, sip);
             _clients.Add(ucid, sip);
         };
         virtual void	OnRemovedUCID(unsigned int ucid)
@@ -1078,7 +1090,7 @@ namespace ec
             if (_clients.Del(ucid))
                 _log.AddLog("MSG:ucid %u disconnected!", ucid);
         };
-        virtual void    CheckNotLogin() {}; 
+        virtual void    CheckNotLogin() {};
     public:
         virtual ec::cTcpSvrWorkThread* CreateWorkThread()
         {
