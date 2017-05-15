@@ -257,6 +257,10 @@ namespace ec
     {
         md5::cMd5::Md5_Encode(inBuf, nsize, outBuf);
     }
+    inline void encodestr_md5(const char *inBuf, unsigned char outBuf[16])
+    {
+        md5::cMd5::Md5_Encode(inBuf, strlen(inBuf), outBuf);
+    }
 }
 #endif // C_MD5_H_
 
