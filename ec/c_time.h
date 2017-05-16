@@ -133,7 +133,7 @@ namespace ec
             parse(s);
         }
     public:
-        int _nyear, _nmon, _nday, _nhour = 0, _nmin = 0, _nsec = 0;
+        int _nyear, _nmon, _nday, _nhour, _nmin, _nsec;
         time_t _gmt;
         inline bool IsOk() {
             return _gmt > 0;
