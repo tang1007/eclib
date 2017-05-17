@@ -308,6 +308,7 @@ namespace ec
     */
 	inline bool gb2utf8(const char* sgb, size_t sizegb, char *sutf8, size_t &sizeutf8)
 	{
+        *sutf8 = 0;
 #ifdef _WIN32
 		int i = MultiByteToWideChar(CP_ACP, 0, sgb, (int)sizegb, NULL, 0);
 		wchar_t* sUnicode = new wchar_t[i + 1];
@@ -328,33 +329,26 @@ namespace ec
 		char **pin = (char**)&sgb;
 		char **pout = &sutf8;
 
-		cd = iconv_open("UTF-8", "GBK");
+		cd = iconv_open("UTF-8//IGNORE", "GBK");
 		if (cd == (iconv_t)-1)
 		{
 			strncpy(sutf8, sgb, sizeutf8);
 			sizeutf8 = strlen(sutf8);
 			return true;
 		}
-		memset(sutf8, 0, sizeutf8);
 		size_t inlen = sizegb;
 		size_t outlen = sizeutf8;
 		if (iconv(cd, pin, &inlen, pout, &outlen) == (size_t)(-1))
 		{
 			iconv_close(cd);
-			sizeutf8 = 0;
-			sutf8[0] = 0;
+			sizeutf8 = 0;			
 			return false;
 		}
 		iconv_close(cd);
 		sizeutf8 = sizeutf8 - outlen;
-		if (sizeutf8 > 0)
-			sutf8[sizeutf8] = 0;
-		else
-		{
-			sizeutf8 = 0;
-			sutf8[0] = 0;
-		}
-        return sizeutf8 > 0;
+		if (outlen > 0)
+			*sutf8 = 0;		
+        return true;
 #endif
     }
 
