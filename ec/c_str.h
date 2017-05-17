@@ -306,42 +306,54 @@ namespace ec
     \brief GB2312 toutf-8
     \param sizeutf8 [in/out] , in sutf8 bufsize, out utf-8 code length
     */
-    inline bool gb2utf8(const char* sgb, size_t sizegb, char *sutf8, size_t &sizeutf8)
-    {
+	inline bool gb2utf8(const char* sgb, size_t sizegb, char *sutf8, size_t &sizeutf8)
+	{
 #ifdef _WIN32
-        int i = MultiByteToWideChar(CP_ACP, 0, sgb, (int)sizegb, NULL, 0);
-        wchar_t* sUnicode = new wchar_t[i + 1];
-        MultiByteToWideChar(CP_ACP, 0, sgb, (int)sizegb, sUnicode, i); //to unicode
+		int i = MultiByteToWideChar(CP_ACP, 0, sgb, (int)sizegb, NULL, 0);
+		wchar_t* sUnicode = new wchar_t[i + 1];
+		MultiByteToWideChar(CP_ACP, 0, sgb, (int)sizegb, sUnicode, i); //to unicode
 
-        int nout = WideCharToMultiByte(CP_UTF8, 0, sUnicode, i, sutf8, (int)sizeutf8, NULL, NULL); //to utf-8
-        sizeutf8 = nout;
-        if (nout > 0)
-            sutf8[nout] = 0;
-        else
-            sutf8[0] = 0;
-        return nout > 0;
+		int nout = WideCharToMultiByte(CP_UTF8, 0, sUnicode, i, sutf8, (int)sizeutf8, NULL, NULL); //to utf-8
+		sizeutf8 = nout;
+		if (sizeutf8 > 0)
+			sutf8[sizeutf8] = 0;
+		else
+		{
+			sizeutf8 = 0;
+			sutf8[0] = 0;
+		}
+		return nout > 0;
 #else
-        iconv_t cd;
-        char **pin = (char**)&sgb;
-        char **pout = &sutf8;
+		iconv_t cd;
+		char **pin = (char**)&sgb;
+		char **pout = &sutf8;
 
-        cd = iconv_open("utf-8", "gb2312");
-        if (cd == 0)
-            return false;;
-        memset(sutf8, 0, sizeutf8);
-        size_t inlen = sizegb;
-        size_t outlen = sizeutf8;
-        if (iconv(cd, pin, &inlen, pout, &outlen) == (size_t)(-1))
-        {
-            iconv_close(cd);
-            return false;
-        }
-        iconv_close(cd);
-        sizeutf8 = outlen;
-        if (outlen > 0)
-            sutf8[outlen] = 0;
-        else
-            sutf8[0] = 0;
+		cd = iconv_open("UTF-8", "GBK");
+		if (cd == (iconv_t)-1)
+		{
+			strncpy(sutf8, sgb, sizeutf8);
+			sizeutf8 = strlen(sutf8);
+			return true;
+		}
+		memset(sutf8, 0, sizeutf8);
+		size_t inlen = sizegb;
+		size_t outlen = sizeutf8;
+		if (iconv(cd, pin, &inlen, pout, &outlen) == (size_t)(-1))
+		{
+			iconv_close(cd);
+			sizeutf8 = 0;
+			sutf8[0] = 0;
+			return false;
+		}
+		iconv_close(cd);
+		sizeutf8 = sizeutf8 - outlen;
+		if (sizeutf8 > 0)
+			sutf8[sizeutf8] = 0;
+		else
+		{
+			sizeutf8 = 0;
+			sutf8[0] = 0;
+		}
         return sizeutf8 > 0;
 #endif
     }
