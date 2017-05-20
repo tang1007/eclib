@@ -102,6 +102,7 @@ namespace ec {
             _pevt = NULL;
             _pdojob = NULL;
             _pdoarg = NULL;
+	    m_tid = 0;
         };
         virtual ~cThread() {
 
@@ -127,9 +128,11 @@ namespace ec {
         }
         void StopThread()
         {
-            atomic_setlong(&_lKillTread, 1);
-            while (atomic_addlong(&_lThreadRun, 0) > 0)
-                usleep(1000);
+            atomic_setlong(&_lKillTread, 1);            
+	    if(m_tid){
+     	        pthread_join(m_tid,NULL);
+                m_tid = 0;
+	    }
         }
         bool Killing() { return 0 != atomic_addlong(&_lKillTread, 0); };
         static void* ThreadProcess(void* pargs)

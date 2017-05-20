@@ -2002,7 +2002,10 @@ namespace ec
                 if (!str_getnextstring(',', ps, len, pos, sarg, sizeof(sarg)))
                     return roc_c_disconnected_msgerr;
                 if (atoi(sarg))
+                {
+                    OnLoginEvent(rpc_c_login_pswerr);
                     return rpc_c_login_pswerr;
+                }
                 _nstatus = 1;//已login成功
                 OnLoginEvent(rpc_c_login_ok);
             }

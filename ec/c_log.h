@@ -57,6 +57,7 @@ namespace ec
     public:
         cLog() : _evt(false, true)
         {
+            _blinestylewin = true;
             _pstr = (char*)malloc(RUNLOG_BUFSIZE);
             *_pstr = 0;
             _nsize = 0;
@@ -75,6 +76,7 @@ namespace ec
                 free(_pstr);
         }
     protected:
+        bool _blinestylewin; // true \r\a ,false \n
         unsigned int   _udate; // year << 16 + mon << 8 +day
         unsigned int	_tk100;
         char *_pstr;
@@ -97,8 +99,9 @@ namespace ec
                 SaveLog();
         }
     public:
-        bool	Start(const char* slogpath)
+        bool	Start(const char* slogpath,bool bLineStyleWin = true)
         {
+            _blinestylewin = bLineStyleWin;
             if (!slogpath || !*slogpath)
                 return false;
             strcpy(_slogpath, slogpath);
@@ -242,8 +245,9 @@ namespace ec
             if (nbytes <= 0)
                 return;
             nbytes += 9;
-            _slog[nbytes++] = 0x0D;
-            _slog[nbytes++] = 0x0A;
+            if(_blinestylewin)
+                _slog[nbytes++] = '\r';
+            _slog[nbytes++] = '\n';
             _slog[nbytes] = 0;
 
             if ((_nsize + nbytes) > (RUNLOG_BUFSIZE - 1)) {

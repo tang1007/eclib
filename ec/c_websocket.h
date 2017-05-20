@@ -865,11 +865,19 @@ namespace ec
                     _plog->AddLog2("    %s:%s\r\n", pa[i].name, pa[i].args);
                 _plog->AddLog2("\r\n");
             }
+            else
+            {
+                _plog->AddLog("MSG:ucid %u:%s %s %s", ucid, _httppkg._method, _httppkg._request, _httppkg._version);                
+            }
             if (!stricmp("GET", _httppkg._method)) //GET
             {
                 char skey[128];
                 if (_httppkg.GetWebSocketKey(skey, sizeof(skey))) //web_socket升级
+                {
+                    if (!_pcfg->_blogdetail)
+                        _plog->AddLog("MSG:ucid %u Upgrade websocket",ucid);
                     return DoUpgradeWebSocket(ucid, skey); //处理Upgrade中的Get
+                }
                 else
                     return DoGetAndHead(ucid);
             }
