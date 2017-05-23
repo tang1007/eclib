@@ -126,8 +126,7 @@ namespace ec
                 if (!nstr)
                 {
                     stmp[np] = 0;
-                    nerr = onfiled(nr, nc, stmp, false, ponfiledparam);
-                    if (nerr)
+                    if (nerr = onfiled(nr, nc, stmp, false, ponfiledparam))
                         break;
                     nc++;   np = 0;
                 }
@@ -140,8 +139,7 @@ namespace ec
             else if (c == '\n')
             {
                 stmp[np] = 0;
-                nerr = onfiled(nr, nc, stmp, true, ponfiledparam);
-                if (nerr)
+                if (nerr = onfiled(nr, nc, stmp, true, ponfiledparam))
                     break;
                 nr++; nc = 0; np = 0;
             }

@@ -54,14 +54,15 @@ namespace ec {
         {
             atomic_setlong(&_lKillTread, 1);
             while (atomic_addlong(&_lThreadRun, 0) > 0)
-                Sleep(100);
+                Sleep(100);            
         }
         bool Killing() { return 0 != atomic_addlong(&_lKillTread, 0); };
     private:
         static void ThreadProcess(void* pargs)
         {
             cThread* pt = (cThread*)pargs;
-            pt->mainloop();            
+            pt->mainloop();
+            _endthread();
         }
     public:
         void	mainloop()
@@ -80,6 +81,8 @@ namespace ec {
                             break;
                     }
                 }
+                if (_pevt)
+                    On100msTimer();
             }
             OnStop();
             atomic_setlong(&_lThreadRun, 0);
@@ -89,6 +92,7 @@ namespace ec {
         virtual bool OnStart() { return true; };
         virtual void OnStop() { };
         virtual	void dojob() { Sleep(1); };
+        virtual void On100msTimer() { };
     };
 #else // linux
 #include <pthread.h>
@@ -102,7 +106,7 @@ namespace ec {
             _pevt = NULL;
             _pdojob = NULL;
             _pdoarg = NULL;
-	    m_tid = 0;
+            m_tid = 0;
         };
         virtual ~cThread() {
 
@@ -128,11 +132,11 @@ namespace ec {
         }
         void StopThread()
         {
-            atomic_setlong(&_lKillTread, 1);            
-	    if(m_tid){
-     	        pthread_join(m_tid,NULL);
+            atomic_setlong(&_lKillTread, 1);
+            if (m_tid) {
+                pthread_join(m_tid, NULL);
                 m_tid = 0;
-	    }
+            }
         }
         bool Killing() { return 0 != atomic_addlong(&_lKillTread, 0); };
         static void* ThreadProcess(void* pargs)
