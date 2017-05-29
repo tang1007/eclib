@@ -20,6 +20,7 @@
 #include "c_readini.h"
 #include "c_tcp_srv.h"
 #include "c_sha1.h"
+#include "c_str.h"
 
 #ifndef _WIN32
 #ifndef stricmp
@@ -171,10 +172,11 @@ namespace ec
         {
             _ps = s;
             _pe = s + usize;
+            _pstr = s;
         }
         ~cParseText() {}
     public:
-        const char* _ps, *_pe;
+        const char* _ps, *_pe,*_pstr;
     public:
 
         bool GetNextWord(char* sout, size_t outsize) // \n as one word
@@ -205,8 +207,10 @@ namespace ec
             sout[pos] = '\0';
             return (pos > 0);
         }
-
-        size_t GetNextLine(char* sout, size_t outsize) // include the end \n
+        /*!
+        \return: -1 error,0:end ; >0 next line pos
+        */
+        size_t GetNextLine(char* sout, size_t outsize,bool bfirstline = false) // include the end \n
         {
             size_t pos = 0;
             sout[0] = '\0';
@@ -220,14 +224,24 @@ namespace ec
                 else if (*_ps == '\n')
                 {
                     sout[pos++] = *_ps++;
-                    break;
+                    sout[pos] = '\0';
+                    return pos;
                 }
                 sout[pos++] = *_ps++;
                 if (pos >= outsize)
-                    return 0;
+                    return -1; //error
             }
-            sout[pos] = '\0';
-            return pos;
+            if (bfirstline && (_ps - _pstr) > 7 )                
+            {
+                char smothod[8] = { 0 };
+                size_t pos = 0;
+                if (!ec::str_getnextstring('\x20', _pstr, _ps - _pstr, pos, smothod, sizeof(smothod)))
+                    return -1;
+                if (!ec::str_icmp("Get", smothod) || !ec::str_icmp("Head", smothod))
+                    return 0;
+                return -1;//error
+            }
+            return 0;
         }
     };
 
@@ -251,18 +265,35 @@ namespace ec
         int  _nprotocol;   //!< HTTP_PROTOCOL or WEB_SOCKET
         char _method[32];  //!< get ,head
         char _request[512];//!< requet URL
-        char _version[16];
-        char _sline[512];
+        char _version[32];
+        char _sline[1024];
 
         tArray<t_httpfileds> _headers;
         tArray<char> _body;
         int  _fin;   //!< end
         int  _opcode;//!< operator code
     protected:
+        bool checkreq()
+        {
+            char* pc = (char*)_request,*ps;
+            ps = pc;
+            while (*pc)
+            {
+                if (*pc == '?')
+                {
+                    *pc = 0;
+                    return false;
+                }
+                pc++;
+            }
+            return ((pc - ps) < 120);                
+        }
 
         int  ParseFirstLine(cParseText* pwp)
         {
-            size_t ul = pwp->GetNextLine(_sline, sizeof(_sline));
+            size_t ul = pwp->GetNextLine(_sline, sizeof(_sline),true);
+            if (-1 == ul)
+                return he_failed;
             if (!ul)
                 return he_waitdata;
 
@@ -270,8 +301,14 @@ namespace ec
             if (!wp.GetNextWord(_method, sizeof(_method))) //method
                 return he_waitdata;
 
+            if (ec::str_icmp("Get", _method) && ec::str_icmp("Head", _method))
+                return he_failed;
+
             if (!wp.GetNextWord(_request, sizeof(_request))) //request
-                return he_waitdata;
+                return he_waitdata;            
+            
+            if (!checkreq()) // not suport ?
+                return he_failed;
 
             if (!wp.GetNextWord(_version, sizeof(_version))) //version
                 return he_waitdata;
@@ -369,27 +406,32 @@ namespace ec
 
             _headers.ClearData();
 
+            _method[0]=0;  
+            _request[0]=0;
+            _version[0]=0;
+            _sline[0]=0;
+
             _nprotocol = PROTOCOL_HTTP;
+
             nret = ParseFirstLine(&wp);
             if (nret != he_ok)
                 return nret;
-
-            size_t ul = wp.GetNextLine(_sline, sizeof(_sline));
-            while (ul && _sline[0] != '\n')
+            
+            size_t ul;
+            while ((ul = wp.GetNextLine(_sline, sizeof(_sline))) > 0)
             {
+                if (_sline[0] == '\n') //head end
+                    break;
                 nret = ParseHeadFiled(_sline);
                 if (nret != he_ok)
-                    return nret;
-                ul = wp.GetNextLine(_sline, sizeof(_sline));
+                    return nret;                        
             }
-
-            _body.ClearData();
-            if (!ul) //no body
-            {
-                sizedo = wp._ps - stxt;
-                return he_ok;
-            }
-
+            if (ul < 0)
+                return he_failed;
+            if (!ul)
+                return he_waitdata;
+            
+            _body.ClearData();            
             size_t bodylength = GetContextLength();
             if (!bodylength)
             {
@@ -399,12 +441,11 @@ namespace ec
             size_t szdo = wp._ps - stxt;
 
             if (szdo + bodylength > usize)
-                return he_waitdata;
+                return he_waitdata;            
             _body.Add(wp._ps, bodylength);
-            sizedo = wp._ps - stxt + bodylength;
+            sizedo = szdo + bodylength;
             return he_ok;
         }
-
 
         int WebsocketParse(const char* stxt, size_t usize, size_t &sizedo)
         {
@@ -876,7 +917,7 @@ namespace ec
                 char skey[128];
                 if (_httppkg.GetWebSocketKey(skey, sizeof(skey))) //web_socket升级
                 {
-                    if (!_pcfg->_blogdetail && _plog)
+                    if (_plog)
                         _plog->AddLog("MSG:ucid %u Upgrade websocket",ucid);
                     return DoUpgradeWebSocket(ucid, skey); //处理Upgrade中的Get
                 }
@@ -961,7 +1002,7 @@ namespace ec
             strcpy(tmp, "http/1.1 200 ok\r\n");
             _answer.Add(tmp, strlen(tmp));
 
-            strcpy(tmp, "Server: httpsrv1.0\r\n");
+            strcpy(tmp, "Server: rdb5 websocket server\r\n");
             _answer.Add(tmp, strlen(tmp));
 
             if (_httppkg.HasKeepAlive())
@@ -1008,10 +1049,10 @@ namespace ec
         */
         void DoNotFount(unsigned int ucid)
         {
-            const char* sret = "http/1.1 404  not found!\r\nServer: httpsrv1.0\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:9\r\n\r\nnot found";
+            const char* sret = "http/1.1 404  not found!\r\nServer:rdb5 websocket server\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:9\r\n\r\nnot found";
             SendToUcid(ucid, (void*)sret, (unsigned int)strlen(sret), true);
             if (_pcfg->_blogdetail && _plog)
-                _plog->AddLog("MSG:write ucid %u:%s", ucid, sret);
+                _plog->AddLog("MSG:write ucid %u:\r\n%s", ucid, sret);
         }
 
         /*!
@@ -1019,10 +1060,10 @@ namespace ec
         */
         void DoBadRequest(unsigned int ucid)
         {
-            const char* sret = "http/1.1 400  Bad Request!\r\nServer: httpsrv1.0\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:11\r\n\r\nBad Request";
+            const char* sret = "http/1.1 400  Bad Request!\r\nServer:rdb5 websocket server\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:11\r\n\r\nBad Request";
             SendToUcid(ucid, (void*)sret, (unsigned int)strlen(sret), true);
             if (_pcfg->_blogdetail && _plog)
-                _plog->AddLog("MSG:write ucid %u:%s", ucid, sret);
+                _plog->AddLog("MSG:write ucid %u:\r\n%s", ucid, sret);
         }
 
     protected:
@@ -1031,7 +1072,7 @@ namespace ec
         */
         virtual void	OnClientDisconnect(unsigned int  ucid, unsigned int uopt, int nerrorcode) //uopt = TCPIO_OPT_XXXX
         {
-            if (_pclis->Del(ucid))
+            if (_pclis->Del(ucid) && _plog)
                 _plog->AddLog("MSG:ucid %u disconnected!", ucid);
         };
 
@@ -1069,6 +1110,11 @@ namespace ec
                     }
                 }
                 nr = _pclis->DoNextData(ucid, &_httppkg);
+            }
+            if (nr == he_failed)
+            {
+                DoBadRequest(ucid);
+                return false;
             }
             return bret;
         };

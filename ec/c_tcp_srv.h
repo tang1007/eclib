@@ -543,7 +543,14 @@ namespace ec
                     }
                     else
                     {
-                        OnReadBytes(ucid, _buf, nbytes);
+                        if (!OnReadBytes(ucid, _buf, nbytes))
+                        {
+                            epoll_ctl(_nfdr, EPOLL_CTL_DEL, nfd, &_evtdel);
+                            m_pConPool->DelAndCloseSocket(ucid);
+                            OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
+                            OnOptError(ucid, TCPIO_OPT_READ);
+                            return;
+                        }
                         m_pConPool->OnRead(ucid, nbytes);
                     }
                 };
