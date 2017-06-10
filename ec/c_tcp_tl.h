@@ -13,38 +13,38 @@ ec library is free C++ library.
 #define C_TCP_H
 
 #ifdef _WIN32
-#pragma warning(disable : 4996)
-#include <winsock2.h>
-#include <mstcpip.h>
+#	pragma warning(disable : 4996)
+#	include <winsock2.h>
+#	include <mstcpip.h>
 #else
-#include <unistd.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <sys/select.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
-#include <errno.h>
+#	include <unistd.h>
+#	include <sys/time.h>
+#	include <sys/types.h>
+#	include <sys/socket.h>
+#	include <sys/ioctl.h>
+#	include <sys/select.h>
+#	include <netinet/tcp.h>
+#	include <arpa/inet.h>
+#	include <errno.h>
 
 #ifndef SOCKET
-#define SOCKET int
+#	define SOCKET int
 #endif 
 
 #ifndef INVALID_SOCKET
-#define INVALID_SOCKET    (-1)
+#	define INVALID_SOCKET    (-1)
 #endif
 
 #ifndef SOCKET_ERROR
-#define SOCKET_ERROR      (-1)
+#	define SOCKET_ERROR      (-1)
 #endif
 
 #ifndef closesocket
-#define closesocket(a) close(a)
+#	define closesocket(a) close(a)
 #endif 
 
 #ifndef TIMEVAL
-#define TIMEVAL struct timeval
+#	define TIMEVAL struct timeval
 #endif 
 
 #endif
@@ -169,7 +169,7 @@ namespace ec
 	}
 
     //return send bytes size or -1 for error,use for block or nonblocking  mode
-    inline int tcp_send(SOCKET s, void* pbuf,  int nsize)
+    inline int tcp_send(SOCKET s, const void* pbuf,  int nsize)
     {
         char *ps = (char*)pbuf;
         int  nsend = 0;
