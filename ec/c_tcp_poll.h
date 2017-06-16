@@ -505,8 +505,8 @@ namespace ec
                     close(_hio);
                 _hio = -1;
 #endif
-            }            
-            virtual void OnAsynConnectEvt(unsigned short ucid, SOCKET s, bool bsuccess) {};
+            }     
+            virtual void OnAsynConnectEvt(unsigned int ucid, SOCKET s, bool bsuccess) {}; //被异步连接处理线程调用
         };
         /*!
         \brief Accept thread

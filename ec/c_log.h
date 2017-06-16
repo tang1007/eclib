@@ -57,7 +57,7 @@ namespace ec
     public:
         cLog() : _evt(false, true)
         {
-            _blinestylewin = true;
+            _blinestylewin = false;
             _pstr = (char*)malloc(RUNLOG_BUFSIZE);
             *_pstr = 0;
             _nsize = 0;
@@ -69,6 +69,7 @@ namespace ec
 
             cTime ct(::time(NULL));
             _udate = ((unsigned int)ct._year) << 16 | ((unsigned int)ct._mon) << 8 | (unsigned int)ct._day;
+            _lastlogtime = 0;
         }
         virtual ~cLog()
         {
@@ -90,6 +91,7 @@ namespace ec
 
         cCritical	_cs;
         cEvent _evt;
+        time_t _lastlogtime;
     protected:
         virtual const char* GetClassName() { return "CLog"; };
         virtual	void dojob() {
@@ -99,7 +101,7 @@ namespace ec
                 SaveLog();
         }
     public:
-        bool	Start(const char* slogpath,bool bLineStyleWin = true)
+        bool	Start(const char* slogpath,bool bLineStyleWin = false)
         {
             _blinestylewin = bLineStyleWin;
             if (!slogpath || !*slogpath)
@@ -235,16 +237,29 @@ namespace ec
                 _udate = udate;
                 _nFileNo = 1;
                 sprintf(_scurlogfile, "%04d%02d%02d-%04d.txt", ctm._year, ctm._mon, ctm._day, _nFileNo);
+                _lastlogtime = 0;
             }
-            sprintf(_slog, "%02d:%02d:%02d ", ctm._hour, ctm._min, ctm._sec);
+            int npos = 0;
+            if (ctm.GetTime() != _lastlogtime)
+            {
+                sprintf(_slog, "%02d:%02d:%02d ", ctm._hour, ctm._min, ctm._sec);
+                npos = 9;
+                _lastlogtime = ctm.GetTime();
+            }
+            else
+            {
+                _slog[0] = '\t';                
+                _slog[1] = '\x20';
+                npos = 2;
+            }
 
             va_list arg_ptr;
             va_start(arg_ptr, format);
-            int nbytes = vsnprintf(&_slog[9], MAX_LOG_SIZE, format, arg_ptr);
+            int nbytes = vsnprintf(&_slog[npos], MAX_LOG_SIZE, format, arg_ptr);
             va_end(arg_ptr);
             if (nbytes <= 0)
                 return;
-            nbytes += 9;
+            nbytes += npos;
             if(_blinestylewin)
                 _slog[nbytes++] = '\r';
             _slog[nbytes++] = '\n';
