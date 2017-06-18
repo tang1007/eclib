@@ -175,6 +175,8 @@ namespace ec
 
         bool Lock(long long offset, long long lsize, bool bExc) // lsize 0 means to EOF
         {
+            if (m_hFile == INVALID_HANDLE_VALUE)
+                return false;
             UV pos, sz;
             pos.v = offset;
             if (!lsize) {
@@ -196,6 +198,9 @@ namespace ec
         }
         bool Unlock(long long offset, long long lsize) // lsize 0 means to EOF
         {
+            if (m_hFile == INVALID_HANDLE_VALUE)
+                return false;
+
             UV pos, sz;
             pos.v = offset;
             if (!lsize) {
@@ -293,6 +298,8 @@ namespace ec
 
         bool Lock(long long offset, long long lsize, bool bExc) // lsize 0 means to EOF
         {
+            if (m_hFile == INVALID_HANDLE_VALUE)
+                return false;
             struct flock    lock;
 
             if (bExc)
@@ -309,6 +316,8 @@ namespace ec
 
         bool Unlock(long long offset, long long lsize) // lsize 0 means to EOF
         {
+            if (m_hFile == INVALID_HANDLE_VALUE)
+                return false;
             struct flock    lock;
 
             lock.l_type = F_UNLCK;  /* F_RDLCK, F_WRLCK, F_UNLCK */

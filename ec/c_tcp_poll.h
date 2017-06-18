@@ -34,6 +34,7 @@ ec library is free C++ library.
 #include "ec/c_str.h"
 #include "ec/c_thread.h"
 #include "ec/c_trace.h"
+#include "ec/c_file.h"
 
 namespace ec {
     namespace tcp_poll {
@@ -109,12 +110,66 @@ namespace ec
             {
                 m_uNextID = 0;
                 _plog = plog;
+                memset(_sidfile, 0, sizeof(_sidfile));
+                
             };
+            ~CConPool()
+            {
+                _fileid.Unlock(0, 0);
+            }
             ec::cLog * _plog;
             ec::cCritical _cs;
+            static unsigned int str2u(const char* s)
+            {
+                int n = 0;
+                unsigned int u = 0, ut;
+                while (*s && n < 8)
+                {
+                    if (*s >= '0' && *s <= '9')
+                        ut = *s - '0';
+                    else if (*s >= 'a' && *s <= 'f')
+                        ut = 0x0A + *s - 'a';
+                    else if (*s >= 'A' && *s <= 'F')
+                        ut = 0x0A + *s - 'A';
+                    else
+                        return u;
+                    u = (u << 4) | ut;
+                    n++;
+                    s++;
+                }
+                return u;
+            }
+        public:
+            bool Loaducid(const char* sfile)
+            {
+                if (!_fileid.Open(sfile, ec::cFile::OF_RDWR | ec::cFile::OF_CREAT, ec::cFile::OF_SHARE_READ))
+                {
+                    if (!_fileid.Open(sfile, ec::cFile::OF_RDWR, ec::cFile::OF_SHARE_READ))
+                        return false;
+                }
+                if (!_fileid.Lock(0, 0, true))
+                    return false;
+                char sbuf[64] = { 0 };
+                int n = _fileid.ReadFrom(0, sbuf, sizeof(sbuf));
+                if (n > 0)
+                    m_uNextID = str2u(sbuf);                    
+                return true;
+            }
+            unsigned int GetNextUcid()
+            {
+                m_uNextID++;
+                while (!m_uNextID || _map.Lookup(m_uNextID))
+                    m_uNextID++;
+                char sbuf[64] = { 0 };
+                sprintf(sbuf, "%X", m_uNextID);
+                _fileid.WriteTo(0, sbuf, strlen(sbuf));
+                return m_uNextID;
+            }
         protected:
-            unsigned short m_uNextID;
+            unsigned int m_uNextID;
             ec::tMap<unsigned int, t_item> _map;
+            ec::cFile _fileid;
+            char _sidfile[512];
             bool _closesockets(SOCKET s)
             {
                 if (s != INVALID_SOCKET)
@@ -177,11 +232,7 @@ namespace ec
             unsigned Add(SOCKET s, unsigned int ip = 0,unsigned int id = 0)
             {
                 ec::cSafeLock lck(&_cs);
-                unsigned short ucid = 0;
-                m_uNextID++;
-                while (!m_uNextID || _map.Lookup(m_uNextID))
-                    m_uNextID++;
-                ucid = m_uNextID;
+                unsigned int ucid = GetNextUcid();                
 
                 t_item u;
                 memset(&u, 0, sizeof(u));
@@ -283,7 +334,7 @@ namespace ec
 
         public:
 #ifdef _WIN32
-            bool   AddToPoll(SOCKET s, unsigned short ucid)
+            bool   AddToPoll(SOCKET s, unsigned int ucid)
             {
                 unsigned long	dwFlags, dwRecv;
                 if (!CreateIoCompletionPort((HANDLE)s, _hio, ucid, 0))
@@ -304,7 +355,7 @@ namespace ec
                 return true;
             }
 #else
-            bool    AddToPoll(SOCKET nfd, unsigned short ucid)
+            bool    AddToPoll(SOCKET nfd, unsigned int ucid)
             {
                 struct epoll_event event;
                 event.data.u64 = ucid;
@@ -410,7 +461,7 @@ namespace ec
                 if (_eplevt.data.fd == -1) // selfmsg
                     return;
                 nfd = (int)(_eplevt.data.u64 & 0xFFFFFFFF);
-                ucid = (unsigned short)(_eplevt.data.u64 >> 32);
+                ucid = (unsigned int)(_eplevt.data.u64 >> 32);
                 if (_eplevt.events & EPOLLIN) // read
                 {
                     while (1)
