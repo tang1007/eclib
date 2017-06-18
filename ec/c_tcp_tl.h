@@ -179,16 +179,21 @@ namespace ec
 #ifdef _WIN32            
             nret = ::send(s, ps + nsend, nsize - nsend, 0);            
             if (SOCKET_ERROR == nret)
-                return SOCKET_ERROR;
-            else if (0 == nret)//for nonblocking  mode
             {
-                TIMEVAL tv01 = { 0,1000 * 100 };
-                fd_set fdw;
-                FD_ZERO(&fdw);
-                FD_SET(s, &fdw);
-                if (-1 == ::select(0, NULL, &fdw, NULL, &tv01))
-                    return SOCKET_ERROR;                
-            }
+                int nerr = WSAGetLastError();
+                if (WSAEWOULDBLOCK == nerr || WSAENOBUFS == nerr)  // nonblocking  mode
+                {
+                    TIMEVAL tv01 = { 0,1000 * 100 };
+                    fd_set fdw;
+                    FD_ZERO(&fdw);
+                    FD_SET(s, &fdw);
+                    if (-1 == ::select(0, NULL, &fdw, NULL, &tv01))
+                        return SOCKET_ERROR;
+                    continue;
+                }
+                else
+                    return SOCKET_ERROR;
+            }            
             else
                 nsend += nret;            
 #else
