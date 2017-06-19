@@ -112,7 +112,7 @@ namespace ec
         0x8201, 0x42c0, 0x4380, 0x8341, 0x4100, 0x81c1, 0x8081, 0x4040
     };
 
-    unsigned short crc16_ansi(const void *buf, int size)
+    inline unsigned short crc16_ansi(const void *buf, int size)
     {
         unsigned short crc = 0;
         int n = size;
@@ -168,7 +168,7 @@ namespace ec
     };
 
     
-    unsigned short crc16_xmodem(const void *buf, int size) {
+    inline unsigned short crc16_xmodem(const void *buf, int size) {
         unsigned short crc = 0;
         int n = size;
         const unsigned char *p = (unsigned char *)buf;
