@@ -1743,8 +1743,6 @@ namespace ec
             _msgr.ClearAndFree(1024 * 1024 * 2);
         }
     protected:
-        unsigned short _wport;
-        char _sip[16];
         char _usr[32];
         char _psw[40];
         unsigned char _pswsha1[20]; //密码的sha1摘要，用于解密
@@ -2015,8 +2013,15 @@ namespace ec
     public:
         bool Connect(const char* sip, unsigned short wport, const char* usr, const char* password)
         {
-            if (!sip || !wport)
+            if (!sip || !wport || !usr || !password)
                 return false;
+            if (IsRun())
+            {
+                unsigned int uip1 = (unsigned int)inet_addr(sip);
+                unsigned int uip2 = (unsigned int)inet_addr(_sip);
+                if (uip1 == uip2 && wport == _wport && !strcmp(usr, _usr) && !strcmp(password, _psw))
+                    return true;
+            }
             str_ncpy(_usr, usr, sizeof(_usr));
             str_ncpy(_psw, password, sizeof(_psw));
             if (!_psw[0])

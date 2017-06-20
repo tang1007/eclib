@@ -61,7 +61,7 @@ namespace ec {
             if (!sip || !wport)
                 return false;
 
-            if (!IsRun())
+            if (IsRun())
                 StopThread();
             ec::str_ncpy(_sip, sip, sizeof(_sip));
             _wport = wport;

@@ -72,7 +72,7 @@ namespace ec
         {
             keepIdle = 5;
             keepInterval = 1;
-            keepCount = 4;
+            keepCount = 3;
         }
         setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, (void *)&keepAlive, sizeof(keepAlive));
         setsockopt(s, SOL_TCP, TCP_KEEPIDLE, (void*)&keepIdle, sizeof(keepIdle));
@@ -92,8 +92,8 @@ namespace ec
         tcp_keepalive alive_out;
         if (bfast)
         {
-            alive_in.keepalivetime = 3 * 1000;
-            alive_in.keepaliveinterval = 300;
+            alive_in.keepalivetime = 5 * 1000;
+            alive_in.keepaliveinterval = 500;
         }
         else
         {
