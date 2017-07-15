@@ -365,7 +365,7 @@ namespace ec
         return 0:success; -1 failed , error code int _lasterror
         \remark can't change args ofter create
         */
-        int CreateStorage(const char *sfile, const char* sappid, unsigned int sizepage, unsigned int sizedir, unsigned int pgsdir, unsigned patpgs)
+        int CreateStorage(const char *sfile, const char* sappid, unsigned int sizepage, unsigned int sizedir, unsigned int pgsdir, unsigned patpgs,bool writethrough = true)
         {
             _lasterror = 0;
             if (IsOpen()) {
@@ -376,7 +376,11 @@ namespace ec
                 _lasterror = MINS_ERR_FAILED;
                 return false;
             }
-            if (!Open(sfile, OF_CREAT | OF_RDWR | OF_SYNC, OF_SHARE_READ | OF_SHARE_WRITE)) {
+            unsigned int uflag = OF_CREAT | OF_RDWR;
+            if (writethrough)
+                uflag |= OF_SYNC;
+
+            if (!Open(sfile, uflag, OF_SHARE_READ | OF_SHARE_WRITE)) {
                 SetSystemLastError();
                 return -1;
             }
@@ -412,14 +416,17 @@ namespace ec
         \brief open storage
         \return 0:ok; -1 error and _lasterror set error code
         */
-        int OpenStorage(const char *sfile)
+        int OpenStorage(const char *sfile,bool writethrough = true)
         {
             _lasterror = 0;
             if (IsOpen()) {
                 _lasterror = MINS_ERR_ISOPEN;
                 return -1;
             }
-            if (!Open(sfile, OF_RDWR | OF_SYNC, OF_SHARE_READ | OF_SHARE_WRITE)) {
+            unsigned int uflag = OF_RDWR;
+            if (writethrough)
+                uflag |= OF_SYNC;
+            if (!Open(sfile, uflag, OF_SHARE_READ | OF_SHARE_WRITE)) {
                 SetSystemLastError();
                 return -1;
             }
@@ -444,7 +451,7 @@ namespace ec
         \brief write user args,max 512 bytes
         \return return write bytes; -1 failed _lasterror
         */
-        int WriteAppArgs(void* pdata, size_t len)
+        int WriteAppArgs(const void* pdata, size_t len)
         {
             _lasterror = 0;
             if (!IsOpen()) {
@@ -499,11 +506,12 @@ namespace ec
         }
         /*!
         \brief create one stream
-        \param sname [in] 流名
+        \param sname [in] 
+        \param nidx [in] create at nidx,-1 is any where
         \return return void* ; 0:failed and set _lasterror
         \remark When you no longer use, use CloseStream release flow
         */
-        void* CreateStream(const char* sname)
+        void* CreateStream(const char* sname, int nidx = -1)
         {
             _lasterror = 0;
             if (!IsOpen()) {
@@ -527,7 +535,7 @@ namespace ec
                 LeSwap(pdir);
                 if (!pdir->flag)
                 {
-                    if (npos < 0)
+                    if ((npos < 0) && (nidx == -1 || nidx == i))
                         npos = i;
                     continue;
                 }
@@ -560,23 +568,30 @@ namespace ec
         /*!
         \brief open onr stream
         \param sname [in] stream name
+        \param nidx [in] open at nidx,-1 is not use
         \return return void* ; 0:failed and set _lasterror
         \remark When you no longer use, use CloseStream release flow
         */
-        void* OpenStream(const char* sname)
+        void* OpenStream(const char* sname,int nidx = -1)
         {
             _lasterror = 0;
             if (!IsOpen()) {
                 _lasterror = MINS_ERR_NOTOPEN;
                 return 0;
             }
-            if (Seek(_head.size_page, seek_set) < 0) {
+            unsigned int upos = _head.size_page;
+            int i = 0, n = (int)MaxDirNum();                
+            if (nidx >= 0)
+            {
+                upos += nidx * _head.size_dir;
+                i = nidx;
+            }
+            if (Seek(upos, seek_set) < 0) {
                 SetSystemLastError();
                 return 0;
             }
-            t_dir* pdir = (t_dir*)malloc(_head.size_dir);
-            int i, n = (int)MaxDirNum();
-            for (i = 0; i < n; i++)
+            t_dir* pdir = (t_dir*)malloc(_head.size_dir);            
+            for (; i < n; i++)
             {
                 if (Read(pdir, _head.size_dir) != (int)_head.size_dir)
                 {
@@ -619,12 +634,12 @@ namespace ec
                 if (pdir->flag)
                 {
                     pinfo->datasize = pdir->datasize;
-                    memcpy(pinfo->name, pdir->name, sizeof(pinfo->name));                    
+                    memcpy(pinfo->name, pdir->name, sizeof(pinfo->name));
                     free(pdir);
                     npos++;
                     return true;
                 }
-            }            
+            }
             return false;
         }
 
@@ -847,7 +862,7 @@ namespace ec
             unsigned int pgnumbk = pdir->pagenum, usizebk = pdir->datasize;
             pdir->datasize = usize;
             pdir->pagenum = (usize % _head.size_page) ? (usize / _head.size_page + 1) : (usize / _head.size_page);
-            if (WriteDir(pdir) < 0) { 
+            if (WriteDir(pdir) < 0) {
                 pdir->datasize = usizebk;// write dir failed ,restore
                 pdir->pagenum = pgnumbk;
                 return -1;
