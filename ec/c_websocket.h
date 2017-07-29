@@ -178,28 +178,20 @@ namespace ec
     public:
         const char* _ps, *_pe,*_pstr;
     public:
-
-        bool GetNextWord(char* sout, size_t outsize) // \n as one word
+        bool GetNextWord(char* sout, size_t outsize)
         {
             size_t pos = 0;
             sout[0] = '\0';
             while (_ps < _pe)
             {
-                if (*_ps == '\x20' || *_ps == '\t' || *_ps == '\r')
+                if (*_ps == '\x20' || *_ps == '\t' || *_ps == '\r' || *_ps == '\n')
                 {
                     if (pos > 0)
                     {
                         _ps++;
                         break;
                     }
-                }
-                else if (*_ps == '\n')
-                {
-                    if (pos > 0)
-                        break;
-                    sout[pos++] = *_ps++;
-                    break;
-                }
+                }                
                 sout[pos++] = *_ps++;
                 if (pos >= outsize)
                     return false;
@@ -343,8 +335,13 @@ namespace ec
                     }
                     else
                     {
-                        ft.args[pos++] = *s++;
-                        ft.args[pos] = '\0';
+                        if (pos < sizeof(ft.args) - 1)
+                        {
+                            ft.args[pos++] = *s++;
+                            ft.args[pos] = '\0';
+                        }
+                        else
+                            return he_failed;
                     }
                 }
                 else
@@ -356,14 +353,18 @@ namespace ec
                             ft.name[pos++] = *s++;
                             ft.name[pos] = '\0';
                         }
+                        else
+                            return he_failed;
                     }
-                    else if (nf == 1)
+                    else 
                     {
                         if (pos < sizeof(ft.args) - 1)
                         {
                             ft.args[pos++] = *s++;
                             ft.args[pos] = '\0';
                         }
+                        else
+                            return he_failed;
                     }
                 }
             }
