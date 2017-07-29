@@ -8,6 +8,7 @@ ec library is free C++ library.
 */
 #ifndef C_STR_H
 #define C_STR_H
+#include <stdlib.h>
 #include <memory.h>
 #include <string.h>
 #ifndef _WIN32
