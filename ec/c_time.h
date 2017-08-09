@@ -129,7 +129,7 @@ namespace ec
     {
     public:
         cDatetime() :_nyear(0), _nmon(0), _nday(0), _nhour(0), _nmin(0), _nsec(0), _gmt(-1) { };
-        cDatetime(const char *s) {
+        cDatetime(const char *s) :_nyear(0), _nmon(0), _nday(0), _nhour(0), _nmin(0), _nsec(0), _gmt(-1) {
             parse(s);
         }
     public:
@@ -175,7 +175,7 @@ namespace ec
             sf[n] = 0;
             _nday = atoi(sf);
 
-            if (st[0]) //ÓĞÊ±¼ä¶Î
+            if (st[0]) //has time filed
             {
                 np = 0;  n = 0;
                 sp = st;
@@ -206,7 +206,7 @@ namespace ec
                 sf[n] = 0;
                 _nsec = atoi(sf);
             }
-            if (_nmon > 12 || _nmon < 1 || _nday >31 || _nday < 1
+            if (_nyear < 1970 || _nmon > 12 || _nmon < 1 || _nday >31 || _nday < 1
                 || _nhour>23 || _nhour < 0 || _nmin < 0 || _nmin > 59 || _nsec < 0 || _nsec > 59)
                 return false;
             ec::cTime t(_nyear, _nmon, _nday, _nhour, _nmin, _nsec);
