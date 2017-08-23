@@ -39,13 +39,14 @@ namespace ec
 			return *this;
 		};
 		
-        template < typename T > cStream & operator << (T& v) {
+        template < typename T > cStream & operator << (T v) {
             if (_pos + sizeof(T) > _size)
                 throw (int)1;
             *((T*)(_ps + _pos)) = v;
             _pos += sizeof(T);
             return *this;
         };
+        
 
 		cStream & read(void* pbuf,size_t size)
 		{
@@ -56,7 +57,7 @@ namespace ec
 			return *this;
 		};
 
-        cStream & write(void* pbuf, size_t size)
+        cStream & write(const void* pbuf, size_t size)
         {
             if (_pos + sizeof(size) > _size)
                 throw (int)1;
@@ -105,9 +106,8 @@ namespace ec
 			_pos = pos;
 			return *this;
 		};
-
+        inline size_t getpos() { return _pos; };
         inline size_t leftsize() { return _size - _pos; }
-        inline size_t getdatasize() { return _pos;};
 	protected:
 		size_t	_pos;
 		size_t	_size;

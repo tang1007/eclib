@@ -56,39 +56,7 @@ namespace ec {
     void    ec::tMap<unsigned int, tcp_poll::t_item>::OnRemoveValue(tcp_poll::t_item* pcls) {}
 };
 namespace ec
-{
-    inline unsigned int GetHostIP(const char* shost) //return net byte order
-    {
-        unsigned int uip = 0;
-        struct addrinfo *result = NULL;
-        struct addrinfo *ptr = NULL;
-        struct addrinfo hints;
-
-        memset(&hints, 0, sizeof(hints));
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_protocol = IPPROTO_TCP;
-
-        if (getaddrinfo(shost, NULL, &hints, &result))
-            return 0;
-
-        for (ptr = result; ptr != NULL; ptr = ptr->ai_next)
-        {
-            if (ptr->ai_family == AF_INET)
-            {
-#ifdef _WIN32
-                uip = ((struct sockaddr_in *) ptr->ai_addr)->sin_addr.S_un.S_addr;
-#else
-                uip = ((struct sockaddr_in *) ptr->ai_addr)->sin_addr.s_addr;
-#endif
-                break;
-            }
-        }
-        if (result)
-            freeaddrinfo(result);
-        return uip;
-    }
-
+{  
     namespace tcp_poll
     {
 #define SIZE_READ_BLOCK  32768

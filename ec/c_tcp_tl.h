@@ -16,6 +16,7 @@ ec library is free C++ library.
 #	pragma warning(disable : 4996)
 #	include <winsock2.h>
 #	include <mstcpip.h>
+#   include <ws2tcpip.h>
 #else
 #	include <unistd.h>
 #	include <sys/time.h>
@@ -26,6 +27,7 @@ ec library is free C++ library.
 #	include <netinet/tcp.h>
 #	include <arpa/inet.h>
 #	include <errno.h>
+#   include <netdb.h>
 
 #ifndef SOCKET
 #	define SOCKET int
@@ -252,5 +254,36 @@ namespace ec
 			return SOCKET_ERROR;
 		return nRet;
 	}
+    inline unsigned int GetHostIP(const char* shost) //return net byte order
+    {
+        unsigned int uip = 0;
+        struct addrinfo *result = NULL;
+        struct addrinfo *ptr = NULL;
+        struct addrinfo hints;
+
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
+
+        if (getaddrinfo(shost, NULL, &hints, &result))
+            return 0;
+
+        for (ptr = result; ptr != NULL; ptr = ptr->ai_next)
+        {
+            if (ptr->ai_family == AF_INET)
+            {
+#ifdef _WIN32
+                uip = ((struct sockaddr_in *) ptr->ai_addr)->sin_addr.S_un.S_addr;
+#else
+                uip = ((struct sockaddr_in *) ptr->ai_addr)->sin_addr.s_addr;
+#endif
+                break;
+            }
+        }
+        if (result)
+            freeaddrinfo(result);
+        return uip;
+    }
 } //namespace ec
 #endif // C_TCP_H

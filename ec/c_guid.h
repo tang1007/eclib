@@ -63,6 +63,17 @@ namespace ec
             _uinfo.seqno++;
             ec::encode_md5(&_uinfo, sizeof(_uinfo), (unsigned char*)pguid);
         }
+
+        void uuid2(unsigned char guid[16],unsigned int seqno)
+        {
+#ifdef _WIN32			
+            GetSystemTimeAsFileTime(&_uinfo.ts);
+#else
+            clock_gettime(CLOCK_REALTIME, &_uinfo.ts);
+#endif
+            _uinfo.seqno = seqno;
+            ec::encode_md5(&_uinfo, sizeof(_uinfo), guid);
+        }
     };
 }
 

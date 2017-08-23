@@ -380,6 +380,98 @@ namespace ec
         void* _p;
     };
 
+    class cStrSplit
+    {
+    public:
+        cStrSplit(const char* s, const char* sfilter = "\t\x20\f\r\n", size_t sizes = 0)
+        {
+            if (s && *s)
+            {
+                _s = s;
+                if (sizes)
+                    _sizes = sizes;
+                else
+                    _sizes = strlen(s);
+            }
+            else
+            {
+                _s = 0;
+                _sizes = 0;
+            }
+            _pos = 0;
+            _sfiled[0] = 0;
+            _sfilter = sfilter;
+        }
+    private:
+        const char* _s, *_sfilter;
+        size_t _sizes, _pos;
+        char _sfiled[4096]; //current filed
+    public:
+        inline void Reset() {
+            _pos = 0;
+            _sfiled[0] = 0;
+        }
+        char* next(const char *split, char * sout = 0, size_t sizeout = 0,size_t *psize=NULL)
+        {
+            if (psize)
+                *psize = 0;
+            char c;
+            size_t i = 0, lout = sizeout;
+            char *so = sout;
+
+            if (!sout || !sizeout)
+            {
+                so = _sfiled;
+                lout = sizeof(_sfiled);
+            }
+            if (!_s)
+                return 0;
+            while (_pos < _sizes)
+            {
+                c = _s[_pos++];
+                if (strchr(split, c))
+                {
+                    while (i > 0)// delete tail space char
+                    {
+                        if (!_sfilter || !strchr(_sfilter, so[i - 1])) //filter out  
+                            break;
+                        i--;
+                    }
+                    so[i] = '\0';
+                    if (i > 0)
+                    {
+                        if (psize)
+                            *psize = i;
+                        return so;
+                    }
+                }
+                else
+                {
+                    if (_sfilter && strchr(_sfilter, c)) //filter out  
+                        continue; //delete head space char                    
+                    so[i++] = c;
+                    if (i >= lout)
+                        return 0;
+                }
+            }
+
+            while (i > 0) //delete tail space char
+            {
+                if (!_sfilter || !strchr(_sfilter, so[i - 1])) //filter out  
+                    break;
+                i--;
+            }
+            so[i] = '\0';
+            if (i > 0)
+            {
+                if (psize)
+                    *psize = i;
+                return so;
+            }
+            return 0;
+        }
+    };
+
 };//namespace ec
 #endif //C_STR_H
 
