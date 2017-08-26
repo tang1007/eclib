@@ -343,7 +343,7 @@ namespace ec
         0:memery error;
         -1: no ucid or IO error ,call OnClientDisconnect
         */
-        int	SendToUcid(unsigned int ucid, void* pbuf, unsigned int usize, bool bAddCount = false, unsigned int uSendOpt = TCPIO_OPT_SEND)
+        int	SendToUcid(unsigned int ucid, const void* pbuf, unsigned int usize, bool bAddCount = false, unsigned int uSendOpt = TCPIO_OPT_SEND)
         {
             if (!pbuf || !usize)
                 return 0;

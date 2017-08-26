@@ -435,9 +435,9 @@ namespace ec
 #else
 
         //return send bytes size or -1 for error
-        int Socket_Send(SOCKET s, void* pbuf, unsigned int nsize)
+        int Socket_Send(SOCKET s, const void* pbuf, unsigned int nsize)
         {
-            char *ps = (char*)pbuf;
+            const char *ps = (const char*)pbuf;
             unsigned int  nsend = 0;
             int nret;
             while (nsend < nsize)
@@ -465,7 +465,7 @@ namespace ec
         };
 
         //send as block ,return send bytes size or -1 for error
-        int ucid_Send(unsigned int uID, void* pbuf, unsigned int nsize)
+        int ucid_Send(unsigned int uID, const void* pbuf, unsigned int nsize)
         {
             SOCKET s = INVALID_SOCKET;
             int rst = LockSocket(uID, CPL_SOCKETST_SEND, s);
