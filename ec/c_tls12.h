@@ -1722,6 +1722,8 @@ namespace ec
             if (!pf)
                 return false;
             size_t size;
+            _pcer.ClearData();
+            _prootcer.ClearData();
             while (!feof(pf))
             {
                 size = fread(stmp, 1, sizeof(stmp), pf);
@@ -1729,16 +1731,19 @@ namespace ec
             }
             fclose(pf);
 
-            pf = fopen(filerootcert, "rb");
-            if (!pf)
-                return false;
-
-            while (!feof(pf))
+            if (filerootcert)
             {
-                size = fread(stmp, 1, sizeof(stmp), pf);
-                _prootcer.Add(stmp, size);
-            }
-            fclose(pf);
+                pf = fopen(filerootcert, "rb");
+                if (!pf)
+                    return false;
+
+                while (!feof(pf))
+                {
+                    size = fread(stmp, 1, sizeof(stmp), pf);
+                    _prootcer.Add(stmp, size);
+                }
+                fclose(pf);
+            }                
 
             pf = fopen(fileprivatekey, "rb");
             if (!pf)

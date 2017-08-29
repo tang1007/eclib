@@ -780,7 +780,7 @@ namespace ec
             }
             if (pos + uw > pdir->datasize)
             {
-                pdir->datasize += pos + uw;
+                pdir->datasize = pos + uw;
                 if (WriteDir(pdir) < 0)
                     return -1;
             }

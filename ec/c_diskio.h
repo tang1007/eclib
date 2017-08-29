@@ -68,12 +68,13 @@ namespace ec
                         if (!CreateDirectoryA(szt, NULL))
                             return false;
                     *pct = '/';
+                    cl = *pct;
                     pct++;
                     *pct = '\0';
-                    cl = '/';
                 }
                 else {
                     *pct = *lpszPath;
+                    cl = *pct;
                     pct++;
                     *pct = '\0';
                 }
