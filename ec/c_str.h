@@ -13,6 +13,7 @@ ec library is free C++ library.
 #include <string.h>
 #ifndef _WIN32
 #include <iconv.h>
+#include <ctype.h>
 #endif
 namespace ec
 {
@@ -76,6 +77,33 @@ namespace ec
         *sd = 0;
         return --n;
     };
+
+    inline bool str_neq(const char* s1, const char* s2, size_t n)
+    {
+        size_t i = 0;
+        while (i < n)
+        {
+            if (*s1 != *s2)
+                return false;
+            i++;
+            s1++;
+            s2++;
+        }
+        return true;
+    }
+    inline bool str_ineq(const char* s1, const char* s2, size_t n)
+    {
+        size_t i = 0;
+        while (i < n)
+        {
+            if (tolower(*s1) != tolower(*s2))
+                return false;
+            i++;
+            s1++;
+            s2++;
+        }
+        return true;
+    }
 
     ///\brief filter string
     ///
@@ -364,6 +392,8 @@ namespace ec
     public:
         cAp(size_t size) {
             _p = malloc(size);
+            if (_p)
+                _size = size;
         }
         ~cAp() {
             if (_p)
@@ -376,7 +406,12 @@ namespace ec
         inline bool isempty() {
             return !_p;
         }
+        inline size_t getsize() {
+            return _size;
+        };
+        inline void* getbuf() { return _p; };
     protected:
+        size_t _size;
         void* _p;
     };
 
