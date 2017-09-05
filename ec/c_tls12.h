@@ -1,4 +1,4 @@
-ï»¿/*!
+/*!
 \file c_tls12.h
 \version 0.01
 TLS 1.2 (rfc5246) safe channel client
@@ -47,6 +47,9 @@ namespace tls
     };
 };
 
+#ifndef _WIN32
+#include <dlfcn.h>
+#endif
 #include <time.h>
 #include "c_str.h"
 #include "c_thread.h"
@@ -62,7 +65,7 @@ namespace tls
 #include "openssl/x509.h"
 #include "openssl/hmac.h"
 #include "openssl/aes.h"
-#include <openssl/pem.h>
+#include "openssl/pem.h"
 
 /*!
 \brief CipherSuite
@@ -78,10 +81,10 @@ namespace tls
 
 #define TLS_CBCBLKSIZE  16303 // (16384-16-32-1-32)
 
-#define TLS_SESSION_ERR		(-1) //é”™è¯¯
-#define TLS_SESSION_HKOK	0 //æˆåŠŸ
-#define TLS_SESSION_RET		1 //æˆåŠŸï¼Œéœ€è¦å‘å¯¹æ–¹å‘é€è¾“å‡ºçš„æ•°æ®
-#define TLS_SESSION_APPDATA 2 //æˆåŠŸï¼Œæœ‰APPå±‚æ•°æ®
+#define TLS_SESSION_ERR		(-1) //´íÎó
+#define TLS_SESSION_HKOK	0 //³É¹¦
+#define TLS_SESSION_RET		1 //³É¹¦£¬ĞèÒªÏò¶Ô·½·¢ËÍÊä³öµÄÊı¾İ
+#define TLS_SESSION_APPDATA 2 //³É¹¦£¬ÓĞAPP²ãÊı¾İ
 
 namespace ec
 {
@@ -175,12 +178,12 @@ namespace ec
             return HMAC(EVP_sha256(), pkeymac, 32, stmp, es.getpos(), outmac, &mdlen) != NULL;
         }
         /*!
-        è§£å¯†recordå¹¶æ ¡éªŒ
-        \param pd [in] å®Œæ•´çš„recordåè®®
-        \param len [in] pdé•¿åº¦
-        \param pout [out]è¾“å‡ºç¼“å†²åŒºï¼Œä¸å°äºpdçš„é•¿åº¦
-        \param poutsize[out]å®é™…è¾“å‡ºçš„å­—èŠ‚æ•°ï¼ŒæˆåŠŸè§£å¯†å’ŒéªŒè¯æ­£ç¡®åè„±å£³æ•°æ®çš„é•¿åº¦ã€‚
-        \remark è¾“å‡ºä¸ºä¸€ä¸ªä¸åŠ å¯†çš„recordåŒ…ã€‚
+        ½âÃÜrecord²¢Ğ£Ñé
+        \param pd [in] ÍêÕûµÄrecordĞ­Òé
+        \param len [in] pd³¤¶È
+        \param pout [out]Êä³ö»º³åÇø£¬²»Ğ¡ÓÚpdµÄ³¤¶È
+        \param poutsize[out]Êµ¼ÊÊä³öµÄ×Ö½ÚÊı£¬³É¹¦½âÃÜºÍÑéÖ¤ÕıÈ·ºóÍÑ¿ÇÊı¾İµÄ³¤¶È¡£
+        \remark Êä³öÎªÒ»¸ö²»¼ÓÃÜµÄrecord°ü¡£
         */
         bool decrypt_record(const unsigned char*pd, size_t len, unsigned char* pout, int *poutsize)
         {
@@ -229,11 +232,11 @@ namespace ec
         virtual int dorecord(const unsigned char* prec, size_t sizerec, int(*OnData)(void*, unsigned int, int, const void*, int), void* pParam) = 0;
 
         /*!
-        åŠ å¯†æ‰“åŒ…ä¸€ä¸ªåŸºæœ¬æ•°æ®å—ä¸ºrecordåè®®
-        \param po [out]è¾“å‡ºç”¨çš„åŠ¨æ€æ•°ç»„å¯¹è±¡æŒ‡é’ˆã€‚
-        \param type [in] recordåè®®çš„å­åè®®æšä¸¾å€¼
-        \param sblk [in] è¢«åŠ å¯†çš„æ•°æ®å—
-        \param size [in] è¢«åŠ å¯†çš„æ•°æ®å—çš„å­—èŠ‚æ•°
+        ¼ÓÃÜ´ò°üÒ»¸ö»ù±¾Êı¾İ¿éÎªrecordĞ­Òé
+        \param po [out]Êä³öÓÃµÄ¶¯Ì¬Êı×é¶ÔÏóÖ¸Õë¡£
+        \param type [in] recordĞ­ÒéµÄ×ÓĞ­ÒéÃ¶¾ÙÖµ
+        \param sblk [in] ±»¼ÓÃÜµÄÊı¾İ¿é
+        \param size [in] ±»¼ÓÃÜµÄÊı¾İ¿éµÄ×Ö½ÚÊı
         */
         int MKR_WithAES_BLK(ec::tArray<unsigned char> *po, unsigned char type, const unsigned char* sblk, size_t size)
         {
@@ -352,9 +355,9 @@ namespace ec
             return true;
         }
 
-        bool SendToBuf(ec::tArray<unsigned char> *po, int nprotocol, const void* pd, size_t size) //å‘é€
+        bool SendToBuf(ec::tArray<unsigned char> *po, int nprotocol, const void* pd, size_t size) //·¢ËÍ
         {
-            if (_bsendcipher && *((unsigned char*)pd) != (unsigned char)tls::rec_contenttype::rec_alert)
+            if (_bsendcipher && *((unsigned char*)pd) != (unsigned char)tls::rec_alert)
                 return mk_cipher(po, (unsigned char)nprotocol, (const unsigned char*)pd, size);
             return mk_nocipher(po, nprotocol, pd, size);
         }
@@ -472,14 +475,14 @@ namespace ec
             memset(_key_block, 0, sizeof(_key_block));
         }
         /*!
-        è®¡ç®—RPF
+        ¼ÆËãRPF
         PRF(secret,label,seed) = P_sha256(secret,label + seed)
-        \param key [in]  å¯†æ•°secret
-        \param keylen [in]  å¯†æ•°secretçš„å­—èŠ‚æ•°
-        \param seed [in] label+seedåˆå¹¶åçš„æ•°æ®
-        \param seedlen [in] label+seedåˆå¹¶åçš„æ•°æ®å­—èŠ‚æ•°
-        \param pout [out] è¾“å‡ºåŒº
-        \param outlen [in] è¾“å‡ºå­—èŠ‚æ•°,å³éœ€è¦æ‰©å±•åˆ°çš„å­—èŠ‚æ•°ã€‚
+        \param key [in]  ÃÜÊısecret
+        \param keylen [in]  ÃÜÊısecretµÄ×Ö½ÚÊı
+        \param seed [in] label+seedºÏ²¢ºóµÄÊı¾İ
+        \param seedlen [in] label+seedºÏ²¢ºóµÄÊı¾İ×Ö½ÚÊı
+        \param pout [out] Êä³öÇø
+        \param outlen [in] Êä³ö×Ö½ÚÊı,¼´ĞèÒªÀ©Õ¹µ½µÄ×Ö½ÚÊı¡£
         */
         static bool prf_sha256(const unsigned char* key, int keylen, const unsigned char* seed, int seedlen, unsigned char *pout, int outlen)
         {
@@ -552,7 +555,7 @@ namespace ec
             RAND_bytes(_clientrand, sizeof(_clientrand));
 
             _client_hello.ClearData();
-            _client_hello.Add((uint8)tls::handshaketype::hsk_client_hello);  // msg type  1byte
+            _client_hello.Add((uint8)tls::hsk_client_hello);  // msg type  1byte
             _client_hello.Add((uint8)0); _client_hello.Add((uint8)0); _client_hello.Add((uint8)0); // msg len  3byte 
 
             _client_hello.Add((uint8)TLSVER_MAJOR);
@@ -587,7 +590,7 @@ namespace ec
                 uct = *p;
                 ulen = p[3];
                 ulen = (ulen << 8) + p[4];
-                if (uct < (uint8)tls::rec_contenttype::rec_change_cipher_spec || uct >(uint8)tls::rec_contenttype::rec_application_data ||
+                if (uct < (uint8)tls::rec_change_cipher_spec || uct >(uint8)tls::rec_application_data ||
                     _pkgtcp[1] != TLSVER_MAJOR || ulen > tls_rec_fragment_len + 2048)
                 {
                     if (_pkgtcp[1] != TLSVER_MAJOR)
@@ -761,7 +764,7 @@ namespace ec
             po->ClearData();
             if (!_bsrvfinished)
                 return false;
-            return SendToBuf(po, tls::rec_contenttype::rec_application_data, pd, size);
+            return SendToBuf(po, tls::rec_application_data, pd, size);
         }
     private:
         bool mkr_ClientKeyExchange(ec::tArray<unsigned char> *po)
@@ -792,7 +795,7 @@ namespace ec
                 return false;
 
             _cli_key_exchange.ClearData();
-            _cli_key_exchange.Add((unsigned char)(tls::handshaketype::hsk_client_key_exchange));
+            _cli_key_exchange.Add((unsigned char)(tls::hsk_client_key_exchange));
             uint32 ulen = nbytes;
             _cli_key_exchange.Add((unsigned char)((ulen >> 16) & 0xFF));
             _cli_key_exchange.Add((unsigned char)((ulen >> 8) & 0xFF));
@@ -933,22 +936,22 @@ namespace ec
             ulen = (ulen << 8) + p[4];
             ECTRACE("protocol=%u,ver=(%d,%d),len = %u\n", p[0], p[1], p[2], ulen);
 
-            if (p[0] == tls::rec_contenttype::rec_handshake)
+            if (p[0] == tls::rec_handshake)
             {
                 if (dohandshakemsg(p + 5, sizerec - 5, OnData, pParam) < 0)
                     return -1;
             }
-            else if (p[0] == tls::rec_contenttype::rec_alert)
+            else if (p[0] == tls::rec_alert)
             {
                 ECTRACE("Alert level = %d,,AlertDescription = %d\n", p[5], p[6]);
             }
-            else if (p[0] == tls::rec_contenttype::rec_change_cipher_spec)
+            else if (p[0] == tls::rec_change_cipher_spec)
             {
                 _breadcipher = true;
                 _seqno_read = 0;
                 ECTRACE("server change_cipher_spec\n");
             }
-            else if (p[0] == tls::rec_contenttype::rec_application_data)
+            else if (p[0] == tls::rec_application_data)
                 return OnData(pParam, _ucid, TLS_SESSION_APPDATA, p + 5, (int)sizerec - 5);
             return 0;
         }
@@ -1042,7 +1045,7 @@ namespace ec
             po->ClearData();
             if (!_bhandshake_finished)
                 return false;
-            return SendToBuf(po, tls::rec_contenttype::rec_application_data, pd, size);
+            return SendToBuf(po, tls::rec_application_data, pd, size);
         }
     protected:
         void MakeServerHello()
@@ -1307,22 +1310,22 @@ namespace ec
             ulen = (ulen << 8) + p[4];
             ECTRACE("protocol=%u,ver=(%d,%d),len = %u\n", p[0], p[1], p[2], ulen);
 
-            if (p[0] == tls::rec_contenttype::rec_handshake)
+            if (p[0] == tls::rec_handshake)
             {
                 if (dohandshakemsg(p + 5, sizerec - 5, OnData, pParam) < 0)
                     return -1;
             }
-            else if (p[0] == tls::rec_contenttype::rec_alert)
+            else if (p[0] == tls::rec_alert)
             {
                 ECTRACE("Alert level = %d,,AlertDescription = %d\n", p[5], p[6]);
             }
-            else if (p[0] == tls::rec_contenttype::rec_change_cipher_spec)
+            else if (p[0] == tls::rec_change_cipher_spec)
             {
                 _breadcipher = true;
                 _seqno_read = 0;
                 ECTRACE("srv: change_cipher_spec\n");
             }
-            else if (p[0] == tls::rec_contenttype::rec_application_data)
+            else if (p[0] == tls::rec_application_data)
                 return OnData(pParam, _ucid, TLS_SESSION_APPDATA, p + 5, (int)sizerec - 5);
             return 0;
         }

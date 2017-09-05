@@ -36,6 +36,7 @@ ec library is free C++ library.
 
 #include <errno.h>
 #include <sys/epoll.h>
+#include <fcntl.h>
 #endif
 
 #include "c_tcp_tl.h"
