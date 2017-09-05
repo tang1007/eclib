@@ -1,4 +1,4 @@
-/*!
+ï»¿/*!
 \file c_wss.h
 \brief websocket protocol on tls 1.2,http protocol only support get,head ; websocket protocol support Sec-WebSocket-Version:13
 \date 2017.8.25
@@ -11,7 +11,7 @@
 namespace ec
 {
     /*!
-    \brief Https¹¤×÷Ïß³Ì
+    \brief Httpså·¥ä½œçº¿ç¨‹
     */
     class cHttpsWorkThread : public cTlsSrvThread
     {
@@ -28,22 +28,22 @@ namespace ec
         };
 
     protected:
-        cHttpCfg*		_pcfg;		//!<ÅäÖÃ
-        cLog*			_plog;		//!<ÈÕÖ¾
+        cHttpCfg*		_pcfg;		//!<é…ç½®
+        cLog*			_plog;		//!<æ—¥å¿—
 
-        cHttpClientMap*	_pclis;		//!<Á¬½Ó¿Í»§MAP
-        cHttpPacket		_httppkg;	//!<±¨ÎÄ½âÎö
-        tArray<char>	_filetmp;	//!<ÎÄ¼şÁÙÊ±Çø
-        tArray<char>	_answer;	//!<Ó¦´ğ       
+        cHttpClientMap*	_pclis;		//!<è¿æ¥å®¢æˆ·MAP
+        cHttpPacket		_httppkg;	//!<æŠ¥æ–‡è§£æ
+        tArray<char>	_filetmp;	//!<æ–‡ä»¶ä¸´æ—¶åŒº
+        tArray<char>	_answer;	//!<åº”ç­”       
     protected:
         /*!
-        \brief ´¦Àíwebsocket½ÓÊÕµ½µÄÊı¾İ
-        \return ·µ»Øtrue±íÊ¾³É¹¦£¬false±íÊ¾Ê§°Ü£¬µ×²ã»á¶Ï¿ªÕâ¸öÁ¬½Ó
-        \remark ÅÉÉúÀàÖØÔØÕâ¸öº¯Êı,´¦Àí½ÓÊÜµ½µÄÊı¾İ£¬Èç¹ûĞèÒªÓ¦´ğ£¬Ö±½ÓÊ¹ÓÃSendToUcid·½·¨Ó¦´ğ
+        \brief å¤„ç†websocketæ¥æ”¶åˆ°çš„æ•°æ®
+        \return è¿”å›trueè¡¨ç¤ºæˆåŠŸï¼Œfalseè¡¨ç¤ºå¤±è´¥ï¼Œåº•å±‚ä¼šæ–­å¼€è¿™ä¸ªè¿æ¥
+        \remark æ´¾ç”Ÿç±»é‡è½½è¿™ä¸ªå‡½æ•°,å¤„ç†æ¥å—åˆ°çš„æ•°æ®ï¼Œå¦‚æœéœ€è¦åº”ç­”ï¼Œç›´æ¥ä½¿ç”¨SendToUcidæ–¹æ³•åº”ç­”
         */
-        virtual bool OnWebSocketData(unsigned int ucid, int bFinal, int wsopcode, const void* pdata, size_t size)//ÖØÔØÕâ¸öº¯Êı´¦Àíwebsocket½ÓÊÕÊı¾İ
+        virtual bool OnWebSocketData(unsigned int ucid, int bFinal, int wsopcode, const void* pdata, size_t size)//é‡è½½è¿™ä¸ªå‡½æ•°å¤„ç†websocketæ¥æ”¶æ•°æ®
         {
-            //¼òµ¥»ØÏÔ£¬Ô­ÑùÓ¦´ğ·¢ËÍ
+            //ç®€å•å›æ˜¾ï¼ŒåŸæ ·åº”ç­”å‘é€
             _answer.ClearData();
             MakeWsSend(pdata, size, (unsigned char)wsopcode, &_answer);
             SendAppData(ucid, _answer.GetBuf(), _answer.GetSize(), true);
@@ -53,7 +53,7 @@ namespace ec
         }
     private:
         /*!
-        \brief websocketÉı¼¶´¦Àí
+        \brief websocketå‡çº§å¤„ç†
         */
         bool DoUpgradeWebSocket(int ucid, const char *skey)
         {
@@ -61,7 +61,7 @@ namespace ec
             _httppkg.GetHeadFiled("Sec-WebSocket-Protocol", sProtocol, sizeof(sProtocol));
             _httppkg.GetHeadFiled("Sec-WebSocket-Version", sVersion, sizeof(sVersion));
 
-            if (atoi(sVersion) < 13) //°æ±¾²»Ö§³ÖĞ¡ÓÚ13
+            if (atoi(sVersion) < 13) //ç‰ˆæœ¬ä¸æ”¯æŒå°äº13
             {
                 if (_pcfg->_blogdetail && _plog)
                     _plog->AddLog("MSG:ws sVersion(%s) error :ucid=%d, ", sVersion, ucid);
@@ -96,9 +96,9 @@ namespace ec
             strcat(tmp, "\r\n\r\n");
             _answer.Add(tmp, strlen(tmp));
 
-            _pclis->UpgradeWebSocket(ucid);//Éı¼¶Ğ­ÒéÎªwebsocket
+            _pclis->UpgradeWebSocket(ucid);//å‡çº§åè®®ä¸ºwebsocket
 
-            SendAppData(ucid, _answer.GetBuf(), _answer.GetSize(), true);//·¢ËÍ
+            SendAppData(ucid, _answer.GetBuf(), _answer.GetSize(), true);//å‘é€
 
             if (_pcfg->_blogdetail && _plog) {
                 _answer.Add((char)0);
@@ -110,7 +110,7 @@ namespace ec
     protected:
 
         /*!
-        \brief WS×é·¢ËÍÖ¡ size < 65536
+        \brief WSç»„å‘é€å¸§ size < 65536
         */
         bool MakeWsSend(const void* pdata, size_t size, unsigned char wsopt, tArray< char>* pout)
         {
@@ -126,8 +126,8 @@ namespace ec
             {
                 uc = 126;
                 pout->Add((char)uc);
-                pout->Add((char)((size & 0xFF00) >> 8)); //¸ß×Ö½Ú
-                pout->Add((char)(size & 0xFF)); //µÍ×Ö½Ú
+                pout->Add((char)((size & 0xFF00) >> 8)); //é«˜å­—èŠ‚
+                pout->Add((char)(size & 0xFF)); //ä½å­—èŠ‚
             }
             else // < 4G
             {
@@ -144,7 +144,7 @@ namespace ec
         }
 
         /*!
-        \brief ÏìÓ¦ping,Ê¹ÓÃPONG»Ø´ğ
+        \brief å“åº”ping,ä½¿ç”¨PONGå›ç­”
         */
         void OnWsPing(unsigned int ucid, const void* pdata, size_t size)
         {
@@ -154,8 +154,8 @@ namespace ec
         }
 
         /*!
-        \brief ´¦ÀíÒ»¸öhttpÇëÇó±¨ÎÄ,Èë¿Ú²ÎÊıÔÚ_httppkgÖĞ
-        \return ·µ»Øtrue±íÊ¾³É¹¦£¬·µ»Øfalse»áµ¼ÖÂµ×²ã¶Ï¿ªÕâ¸öÁ¬½Ó
+        \brief å¤„ç†ä¸€ä¸ªhttpè¯·æ±‚æŠ¥æ–‡,å…¥å£å‚æ•°åœ¨_httppkgä¸­
+        \return è¿”å›trueè¡¨ç¤ºæˆåŠŸï¼Œè¿”å›falseä¼šå¯¼è‡´åº•å±‚æ–­å¼€è¿™ä¸ªè¿æ¥
         */
         bool DoHttpRequest(unsigned int ucid)
         {
@@ -176,11 +176,11 @@ namespace ec
             if (!stricmp("GET", _httppkg._method)) //GET
             {
                 char skey[128];
-                if (_httppkg.GetWebSocketKey(skey, sizeof(skey))) //web_socketÉı¼¶
+                if (_httppkg.GetWebSocketKey(skey, sizeof(skey))) //web_socketå‡çº§
                 {
                     if (_plog)
                         _plog->AddLog("MSG:ucid %u Upgrade websocket", ucid);
-                    return DoUpgradeWebSocket(ucid, skey); //´¦ÀíUpgradeÖĞµÄGet
+                    return DoUpgradeWebSocket(ucid, skey); //å¤„ç†Upgradeä¸­çš„Get
                 }
                 else
                     return DoGetAndHead(ucid);
@@ -188,12 +188,12 @@ namespace ec
             else if (!stricmp("HEAD", _httppkg._method)) //HEAD
                 return DoGetAndHead(ucid, false);
 
-            DoBadRequest(ucid);//²»Ö§³ÖÆäËû·½·¨
+            DoBadRequest(ucid);//ä¸æ”¯æŒå…¶ä»–æ–¹æ³•
             return _httppkg.HasKeepAlive();
         }
 
         /*!
-        \brief ÅĞ¶ÏÊÇ·ñÊÇÄ¿Â¼
+        \brief åˆ¤æ–­æ˜¯å¦æ˜¯ç›®å½•
         */
         bool IsDir(const char* s)
         {
@@ -215,7 +215,7 @@ namespace ec
         }
 
         /*!
-        \brief È¡ÎÄ¼şÀ©Õ¹Ãû
+        \brief å–æ–‡ä»¶æ‰©å±•å
         */
         const char *GetFileExtName(const char*s)
         {
@@ -230,7 +230,7 @@ namespace ec
         }
 
         /*!
-        \brief ´¦ÀíGETºÍHEAD·½·¨
+        \brief å¤„ç†GETå’ŒHEADæ–¹æ³•
         */
         bool DoGetAndHead(unsigned int ucid, bool bGet = true)
         {
@@ -245,7 +245,7 @@ namespace ec
             strcat(sfile, tmp);
 
             size_t n = strlen(sfile);
-            if (n && (sfile[n - 1] == '/' || sfile[n - 1] == '\\')) //Èç¹ûÊÇÄ¿Â¼ÔÚÊ¹ÓÃÄ¬ÈÏµÄindex.html×÷ÎªÎÄ¼şÃû
+            if (n && (sfile[n - 1] == '/' || sfile[n - 1] == '\\')) //å¦‚æœæ˜¯ç›®å½•åœ¨ä½¿ç”¨é»˜è®¤çš„index.htmlä½œä¸ºæ–‡ä»¶å
                 strcat(sfile, "index.html");
 
             else if (IsDir(sfile))
@@ -306,7 +306,7 @@ namespace ec
         }
 
         /*!
-        \brief Ó¦´ğ404´íÎó,×ÊÔ´Î´ÕÒµ½
+        \brief åº”ç­”404é”™è¯¯,èµ„æºæœªæ‰¾åˆ°
         */
         void DoNotFount(unsigned int ucid)
         {
@@ -317,7 +317,7 @@ namespace ec
         }
 
         /*!
-        \brief Ó¦´ğ400´íÎó,´íÎóµÄ·½·¨
+        \brief åº”ç­”400é”™è¯¯,é”™è¯¯çš„æ–¹æ³•
         */
         void DoBadRequest(unsigned int ucid)
         {
@@ -329,7 +329,7 @@ namespace ec
 
     protected:
         /*!
-        \brief ÖØÔØ¿Í»§¶ËÁ¬½Ó¶Ï¿ª£¬É¾³ıucid¶ÔÓ¦µÄÓ¦ÓÃ²ã¿Í»§¶Ë¶ÔÏó
+        \brief é‡è½½å®¢æˆ·ç«¯è¿æ¥æ–­å¼€ï¼Œåˆ é™¤ucidå¯¹åº”çš„åº”ç”¨å±‚å®¢æˆ·ç«¯å¯¹è±¡
         */        
         virtual void	OnDisconnect(unsigned int  ucid, unsigned int uopt, int nerrorcode) //uopt = TCPIO_OPT_XXXX
         {
@@ -338,14 +338,14 @@ namespace ec
         };
 
         /*!
-        \brief ´¦Àí½ÓÊÜÊı¾İ
+        \brief å¤„ç†æ¥å—æ•°æ®
         */       
-        virtual bool    OnAppData(unsigned int ucid, const void* pdata, unsigned int usize)//·µ»Øfalse±íÊ¾Òª·şÎñ¶ËÒª¶Ï¿ªÁ¬½Ó
+        virtual bool    OnAppData(unsigned int ucid, const void* pdata, unsigned int usize)//è¿”å›falseè¡¨ç¤ºè¦æœåŠ¡ç«¯è¦æ–­å¼€è¿æ¥
         {
             bool bret = true;
             if (_pcfg->_blogdetail && _plog)
                 _plog->AddLog("MSG:ucid %d read %d bytes!", ucid, usize);
-            int nr = _pclis->OnReadData(ucid, (const char*)pdata, usize, &_httppkg);//½âÎöÊı¾İ£¬½á¹¹´æ·ÅÔÚ_httppkgÖĞ
+            int nr = _pclis->OnReadData(ucid, (const char*)pdata, usize, &_httppkg);//è§£ææ•°æ®ï¼Œç»“æ„å­˜æ”¾åœ¨_httppkgä¸­
             while (nr == he_ok)
             {
                 if (_httppkg._nprotocol == PROTOCOL_HTTP)
@@ -359,7 +359,7 @@ namespace ec
                     else if (_httppkg._opcode == WS_OP_CLOSE)
                     {
                         _plog->AddLog("MSG:ucid %d WS_OP_CLOSE!", ucid);
-                        return false; //·µ»Øfalseºóµ×²ã»á¶Ï¿ªÁ¬½Ó
+                        return false; //è¿”å›falseååº•å±‚ä¼šæ–­å¼€è¿æ¥
                     }
 
                     else if (_httppkg._opcode == WS_OP_PING)
@@ -394,9 +394,9 @@ namespace ec
         cHttpsServer() {};
         virtual ~cHttpsServer() {};
     public:
-        cHttpCfg        _cfg;    //!<ÅäÖÃ
-        cHttpClientMap	_clients;//!<Á¬½Ó¿Í»§¶Ë
-        cLog		    _log;	 //!<ÈÕÖ¾
+        cHttpCfg        _cfg;    //!<é…ç½®
+        cHttpClientMap	_clients;//!<è¿æ¥å®¢æˆ·ç«¯
+        cLog		    _log;	 //!<æ—¥å¿—
     protected:
 
         virtual void    OnConnected(unsigned int  ucid, const char* sip)
@@ -412,7 +412,7 @@ namespace ec
             cTlsServer::OnRemovedUCID(ucid);
         };
         virtual void    CheckNotLogin() {};
-    public:
+    
         virtual ec::cTcpSvrWorkThread* CreateWorkThread()
         {
             cHttpsWorkThread* pthread = new cHttpsWorkThread(&_sss, &_clients, &_cfg, &_log);

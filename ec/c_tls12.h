@@ -1,4 +1,4 @@
-/*!
+﻿/*!
 \file c_tls12.h
 \version 0.01
 TLS 1.2 (rfc5246) safe channel client
@@ -78,10 +78,10 @@ namespace tls
 
 #define TLS_CBCBLKSIZE  16303 // (16384-16-32-1-32)
 
-#define TLS_SESSION_ERR		(-1) //����
-#define TLS_SESSION_HKOK	0 //�ɹ�
-#define TLS_SESSION_RET		1 //�ɹ�����Ҫ��Է��������������
-#define TLS_SESSION_APPDATA 2 //�ɹ�����APP������
+#define TLS_SESSION_ERR		(-1) //错误
+#define TLS_SESSION_HKOK	0 //成功
+#define TLS_SESSION_RET		1 //成功，需要向对方发送输出的数据
+#define TLS_SESSION_APPDATA 2 //成功，有APP层数据
 
 namespace ec
 {
@@ -174,6 +174,14 @@ namespace ec
                 return HMAC(EVP_sha1(), pkeymac, 20, stmp, es.getpos(), outmac, &mdlen) != NULL;
             return HMAC(EVP_sha256(), pkeymac, 32, stmp, es.getpos(), outmac, &mdlen) != NULL;
         }
+        /*!
+        解密record并校验
+        \param pd [in] 完整的record协议
+        \param len [in] pd长度
+        \param pout [out]输出缓冲区，不小于pd的长度
+        \param poutsize[out]实际输出的字节数，成功解密和验证正确后脱壳数据的长度。
+        \remark 输出为一个不加密的record包。
+        */
         bool decrypt_record(const unsigned char*pd, size_t len, unsigned char* pout, int *poutsize)
         {
             int i;
@@ -220,6 +228,13 @@ namespace ec
     protected:
         virtual int dorecord(const unsigned char* prec, size_t sizerec, int(*OnData)(void*, unsigned int, int, const void*, int), void* pParam) = 0;
 
+        /*!
+        加密打包一个基本数据块为record协议
+        \param po [out]输出用的动态数组对象指针。
+        \param type [in] record协议的子协议枚举值
+        \param sblk [in] 被加密的数据块
+        \param size [in] 被加密的数据块的字节数
+        */
         int MKR_WithAES_BLK(ec::tArray<unsigned char> *po, unsigned char type, const unsigned char* sblk, size_t size)
         {
             int i;
@@ -337,7 +352,7 @@ namespace ec
             return true;
         }
 
-        bool SendToBuf(ec::tArray<unsigned char> *po, int nprotocol, const void* pd, size_t size) //����
+        bool SendToBuf(ec::tArray<unsigned char> *po, int nprotocol, const void* pd, size_t size) //发送
         {
             if (_bsendcipher && *((unsigned char*)pd) != (unsigned char)tls::rec_contenttype::rec_alert)
                 return mk_cipher(po, (unsigned char)nprotocol, (const unsigned char*)pd, size);
@@ -375,7 +390,7 @@ namespace ec
 
             unsigned char verfiy[32], sdata[32];
             SHA256(tmp.GetBuf(), tmp.GetSize(), &hkhash[strlen(slab)]); //            
-            if (!prf_sha256(_master_key, 48, hkhash, strlen(slab) + 32, verfiy, 32))
+            if (!prf_sha256(_master_key, 48, hkhash, (int)strlen(slab) + 32, verfiy, 32))
                 return false;
 
             sdata[0] = tls::hsk_finished;
@@ -412,7 +427,7 @@ namespace ec
 
             unsigned char verfiy[32], sdata[32];
             SHA256(tmp.GetBuf(), tmp.GetSize(), &hkhash[strlen(slab)]); //            
-            if (!prf_sha256(_master_key, 48, hkhash, strlen(slab) + 32, verfiy, 32))
+            if (!prf_sha256(_master_key, 48, hkhash, (int)strlen(slab) + 32, verfiy, 32))
                 return false;
 
             sdata[0] = tls::hsk_finished;
@@ -456,7 +471,16 @@ namespace ec
             memset(_master_key, 0, sizeof(_master_key));
             memset(_key_block, 0, sizeof(_key_block));
         }
-
+        /*!
+        计算RPF
+        PRF(secret,label,seed) = P_sha256(secret,label + seed)
+        \param key [in]  密数secret
+        \param keylen [in]  密数secret的字节数
+        \param seed [in] label+seed合并后的数据
+        \param seedlen [in] label+seed合并后的数据字节数
+        \param pout [out] 输出区
+        \param outlen [in] 输出字节数,即需要扩展到的字节数。
+        */
         static bool prf_sha256(const unsigned char* key, int keylen, const unsigned char* seed, int seedlen, unsigned char *pout, int outlen)
         {
             int nout = 0;
@@ -537,12 +561,12 @@ namespace ec
 
             _client_hello.Add((uint8)0);    // SessionID = NULL   1byte
 
-            _client_hello.Add((uint8)0); _client_hello.Add((uint8)4); // cipher_suites
-            //_client_hello.Add((uint8)0); _client_hello.Add((uint8)TLS_RSA_WITH_AES_256_CBC_SHA256);
-            //_client_hello.Add((uint8)0); _client_hello.Add((uint8)TLS_RSA_WITH_AES_128_CBC_SHA256);
+            _client_hello.Add((uint8)0); _client_hello.Add((uint8)8); // cipher_suites
+            _client_hello.Add((uint8)0); _client_hello.Add((uint8)TLS_RSA_WITH_AES_256_CBC_SHA256);
+            _client_hello.Add((uint8)0); _client_hello.Add((uint8)TLS_RSA_WITH_AES_128_CBC_SHA256);
 
-            _client_hello.Add((uint8)0); _client_hello.Add((uint8)TLS_RSA_WITH_AES_128_CBC_SHA);
             _client_hello.Add((uint8)0); _client_hello.Add((uint8)TLS_RSA_WITH_AES_256_CBC_SHA);
+            _client_hello.Add((uint8)0); _client_hello.Add((uint8)TLS_RSA_WITH_AES_128_CBC_SHA);            
 
             _client_hello.Add((uint8)1); // compression_methods
             _client_hello.Add((uint8)0);
@@ -888,7 +912,7 @@ namespace ec
 
             unsigned char verfiy[32];
             SHA256(tmp.GetBuf(), tmp.GetSize(), &hkhash[strlen(slab)]); //            
-            if (!prf_sha256(_master_key, 48, hkhash, strlen(slab) + 32, verfiy, 32))
+            if (!prf_sha256(_master_key, 48, hkhash, (int)strlen(slab) + 32, verfiy, 32))
                 return false;
 
             int i;
@@ -1033,7 +1057,7 @@ namespace ec
             _srv_hello.Add((uint8)TLSVER_NINOR);
             _srv_hello.Add(_serverrand, 32);// random 32byte 
 
-            _srv_hello.Add((uint8)4);    // SessionID = NULL   1byte
+            _srv_hello.Add((uint8)4);    // SessionID = 4   1byte
 
             _srv_hello.Add((uint8)((_ucid >> 24) & 0xFF));
             _srv_hello.Add((uint8)((_ucid >> 16) & 0xFF));
@@ -1047,7 +1071,7 @@ namespace ec
             *(_srv_hello.GetBuf() + 3) = (uint8)(_srv_hello.GetSize() - 4);
         }
 
-        void MakeCertificate()
+        void MakeCertificateMsg()
         {
             _srv_certificate.ClearData();
             _srv_certificate.Add((uint8)tls::hsk_certificate);
@@ -1056,23 +1080,23 @@ namespace ec
             uint32 u;
             if (_pcerroot && _cerrootlen)
             {
-                u = _cerlen + _cerrootlen + 6;
+                u = (uint32)(_cerlen + _cerrootlen + 6);
                 _srv_certificate.Add((uint8)((u >> 16) & 0xFF)); _srv_certificate.Add((uint8)((u >> 8) & 0xFF)); _srv_certificate.Add((uint8)(u & 0xFF));//4,5,6
 
-                u = _cerlen;
+                u = (uint32)_cerlen;
                 _srv_certificate.Add((uint8)((u >> 16) & 0xFF)); _srv_certificate.Add((uint8)((u >> 8) & 0xFF)); _srv_certificate.Add((uint8)(u & 0xFF));//7,8,9
                 _srv_certificate.Add((const uint8*)_pcer, _cerlen);
 
-                u = _cerrootlen;
+                u = (uint32)_cerrootlen;
                 _srv_certificate.Add((uint8)((u >> 16) & 0xFF)); _srv_certificate.Add((uint8)((u >> 8) & 0xFF)); _srv_certificate.Add((uint8)(u & 0xFF));
                 _srv_certificate.Add((const uint8*)_pcerroot, _cerrootlen);
             }
             else
             {
-                u = _cerlen + 3;
+                u = (uint32)_cerlen + 3;
                 _srv_certificate.Add((uint8)((u >> 16) & 0xFF)); _srv_certificate.Add((uint8)((u >> 8) & 0xFF)); _srv_certificate.Add((uint8)(u & 0xFF));//4,5,6
 
-                u = _cerlen;
+                u = (uint32)_cerlen;
                 _srv_certificate.Add((uint8)((u >> 16) & 0xFF)); _srv_certificate.Add((uint8)((u >> 8) & 0xFF)); _srv_certificate.Add((uint8)(u & 0xFF));//7,8,9
                 _srv_certificate.Add((const uint8*)_pcer, _cerlen);
             }
@@ -1145,7 +1169,7 @@ namespace ec
             ECTRACE("srv:cipher = %02x,%02x\n", (_cipher_suite >> 8) & 0xFF, _cipher_suite & 0xFF);
             // ServerHello,  Certificate,     ServerHelloDone			
             MakeServerHello();
-            MakeCertificate();
+            MakeCertificateMsg();
             unsigned char umsg[4] = { tls::hsk_server_hello_done,0,0,0 };
             ec::tArray<unsigned char> rec(1024 * 8192);
             SendToBuf(&rec, tls::rec_handshake, _srv_hello.GetBuf(), _srv_hello.GetSize());
@@ -1234,7 +1258,7 @@ namespace ec
 
             unsigned char verfiy[32];
             SHA256(tmp.GetBuf(), tmp.GetSize(), &hkhash[strlen(slab)]); //
-            if (!prf_sha256(_master_key, 48, hkhash, strlen(slab) + 32, verfiy, 32))
+            if (!prf_sha256(_master_key, 48, hkhash, (int)strlen(slab) + 32, verfiy, 32))
             {
                 Alert(2, 80, OnData, pParam);//internal_error(80),				
                 return false;
