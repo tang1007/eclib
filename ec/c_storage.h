@@ -374,7 +374,7 @@ namespace ec
             }
             if (!CreateHead(sappid, sizepage, sizedir, pgsdir, patpgs)) {
                 _lasterror = MINS_ERR_FAILED;
-                return false;
+                return -1;
             }
             unsigned int uflag = OF_CREAT | OF_RDWR;
             if (writethrough)

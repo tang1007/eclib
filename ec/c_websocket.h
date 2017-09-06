@@ -83,15 +83,38 @@ namespace ec
         cHttpCfg() :_mime(1024) {
             _wport = 0;
             _blogdetail = false;
-            _sroot[0] = 0;
-            _slogpath[0] = 0;        
+            memset(_sroot, 0, sizeof(_sroot));
+            memset(_slogpath, 0, sizeof(_slogpath));
+            
+            _wport_wss = 0;
+            _blogdetail_wss = false;
+            memset(_sroot_wss, 0, sizeof(_sroot_wss));
+            memset(_slogpath_wss, 0, sizeof(_slogpath_wss));            
+
+            memset(_ca_server, 0, sizeof(_ca_server));
+            memset(_ca_root, 0, sizeof(_ca_root));
+            memset(_private_ket, 0, sizeof(_private_ket));
+            
+
         };
         virtual ~cHttpCfg() {};
     public:
+        //http and ws
         unsigned short _wport;//!< server port
         char _sroot[512];     //!< http root , utf8
         char _slogpath[512];
         bool _blogdetail;     //!< save detail log
+
+        //https && wss
+        unsigned short _wport_wss;//!< server port
+        char _sroot_wss[512];     //!< http root , utf8
+        char _slogpath_wss[512];
+        bool _blogdetail_wss;     //!< save detail log
+
+        char _ca_server[512];
+        char _ca_root[512];
+        char _private_ket[512];
+
         tMap<const char*, t_mime> _mime;
     public:
         bool GetMime(const char* sext, char *sout, size_t outsize)
@@ -111,17 +134,12 @@ namespace ec
                 if (!stricmp("rootpath", lpszKeyName))
                 {
                     if (lpszKeyVal && *lpszKeyVal)
-                    {
-                        strncpy(_sroot, lpszKeyVal, sizeof(_sroot) - 1);
-                        size_t n = strlen(_sroot);
-                        if (n > 0 && (_sroot[n - 1] == '/' || _sroot[n - 1] == '\\'))
-                            _sroot[n - 1] = 0;
-                    }
+                        ec::str_ncpy(_sroot, lpszKeyVal, sizeof(_sroot));
                 }
                 else if (!stricmp("logpath", lpszKeyName))
                 {
                     if (lpszKeyVal && *lpszKeyVal)
-                        strncpy(_slogpath, lpszKeyVal, sizeof(_slogpath) - 1);
+                        ec::str_ncpy(_slogpath, lpszKeyVal, sizeof(_slogpath));
                 }
                 else if (!stricmp("port", lpszKeyName))
                 {
@@ -132,6 +150,44 @@ namespace ec
                 {
                     if (lpszKeyVal && *lpszKeyVal && (!str_icmp("true", lpszKeyVal) || !str_icmp("yes", lpszKeyVal)))
                         _blogdetail = true;
+                }
+            }
+            if (!stricmp("https", lpszBlkName))
+            {
+                if (!stricmp("rootpath", lpszKeyName))
+                {
+                    if (lpszKeyVal && *lpszKeyVal)
+                        ec::str_ncpy(_sroot_wss, lpszKeyVal, sizeof(_sroot_wss));                        
+                }
+                else if (!stricmp("logpath", lpszKeyName))
+                {
+                    if (lpszKeyVal && *lpszKeyVal)
+                        ec::str_ncpy(_slogpath_wss, lpszKeyVal, sizeof(_slogpath_wss));
+                }
+                else if (!stricmp("port", lpszKeyName))
+                {
+                    if (lpszKeyVal && *lpszKeyVal)
+                        _wport_wss = (unsigned short)atoi(lpszKeyVal);
+                }
+                else if (!stricmp("logdetail", lpszKeyName))
+                {
+                    if (lpszKeyVal && *lpszKeyVal && (!str_icmp("true", lpszKeyVal) || !str_icmp("yes", lpszKeyVal)))
+                        _blogdetail_wss = true;
+                }
+                else if (!stricmp("ca_root", lpszKeyName))
+                {
+                    if (lpszKeyVal && *lpszKeyVal)
+                        ec::str_ncpy(_ca_root, lpszKeyVal, sizeof(_ca_root));
+                }
+                else if (!stricmp("ca_server", lpszKeyName))
+                {
+                    if (lpszKeyVal && *lpszKeyVal)
+                        ec::str_ncpy(_ca_server, lpszKeyVal, sizeof(_ca_server));
+                }
+                else if (!stricmp("private_ket", lpszKeyName))
+                {
+                    if (lpszKeyVal && *lpszKeyVal)
+                        ec::str_ncpy(_private_ket, lpszKeyVal, sizeof(_private_ket));
                 }
             }
             else  if (!stricmp("mime", lpszBlkName))
@@ -274,7 +330,7 @@ namespace ec
                 if (*pc == '?')
                 {
                     *pc = 0;
-                    return false;
+                    break;
                 }
                 pc++;
             }
@@ -1157,8 +1213,10 @@ namespace ec
         }
     public:
 
-        bool StartServer(unsigned int uThreads, unsigned int  uMaxConnect)
+        bool StartServer(const char* cnffile, unsigned int uThreads, unsigned int  uMaxConnect)
         {
+            if (!_cfg.ReadIniFile(cnffile))
+                return false;
             if (!_log.Start(_cfg._slogpath))
                 return false;
             return Start(_cfg._wport, uThreads, uMaxConnect);

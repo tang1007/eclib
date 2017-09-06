@@ -418,24 +418,19 @@ namespace ec
             cHttpsWorkThread* pthread = new cHttpsWorkThread(&_sss, &_clients, &_cfg, &_log);
             return pthread;           
         }
-    public:
-        bool Init(const char* scfgfile, const char* filecert, const char* filerootcert, const char* fileprivatekey)
+    public:        
+        bool StartServer(const char* scfgfile,unsigned int uThreads, unsigned int  uMaxConnect)
         {
-            if (!_cfg.ReadIniFile(scfgfile))
+            if (!_cfg.ReadIniFile(scfgfile) || !InitCert(_cfg._ca_server, _cfg._ca_root, _cfg._private_ket))
                 return false;
-            return InitCert(filecert, filerootcert, fileprivatekey);
-        }
-
-        bool StartServer(unsigned int uThreads, unsigned int  uMaxConnect)
-        {
-            if (!_log.Start(_cfg._slogpath))
+            if (!_log.Start(_cfg._slogpath_wss))
                 return false;
-            return Start(_cfg._wport, uThreads, uMaxConnect);
+            return Start(_cfg._wport_wss, uThreads, uMaxConnect);
         }
         void StopServer()
         {
             Stop();
-            _log.AddLog("MSG:httpsrv stop success!");
+            _log.AddLog("MSG:HTTPS server stop success!");
             _log.Stop();
         }
     };

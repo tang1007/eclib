@@ -156,22 +156,14 @@ namespace ec
     private:
         bool caldatahmac(unsigned char type, uint64 seqno, const void* pd, size_t len, unsigned char* pkeymac, unsigned char *outmac)
         {
-            int i;
             unsigned char  stmp[1024 * 20];
             ec::cStream es(stmp, sizeof(stmp));
-
-            for (i = 7; i >= 0; i--)
-                es << (char)((seqno >> i * 8) & 0xFF);
-
-            es << type; //type
-            es << (char)TLSVER_MAJOR; //ver            
-            es << (char)TLSVER_NINOR; //ver            
-
-            es << (char)((len >> 8) & 0xFF);
-            es << (char)(len & 0xFF); // len
-
-            es.write(pd, len); // data
-
+            try
+            {
+                es < seqno < type < (char)TLSVER_MAJOR < (char)TLSVER_NINOR < (unsigned short)len;
+                es.write(pd, len);
+            }
+            catch (int) { return false; }
             unsigned int mdlen = 0;
             if (_cipher_suite == TLS_RSA_WITH_AES_128_CBC_SHA || _cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA)
                 return HMAC(EVP_sha1(), pkeymac, 20, stmp, es.getpos(), outmac, &mdlen) != NULL;
@@ -256,16 +248,13 @@ namespace ec
             }
 
             ec::cStream ss(srec, sizeof(srec));
-            ss << type;
-            ss << (unsigned char)TLSVER_MAJOR;
-            ss << (unsigned char)TLSVER_NINOR;
-
-            ss << (unsigned char)0;
-            ss << (unsigned char)0;
-
-            RAND_bytes(IV, AES_BLOCK_SIZE);
-            ss.write(IV, AES_BLOCK_SIZE);
-
+            try
+            {
+                RAND_bytes(IV, AES_BLOCK_SIZE);
+                ss << type << (unsigned char)TLSVER_MAJOR << (unsigned char)TLSVER_NINOR << (unsigned short)0;
+                ss.write(IV, AES_BLOCK_SIZE);
+            }
+            catch (int) { return -1; }
             if (!caldatahmac(type, _seqno_send, sblk, size, pkeywmac, mac))
                 return -1;
 
@@ -274,34 +263,36 @@ namespace ec
                 maclen = 20;
 
             ec::cStream es(sv, sizeof(sv));
-
-            es.write(sblk, size); //content
-            es.write(mac, maclen); //MAC 
-            size_t len = es.getpos() + 1;
-            if (len % AES_BLOCK_SIZE)
+            size_t rl;
+            try
             {
-                for (i = 0; i < (int)(AES_BLOCK_SIZE - (len % AES_BLOCK_SIZE)) + 1; i++)//padding and   padding_length  
-                    es << (char)(AES_BLOCK_SIZE - (len % AES_BLOCK_SIZE));
+                es.write(sblk, size); //content
+                es.write(mac, maclen); //MAC 
+                size_t len = es.getpos() + 1;
+                if (len % AES_BLOCK_SIZE)
+                {
+                    for (i = 0; i < (int)(AES_BLOCK_SIZE - (len % AES_BLOCK_SIZE)) + 1; i++)//padding and   padding_length  
+                        es << (char)(AES_BLOCK_SIZE - (len % AES_BLOCK_SIZE));
+                }
+                else
+                    es << (char)0; //padding_length
+
+                AES_KEY aes_e;
+                int nkeybit = 128;
+                if (_cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA256)
+                    nkeybit = 256;
+                if (AES_set_encrypt_key(pkeyw, nkeybit, &aes_e) < 0)
+                    return -1;
+
+                AES_cbc_encrypt(sv, sout_e, es.getpos(), &aes_e, IV, AES_ENCRYPT);
+                ss.write(sout_e, es.getpos());
+                rl = ss.getpos();
+                ss.setpos(3) < (unsigned short)(es.getpos() + sizeof(IV));
             }
-            else
-                es << (char)0; //padding_length
-
-            AES_KEY aes_e;
-            int nkeybit = 128;
-            if (_cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA256)
-                nkeybit = 256;
-            if (AES_set_encrypt_key(pkeyw, nkeybit, &aes_e) < 0)
+            catch (int)
+            {
                 return -1;
-
-            AES_cbc_encrypt(sv, sout_e, es.getpos(), &aes_e, IV, AES_ENCRYPT);
-
-            ss.write(sout_e, es.getpos());
-            size_t rl = ss.getpos();
-            unsigned short uslen = (unsigned short)(es.getpos() + sizeof(IV));
-            ss.setpos(3);
-            ss << (unsigned char)((uslen >> 8) & 0xFF);
-            ss << (unsigned char)(uslen & 0xFF);
-
+            }
             po->Add(srec, rl);
             _seqno_send++;
             return (int)rl;
@@ -569,7 +560,7 @@ namespace ec
             _client_hello.Add((uint8)0); _client_hello.Add((uint8)TLS_RSA_WITH_AES_128_CBC_SHA256);
 
             _client_hello.Add((uint8)0); _client_hello.Add((uint8)TLS_RSA_WITH_AES_256_CBC_SHA);
-            _client_hello.Add((uint8)0); _client_hello.Add((uint8)TLS_RSA_WITH_AES_128_CBC_SHA);            
+            _client_hello.Add((uint8)0); _client_hello.Add((uint8)TLS_RSA_WITH_AES_128_CBC_SHA);
 
             _client_hello.Add((uint8)1); // compression_methods
             _client_hello.Add((uint8)0);
@@ -740,7 +731,7 @@ namespace ec
         bool _bsrvfinished;
         RSA *_prsa;
         EVP_PKEY *_pevppk;
-        X509* _px509 = 0;
+        X509* _px509;
         ec::tArray<unsigned char> _pkgm;
     public:
         virtual void Reset()
@@ -1132,19 +1123,15 @@ namespace ec
                 return false;
             }
             ec::cStream ss(phandshakemsg, size);
-            ss.setpos(6);
-            ss.read(_clientrand, 32);
-
-            ss >> uct; //session id len
-            if (uct > 0)
-                ss.setpos(ss.getpos() + uct);
-
             unsigned short i, cipherlen = 0;
-            ss >> uct;
-            cipherlen = uct;
-            ss >> uct;
-            cipherlen = cipherlen << 8 | uct;
-
+            try
+            {
+                ss.setpos(6).read(_clientrand, 32) >> uct; //session id len
+                if (uct > 0)
+                    ss.setpos(ss.getpos() + uct);
+                ss < cipherlen;
+            }
+            catch (int) { return false; }
             if (ss.getpos() + cipherlen > size)
             {
                 Alert(2, 10, OnData, pParam);//unexpected_message(10)
@@ -1216,17 +1203,6 @@ namespace ec
                 return false;
             }
 
-            //if (premasterkey[0] != 3 || premasterkey[1] != 3)
-            //{
-            //    Alert(2, 70, OnData, pParam);// protocol_version(70),
-            //    return false;
-            //}
-
-            /*tracebin("rand:_clientrand", _clientrand, 32);
-            tracebin("rand:_serverrand", _serverrand, 32);
-
-            tracebin("srv:premasterkey",premasterkey, 48);*/
-
             const char* slab = "master secret";//calculate master_key
             unsigned char seed[128];
             memcpy(seed, slab, strlen(slab));
@@ -1283,7 +1259,7 @@ namespace ec
                     return false;
                 }
             }
-            
+
             unsigned char change_cipher_spec = 1;//send change_cipher_spec 
             tmp.ClearData();
             SendToBuf(&tmp, tls::rec_change_cipher_spec, &change_cipher_spec, 1);
@@ -1735,7 +1711,7 @@ namespace ec
         RSA* _pRsaPrivate;
 
         EVP_PKEY *_pevppk;
-        X509* _px509 = 0;
+        X509* _px509;
 
         ec::tArray<unsigned char> _pcer;
         ec::tArray<unsigned char> _prootcer;
@@ -1770,7 +1746,7 @@ namespace ec
                     _prootcer.Add(stmp, size);
                 }
                 fclose(pf);
-            }                
+            }
 
             pf = fopen(fileprivatekey, "rb");
             if (!pf)
