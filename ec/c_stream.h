@@ -12,6 +12,9 @@
 #include <memory.h>
 namespace ec
 {
+    /*!
+    *Note: overloaded "<,>" and "<<, >>" do not mix in one line because the priority is different
+    */
     class cStream
     {
     public:
@@ -137,7 +140,7 @@ namespace ec
             _pos += sizeof(T);
             return *this;
         };
-
+        
         cStream & read(void* pbuf, size_t size)
         {
             if (_pos + sizeof(size) > _size)
