@@ -83,7 +83,7 @@ namespace ec
         size_t i = 0;
         while (i < n)
         {
-            if (*s1 != *s2)
+            if (*s1 != *s2 || !(*s1) || !(*s2))
                 return false;
             i++;
             s1++;
@@ -96,7 +96,7 @@ namespace ec
         size_t i = 0;
         while (i < n)
         {
-            if (tolower(*s1) != tolower(*s2))
+            if ((*s1 != *s2 && tolower(*s1) != tolower(*s2)) || !(*s1) || !(*s2) )
                 return false;
             i++;
             s1++;
