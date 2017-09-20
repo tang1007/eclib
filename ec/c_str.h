@@ -96,7 +96,7 @@ namespace ec
         size_t i = 0;
         while (i < n)
         {
-            if ((*s1 != *s2 && tolower(*s1) != tolower(*s2)) || !(*s1) || !(*s2) )
+            if ((*s1 != *s2 && tolower(*s1) != tolower(*s2)) || !(*s1) || !(*s2))
                 return false;
             i++;
             s1++;
@@ -386,7 +386,7 @@ namespace ec
         size_t sz = sizeout;
         return gb2utf8(sgb, sizegb, sutf8, sz);
     }
-    
+
     class cAp // auto free pointer
     {
     public:
@@ -402,7 +402,7 @@ namespace ec
         template<typename T>
         inline operator T*() {
             return (T*)_p;
-        }        
+        }
         inline bool isempty() {
             return !_p;
         }
@@ -410,6 +410,28 @@ namespace ec
             return _size;
         };
         inline void* getbuf() { return _p; };
+        bool resize(size_t newsize, bool bkeepdata = false)
+        {
+            if (bkeepdata)
+            {
+                void* p = malloc(newsize);
+                if (!p)
+                    return false;
+                if (_p && _size) {
+                    memcpy(p, _p, _size);
+                    free(_p);
+                }
+                _p = p;
+            }
+            else
+            {
+                if (_p && _size)
+                    free(_p);
+                _p = malloc(newsize);
+            }                            
+            _size = _p ? newsize : 0;
+            return _p != 0;
+        }
     protected:
         size_t _size;
         void* _p;
@@ -446,7 +468,7 @@ namespace ec
             _pos = 0;
             _sfiled[0] = 0;
         }
-        char* next(const char *split, char * sout = 0, size_t sizeout = 0,size_t *psize=NULL)
+        char* next(const char *split, char * sout = 0, size_t sizeout = 0, size_t *psize = NULL)
         {
             if (psize)
                 *psize = 0;

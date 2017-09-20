@@ -251,6 +251,25 @@ namespace ec
             Unlock(0, (long long)sizeof(_head));
             return _lasterror == 0 ? 0 : -1;
         }
+                
+        bool DelFile(const char* sfile)
+        {
+            t_file* pf = fOpen(sfile, false);
+            if (!pf)
+                return true;
+            ec::tArray<unsigned int> fat(4096);
+            bool bret = false;                        
+            if (LoadFat(pf, &fat) && DelFileEntry(pf->entrypgno, pf->entrypos))
+            {
+                int i;
+                for (i = 0; i < fat.GetNum(); i++)
+                    FreePage(fat[i]);
+                FreePage(pf->fatpg);
+                bret = true;
+            }
+            fClose(pf);
+            return bret;            
+        }
 
         ec::cXStorage::t_file* fOpen(const char* sname, bool bCreate)
         {
@@ -458,6 +477,7 @@ namespace ec
             return true;
         }
 
+        
         ec::cXStorage::DIR* OpenDir(const char* sname)
         {
             _lasterror = 0;
@@ -607,6 +627,17 @@ namespace ec
         inline unsigned int GetRootPgno()
         {
             return 1 + _head.allocpages;
+        }
+
+        bool DelFileEntry(unsigned int upg, unsigned int upos)
+        {
+            char pg[ECSTG_PAGE_SIZE];
+            ec::cStream ss(pg, ECSTG_PAGE_SIZE);
+            if (ECSTG_PAGE_SIZE != ReadFrom(static_cast<long long>(upg) * ECSTG_PAGE_SIZE, pg, ECSTG_PAGE_SIZE))
+                return false;
+            ss.setpos((upos + 1) * sizeof(t_entry));
+            ss << int(0);
+            return 4 == WriteTo(static_cast<long long>(upg) * ECSTG_PAGE_SIZE + (upos + 1) * sizeof(t_entry), &pg[(upos + 1) * sizeof(t_entry)], 4);
         }
 
         bool LoadFat(ec::cXStorage::t_file* pf, ec::tArray<unsigned int> *pout) //读取文件分配表
@@ -913,7 +944,7 @@ namespace ec
 
         int FreePage(unsigned int pageno)
         {
-            if (pageno >= _head.allocpages * ECSTG_PAGE_SIZE * 8 || pageno < _head.allocpages + 2) {
+            if (pageno == ECSTG_PAGE_INVALIDATE || pageno >= _head.allocpages * ECSTG_PAGE_SIZE * 8 || pageno < _head.allocpages + 2) {
                 _lasterror = ECSTG_PAGE_INVALIDATE;
                 return -1;
             }
