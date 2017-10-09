@@ -150,7 +150,7 @@ namespace ec
             char *sp = sd;
             while (*sp)
             {
-                if (*sp == '/' || *sp == '-') {
+                if (*sp == '/' || *sp == '-' || *sp == '.') {
                     sf[n++] = 0;
                     np++;
                     if (np > 2)

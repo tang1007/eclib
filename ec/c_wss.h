@@ -57,6 +57,7 @@ namespace ec
         */
         bool DoUpgradeWebSocket(int ucid, const char *skey)
         {
+            /*
             char sProtocol[128] = { 0 }, sVersion[128] = { 0 }, tmp[256] = { 0 };
             _httppkg.GetHeadFiled("Sec-WebSocket-Protocol", sProtocol, sizeof(sProtocol));
             _httppkg.GetHeadFiled("Sec-WebSocket-Version", sVersion, sizeof(sVersion));
@@ -97,7 +98,56 @@ namespace ec
             _answer.Add(tmp, strlen(tmp));
 
             _pclis->UpgradeWebSocket(ucid);//升级协议为websocket
+            */
+            const char* sc;
+            char sProtocol[128] = { 0 }, sVersion[128] = { 0 }, tmp[256] = { 0 };
+            _httppkg.GetHeadFiled("Sec-WebSocket-Protocol", sProtocol, sizeof(sProtocol));
+            _httppkg.GetHeadFiled("Sec-WebSocket-Version", sVersion, sizeof(sVersion));
 
+            if (atoi(sVersion) != 13)
+            {
+                if (_pcfg->_blogdetail && _plog)
+                    _plog->AddLog("MSG:ws sVersion(%s) error :ucid=%d, ", sVersion, ucid);
+                DoBadRequest(ucid);
+                return _httppkg.HasKeepAlive();
+            }
+            _answer.ClearData();
+            sc = "HTTP/1.1 101 Switching Protocols\x0d\x0a"
+                "Upgrade: websocket\x0d\x0a"
+                "Connection: Upgrade\x0d\x0a";
+            _answer.Add(sc, strlen(sc));
+
+            char ss[256];
+            strcpy(ss, skey);
+            strcat(ss, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+
+            char sha1out[20] = { 0 }, base64out[32] = { 0 };
+            encode_sha1(ss, (unsigned int)strlen(ss), sha1out); //SHA1
+            encode_base64(base64out, sha1out, 20);    //BASE64
+
+            sc = "Sec-WebSocket-Accept: ";
+            _answer.Add(sc, strlen(sc));
+            _answer.Add(base64out, strlen(base64out));
+            _answer.Add("\x0d\x0a", 2);
+
+            if (sProtocol[0])
+            {
+                sc = "Sec-WebSocket-Protocol: ";
+                _answer.Add(sc, strlen(sc));
+                _answer.Add(sProtocol, strlen(sProtocol));
+                _answer.Add("\x0d\x0a", 2);
+            }
+
+            if (_httppkg.GetHeadFiled("Host", tmp, sizeof(tmp)))
+            {
+                sc = "Host: ";
+                _answer.Add(sc, strlen(sc));
+                _answer.Add(tmp, strlen(tmp));
+                _answer.Add("\x0d\x0a", 2);
+            }
+            _answer.Add("\x0d\x0a", 2);
+
+            _pclis->UpgradeWebSocket(ucid);//升级协议为websocket
             SendAppData(ucid, _answer.GetBuf(), _answer.GetSize(), true);//发送
 
             if (_pcfg->_blogdetail && _plog) {
@@ -260,7 +310,7 @@ namespace ec
             }
 
             _answer.ClearData();
-            strcpy(tmp, "http/1.1 200 ok\r\n");
+            strcpy(tmp, "HTTP/1.1 200 ok\r\n");
             _answer.Add(tmp, strlen(tmp));
 
             strcpy(tmp, "Server: rdb5 websocket server\r\n");

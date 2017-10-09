@@ -22,6 +22,8 @@
 #include "c_sha1.h"
 #include "c_str.h"
 
+#include "c_zlibs.h"
+
 #ifndef _WIN32
 #ifndef stricmp
 #define stricmp(a,b)    strcasecmp(a,b)
@@ -41,8 +43,6 @@
 #define WS_OP_CLOSE	    8
 #define WS_OP_PING		9
 #define WS_OP_PONG		10
-
-
 
 namespace ec
 {
@@ -85,16 +85,16 @@ namespace ec
             _blogdetail = false;
             memset(_sroot, 0, sizeof(_sroot));
             memset(_slogpath, 0, sizeof(_slogpath));
-            
+
             _wport_wss = 0;
             _blogdetail_wss = false;
             memset(_sroot_wss, 0, sizeof(_sroot_wss));
-            memset(_slogpath_wss, 0, sizeof(_slogpath_wss));            
+            memset(_slogpath_wss, 0, sizeof(_slogpath_wss));
 
             memset(_ca_server, 0, sizeof(_ca_server));
             memset(_ca_root, 0, sizeof(_ca_root));
             memset(_private_ket, 0, sizeof(_private_ket));
-            
+
 
         };
         virtual ~cHttpCfg() {};
@@ -157,7 +157,7 @@ namespace ec
                 if (!stricmp("rootpath", lpszKeyName))
                 {
                     if (lpszKeyVal && *lpszKeyVal)
-                        ec::str_ncpy(_sroot_wss, lpszKeyVal, sizeof(_sroot_wss));                        
+                        ec::str_ncpy(_sroot_wss, lpszKeyVal, sizeof(_sroot_wss));
                 }
                 else if (!stricmp("logpath", lpszKeyName))
                 {
@@ -232,7 +232,7 @@ namespace ec
         }
         ~cParseText() {}
     public:
-        const char* _ps, *_pe,*_pstr;
+        const char* _ps, *_pe, *_pstr;
     public:
         bool GetNextWord(char* sout, size_t outsize)
         {
@@ -247,7 +247,7 @@ namespace ec
                         _ps++;
                         break;
                     }
-                }                
+                }
                 sout[pos++] = *_ps++;
                 if (pos >= outsize)
                     return false;
@@ -258,7 +258,7 @@ namespace ec
         /*!
         \return: -1 error,0:end ; >0 next line pos
         */
-        size_t GetNextLine(char* sout, size_t outsize,bool bfirstline = false) // include the end \n
+        size_t GetNextLine(char* sout, size_t outsize, bool bfirstline = false) // include the end \n
         {
             size_t pos = 0;
             sout[0] = '\0';
@@ -279,7 +279,7 @@ namespace ec
                 if (pos >= outsize)
                     return -1; //error
             }
-            if (bfirstline && (_ps - _pstr) > 7 )                
+            if (bfirstline && (_ps - _pstr) > 7)
             {
                 char smothod[8] = { 0 };
                 size_t pos = 0;
@@ -307,6 +307,7 @@ namespace ec
             memset(_method, 0, sizeof(_method));
             memset(_request, 0, sizeof(_request));
             memset(_version, 0, sizeof(_version));
+            _comp = 0;
         };
         ~cHttpPacket() {};
     public:
@@ -318,12 +319,13 @@ namespace ec
 
         tArray<t_httpfileds> _headers;
         tArray<char> _body;
-        int  _fin;   //!< end
+        int  _fin;   //!< end    
+        int _comp;   //
         int  _opcode;//!< operator code
     protected:
         bool checkreq()
         {
-            char* pc = (char*)_request,*ps;
+            char* pc = (char*)_request, *ps;
             ps = pc;
             while (*pc)
             {
@@ -334,12 +336,12 @@ namespace ec
                 }
                 pc++;
             }
-            return ((pc - ps) < 120);                
+            return ((pc - ps) < 120);
         }
 
         int  ParseFirstLine(cParseText* pwp)
         {
-            size_t ul = pwp->GetNextLine(_sline, sizeof(_sline),true);
+            size_t ul = pwp->GetNextLine(_sline, sizeof(_sline), true);
             if (-1 == ul)
                 return he_failed;
             if (!ul)
@@ -353,8 +355,8 @@ namespace ec
                 return he_failed;
 
             if (!wp.GetNextWord(_request, sizeof(_request))) //request
-                return he_waitdata;            
-            
+                return he_waitdata;
+
             if (!checkreq()) // not suport ?
                 return he_failed;
 
@@ -412,7 +414,7 @@ namespace ec
                         else
                             return he_failed;
                     }
-                    else 
+                    else
                     {
                         if (pos < sizeof(ft.args) - 1)
                         {
@@ -463,17 +465,17 @@ namespace ec
 
             _headers.ClearData();
 
-            _method[0]=0;  
-            _request[0]=0;
-            _version[0]=0;
-            _sline[0]=0;
+            _method[0] = 0;
+            _request[0] = 0;
+            _version[0] = 0;
+            _sline[0] = 0;
 
             _nprotocol = PROTOCOL_HTTP;
 
             nret = ParseFirstLine(&wp);
             if (nret != he_ok)
                 return nret;
-            
+
             size_t ul;
             while ((ul = wp.GetNextLine(_sline, sizeof(_sline))) > 0)
             {
@@ -481,14 +483,14 @@ namespace ec
                     break;
                 nret = ParseHeadFiled(_sline);
                 if (nret != he_ok)
-                    return nret;                        
+                    return nret;
             }
             if (ul < 0)
                 return he_failed;
             if (!ul)
                 return he_waitdata;
-            
-            _body.ClearData();            
+
+            _body.ClearData();
             size_t bodylength = GetContextLength();
             if (!bodylength)
             {
@@ -498,7 +500,7 @@ namespace ec
             size_t szdo = wp._ps - stxt;
 
             if (szdo + bodylength > usize)
-                return he_waitdata;            
+                return he_waitdata;
             _body.Add(wp._ps, bodylength);
             sizedo = szdo + bodylength;
             return he_ok;
@@ -517,6 +519,7 @@ namespace ec
             _nprotocol = PROTOCOL_WS;
 
             _fin = pu[0] & 0x80;
+            _comp = pu[0] & 0x40;
             _opcode = (pu[0] & 0x0F);
 
             int bmask = pu[1] & 0x80;
@@ -567,6 +570,7 @@ namespace ec
                 for (i = 0; i < n; i++)
                     p[i] = p[i] ^ pu[datapos - 4 + i % 4];
             }
+
             sizedo = datapos + datalen;
             return he_ok;
         }
@@ -625,7 +629,7 @@ namespace ec
                 {
                     len = strlen(pf[i].args);
                     pos = 0;
-                    while (ec::str_getnextstring(',', pf[i].args, len, pos, stmp, sizeof(stmp)))
+                    while (str_getnextstring(',', pf[i].args, len, pos, stmp, sizeof(stmp)))
                     {
                         if (!stricmp(stmp, sval))
                             return true;
@@ -635,6 +639,7 @@ namespace ec
             return false;
         }
     };
+
 
     /*!
     \brief http connections
@@ -648,11 +653,11 @@ namespace ec
             _ucid = ucid;
             _protocol = PROTOCOL_HTTP;
             if (sip && *sip)
-                strncpy(_sip, sip, sizeof(_sip) - 1);
+                strncpy(_sip, sip, sizeof(_sip) - 1);            
         };
         ~cHttpClient() {};
     public:
-        int					_protocol;//!< HTTP_PROTOCOL:http; WEB_SOCKET:websocket
+        int					_protocol;//!< HTTP_PROTOCOL:http; WEB_SOCKET:websocket        
         unsigned int        _ucid; //!<UCID
         char _sip[32];				//!<ip address
         tArray<char>   _txt;  //!< 未处理字符数组
@@ -685,7 +690,9 @@ namespace ec
             //下面按照websocket处理
             int nr = pout->WebsocketParse(_txt.GetBuf(), _txt.GetSize(), sizedo);
             if (nr == he_ok)
-                _txt.LeftMove(sizedo);
+            {
+                _txt.LeftMove(sizedo);                
+            }
             else
             {
                 if (nr >= he_failed || _txt.GetSize() > SIZE_WSMAXREQUEST)
@@ -713,7 +720,9 @@ namespace ec
             //下面按照websocket处理
             int nr = pout->WebsocketParse(_txt.GetBuf(), _txt.GetSize(), sizedo);
             if (nr == he_ok)
-                _txt.LeftMove(sizedo);
+            {
+                _txt.LeftMove(sizedo);                
+            }
             else
             {
                 if (nr >= he_failed || _txt.GetSize() > SIZE_WSMAXREQUEST)
@@ -788,6 +797,7 @@ namespace ec
         {
             cSafeLock lck(&_cs);
             cHttpClient* pcli = new cHttpClient(ucid, sip);
+
             if (pcli)
                 _map.SetAt(ucid, pcli);
         }
@@ -803,7 +813,7 @@ namespace ec
             cHttpClient* pcli = NULL;
             if (!_map.Lookup(ucid, pcli) || !pcli)
                 return;
-            pcli->_protocol = PROTOCOL_WS;
+            pcli->_protocol = PROTOCOL_WS;            
             pcli->_txt.ClearData();
         }
     };
@@ -853,32 +863,24 @@ namespace ec
         */
         bool DoUpgradeWebSocket(int ucid, const char *skey)
         {
+            const char* sc;
             char sProtocol[128] = { 0 }, sVersion[128] = { 0 }, tmp[256] = { 0 };
             _httppkg.GetHeadFiled("Sec-WebSocket-Protocol", sProtocol, sizeof(sProtocol));
             _httppkg.GetHeadFiled("Sec-WebSocket-Version", sVersion, sizeof(sVersion));
-
-            if (atoi(sVersion) < 13) //版本不支持小于13
+                                    
+            if (atoi(sVersion) != 13)
             {
                 if (_pcfg->_blogdetail && _plog)
-                    _plog->AddLog("MSG:ws sVersion(%s) error :ucid=%d, ", sVersion,ucid);
+                    _plog->AddLog("MSG:ws sVersion(%s) error :ucid=%d, ", sVersion, ucid);
                 DoBadRequest(ucid);
                 return _httppkg.HasKeepAlive();
             }
             _answer.ClearData();
-            strcpy(tmp, "http/1.1 101 Switching Protocols\r\n");
-            _answer.Add(tmp, strlen(tmp));
-
-            strcpy(tmp, "Upgrade:websocket\r\nConnection:Upgrade\r\n");
-            _answer.Add(tmp, strlen(tmp));
-
-            if (sProtocol[0])
-            {
-                strcpy(tmp, "Sec-WebSocket-Protocol:");
-                strcat(tmp, sProtocol);
-                strcat(tmp, "\r\n");
-                _answer.Add(tmp, strlen(tmp));
-            }
-
+            sc = "HTTP/1.1 101 Switching Protocols\x0d\x0a" 
+                "Upgrade: websocket\x0d\x0a"  
+                "Connection: Upgrade\x0d\x0a";
+            _answer.Add(sc, strlen(sc));
+                        
             char ss[256];
             strcpy(ss, skey);
             strcat(ss, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
@@ -887,10 +889,27 @@ namespace ec
             encode_sha1(ss, (unsigned int)strlen(ss), sha1out); //SHA1
             encode_base64(base64out, sha1out, 20);    //BASE64
 
-            strcpy(tmp, "Sec-WebSocket-Accept:");
-            strcat(tmp, base64out);
-            strcat(tmp, "\r\n\r\n");
-            _answer.Add(tmp, strlen(tmp));
+            sc = "Sec-WebSocket-Accept: ";
+            _answer.Add(sc, strlen(sc));
+            _answer.Add(base64out, strlen(base64out));            
+            _answer.Add("\x0d\x0a",2);
+
+            if (sProtocol[0])
+            {
+                sc = "Sec-WebSocket-Protocol: ";
+                _answer.Add(sc, strlen(sc));
+                _answer.Add(sProtocol, strlen(sProtocol));
+                _answer.Add("\x0d\x0a", 2);                
+            }
+            
+            if (_httppkg.GetHeadFiled("Host", tmp, sizeof(tmp)))
+            {
+                sc = "Host: ";
+                _answer.Add(sc, strlen(sc));
+                _answer.Add(tmp, strlen(tmp));
+                _answer.Add("\x0d\x0a", 2);
+            }
+            _answer.Add("\x0d\x0a", 2);
 
             _pclis->UpgradeWebSocket(ucid);//升级协议为websocket
 
@@ -967,7 +986,7 @@ namespace ec
             }
             else
             {
-                _plog->AddLog("MSG:ucid %u:%s %s %s", ucid, _httppkg._method, _httppkg._request, _httppkg._version);                
+                _plog->AddLog("MSG:ucid %u:%s %s %s", ucid, _httppkg._method, _httppkg._request, _httppkg._version);
             }
             if (!stricmp("GET", _httppkg._method)) //GET
             {
@@ -975,7 +994,7 @@ namespace ec
                 if (_httppkg.GetWebSocketKey(skey, sizeof(skey))) //web_socket升级
                 {
                     if (_plog)
-                        _plog->AddLog("MSG:ucid %u Upgrade websocket",ucid);
+                        _plog->AddLog("MSG:ucid %u Upgrade websocket", ucid);
                     return DoUpgradeWebSocket(ucid, skey); //处理Upgrade中的Get
                 }
                 else
@@ -1056,7 +1075,7 @@ namespace ec
             }
 
             _answer.ClearData();
-            strcpy(tmp, "http/1.1 200 ok\r\n");
+            strcpy(tmp, "HTTP/1.1 200 ok\r\n");
             _answer.Add(tmp, strlen(tmp));
 
             strcpy(tmp, "Server: rdb5 websocket server\r\n");
@@ -1138,12 +1157,10 @@ namespace ec
         */
         virtual bool	OnReadBytes(unsigned int ucid, const void* pdata, unsigned int usize) //返回false表示要服务端要断开连接
         {
-            bool bret = true;
-            if (_pcfg->_blogdetail && _plog)
-                _plog->AddLog("MSG:ucid %d read %d bytes!", ucid, usize);
+            bool bret = true;            
             int nr = _pclis->OnReadData(ucid, (const char*)pdata, usize, &_httppkg);//解析数据，结构存放在_httppkg中
             while (nr == he_ok)
-            {
+            {                
                 if (_httppkg._nprotocol == PROTOCOL_HTTP)
                 {
                     bret = DoHttpRequest(ucid);
