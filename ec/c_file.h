@@ -412,6 +412,26 @@ namespace ec
             if (_pf)
                 _pf->Unlock(_offset, _lsize);
         }
+        cSafeFileLock()
+        {
+            _pf = 0;
+            _offset = 0;
+            _lsize = 0;
+            _bExc = 0;
+        }
+    public:
+        void Lock(cFile* pf, long long offset, long long lsize, bool bExc)
+        {
+            if (_pf)
+                _pf->Unlock(_offset, _lsize);
+
+            _pf = pf;
+            _offset = offset;
+            _lsize = lsize;
+            _bExc = bExc;
+            if (_pf)
+                _pf->Lock(_offset, _lsize, _bExc);
+        }
     private:
         cFile* _pf;
         long long _offset;

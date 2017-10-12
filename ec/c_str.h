@@ -180,8 +180,7 @@ namespace ec
     }
 
     /*!
-    \brief get next string
-    \remark cp can't be \n\r\t and space
+    \brief get next string    
     \param cp separate character
     \param src source string
     \param srcsize source string length
@@ -197,6 +196,59 @@ namespace ec
         {
             c = src[pos++];
             if (c == cp)
+            {
+                while (i > 0)// delete tail space char
+                {
+                    if (sout[i - 1] != '\t' && sout[i - 1] != ' ')
+                        break;
+                    i--;
+                }
+                sout[i] = '\0';
+                if (i > 0)
+                    return sout;
+            }
+            else if (c != '\n' && c != '\r')
+            {
+                if (i == 0 && (c == '\t' || c == ' ')) //delete head space char
+                    continue;
+                sout[i++] = c;
+                if (i >= outsize)
+                    return 0;
+            }
+        }
+        if (i && i < outsize && pos == srcsize)
+        {
+            while (i > 0) //delete tail space char
+            {
+                if (sout[i - 1] != '\t' && sout[i - 1] != ' ')
+                    break;
+                i--;
+            }
+            sout[i] = '\0';
+            if (i > 0)
+                return sout;
+        }
+        return 0;
+    }
+
+
+    /*!
+    \brief get next string    
+    \param split separate characters
+    \param src source string
+    \param srcsize source string length
+    \param pos [in/out] current position
+    \param sout [out] output buffer
+    \param outsize output buffer length
+    */
+    inline const char* str_getnext(const char* split, const char* src, size_t srcsize, size_t &pos, char *sout, size_t outsize)
+    {
+        char c;
+        size_t i = 0;
+        while (pos < srcsize)
+        {
+            c = src[pos++];
+            if (strchr(split, c))
             {
                 while (i > 0)// delete tail space char
                 {
