@@ -83,8 +83,10 @@ namespace ec
         size_t i = 0;
         while (i < n)
         {
-            if (*s1 != *s2 || !(*s1) || !(*s2))
+            if (*s1 != *s2)
                 return false;
+            if (!(*s1))
+                return true;
             i++;
             s1++;
             s2++;
@@ -95,9 +97,11 @@ namespace ec
     {
         size_t i = 0;
         while (i < n)
-        {
-            if ((*s1 != *s2 && tolower(*s1) != tolower(*s2)) || !(*s1) || !(*s2))
+        {               
+            if (*s1 != *s2 && tolower(*s1) != tolower(*s2))
                 return false;
+            if (!(*s1))
+                return true;
             i++;
             s1++;
             s2++;
@@ -580,6 +584,15 @@ namespace ec
             return 0;
         }
     };
+
+    inline long long ato_ll(const char* s)
+    {
+#ifdef _WIN32
+        return _atoi64(s);
+#else
+        return atoll(s);
+#endif
+    }
 
 };//namespace ec
 #endif //C_STR_H
