@@ -228,7 +228,7 @@ namespace ec
                 return false;
             memcpy(st, s, len);
             return parse(st);
-        }
+        }        
     };
 
 }; // ec
