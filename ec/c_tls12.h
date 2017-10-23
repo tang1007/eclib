@@ -568,8 +568,7 @@ namespace ec
             *(_client_hello.GetBuf() + 3) = (uint8)(_client_hello.GetSize() - 4);
             return SendToBuf(po, tls::rec_handshake, _client_hello.GetBuf(), _client_hello.GetSize());
         }
-
-        // int OnData (void* pParam, unsigned int ucid, int datamode,const void* pd, int dsize);
+        
         int  OnTcpRead(const void* pd, size_t size, int(*OnData)(void*, unsigned int, int, const void*, int), void* pParam)
         {
             _pkgtcp.Add((const unsigned char*)pd, size);
@@ -714,6 +713,7 @@ namespace ec
             _prsa = 0;
             _pevppk = 0;
             _px509 = 0;
+            _pubkeylen = 0;
         }
         virtual ~cTlsSession_cli()
         {
@@ -732,8 +732,17 @@ namespace ec
         RSA *_prsa;
         EVP_PKEY *_pevppk;
         X509* _px509;
+        int _pubkeylen;//The server pubkey length，0 for not use
+        unsigned char _pubkey[1024];//The server pubkey is used to verify the server legitimacy
         ec::tArray<unsigned char> _pkgm;
     public:
+        bool SetServerPubkey(int len, unsigned char *pubkey)
+        {
+            if (!pubkey || len > (int)sizeof(_pubkey))
+                return false;
+            _pubkeylen = len;
+            memcpy(_pubkey, pubkey, len);
+        }
         virtual void Reset()
         {
             cTlsSession::Reset();
@@ -823,7 +832,7 @@ namespace ec
             ECTRACE("cipher = %02x,%02x\n", (_cipher_suite >> 8) & 0xFF, _cipher_suite & 0xFF);
         }
 
-        void OnServerCertificate(unsigned char* phandshakemsg, size_t size)
+        bool OnServerCertificate(unsigned char* phandshakemsg, size_t size)
         {
             _srv_certificate.ClearData();
             _srv_certificate.Add(phandshakemsg, size);
@@ -834,7 +843,7 @@ namespace ec
             trace_server_certificate(pmsg);
 #endif
             if (!pmsg || !pmsg->GetBuf() || !pmsg->GetSize())
-                return;
+                return false;
             const unsigned char* p = pmsg->GetBuf(), *pend = 0;
             pend = p + pmsg->GetSize();
             uint32 ulen = p[7];
@@ -842,26 +851,49 @@ namespace ec
             ulen = (ulen << 8) + p[9];
             p += 10;
             _px509 = d2i_X509(NULL, &p, (long)ulen);//only use first Certificate
-            if (_px509)
+            if (!_px509)
+                return false;
+            if (_pubkeylen) // need to verify the server legitimacy
             {
-                _pevppk = X509_get_pubkey(_px509);
-                if (!_pevppk)
-                {
-                    X509_free(_px509);
-                    _px509 = 0;
-                    return;
+                bool bok = true;
+                int i;
+                if (_px509->cert_info->key->public_key->length != _pubkeylen)
+                    bok = false;
+                else {
+                    for (i = 0; i < _px509->cert_info->key->public_key->length; i++)
+                    {
+                        if (_px509->cert_info->key->public_key->data[i] != _pubkey[i])
+                        {
+                            bok = false;
+                            break;
+                        }
+                    }
                 }
-                _prsa = EVP_PKEY_get1_RSA(_pevppk);
-                if (!_prsa)
+                if (!bok)
                 {
-                    EVP_PKEY_free(_pevppk);
                     X509_free(_px509);
-                    _pevppk = 0;
                     _px509 = 0;
-                    return;
+                    return false;
                 }
             }
+            _pevppk = X509_get_pubkey(_px509);
+            if (!_pevppk)
+            {
+                X509_free(_px509);
+                _px509 = 0;
+                return false;
+            }
+            _prsa = EVP_PKEY_get1_RSA(_pevppk);
+            if (!_prsa)
+            {
+                EVP_PKEY_free(_pevppk);
+                X509_free(_px509);
+                _pevppk = 0;
+                _px509 = 0;
+                return false;
+            }
             ECTRACE("ServerCertificate success!\n");
+            return  true;
         }
 
         bool  OnServerHelloDone(unsigned char* phandshakemsg, size_t size, int(*OnData)(void*, unsigned int, int, const void*, int), void* pParam)
@@ -890,6 +922,7 @@ namespace ec
             ECTRACE("ClientFinished success!send size = %d\n", s.GetNum());
             return OnData(pParam, _ucid, TLS_SESSION_RET, s.GetBuf(), s.GetNum()) >= 0;
         }
+
         bool OnServerFinished(unsigned char* phandshakemsg, size_t size, int(*OnData)(void*, unsigned int, int, const void*, int), void* pParam)
         {
             const char* slab = "server finished";
@@ -918,7 +951,6 @@ namespace ec
             }
             return true;
         }
-
     protected:
         virtual int dorecord(const unsigned char* prec, size_t sizerec, int(*OnData)(void*, unsigned int, int, const void*, int), void* pParam)
         {
@@ -965,7 +997,8 @@ namespace ec
                     OnServerHello(p, ulen + 4);
                     break;
                 case tls::hsk_certificate:
-                    OnServerCertificate(p, ulen + 4);
+                    if (!OnServerCertificate(p, ulen + 4))
+                        return -1;
                     break;
                 case tls::hsk_server_key_exchange:
                     ECTRACE("hsk_server_key_exchange size=%u\n", ulen + 4);
@@ -1016,6 +1049,7 @@ namespace ec
             _cerrootlen = cerrootlen;
             _pRsaPub = pRsaPub;
             _pRsaPrivate = pRsaPrivate;
+            memset(_sip, 0, sizeof(_sip));
         }
         virtual ~cTlsSession_srv()
         {
@@ -1030,7 +1064,13 @@ namespace ec
         const void* _pcerroot;
         size_t _cerrootlen;
         ec::tArray<unsigned char> _pkgm;
+        char _sip[20];
     public:
+        void SetIP(const char* sip)
+        {
+            if (sip && *sip)
+                str_ncpy(_sip, sip, sizeof(_sip));
+        }
         virtual bool MakeAppRecord(ec::tArray<unsigned char>*po, const void* pd, size_t size)
         {
             po->ClearData();
@@ -1129,7 +1169,7 @@ namespace ec
                 ss.setpos(6).read(_clientrand, 32) >> uct; //session id len
                 if (uct > 0)
                     ss.setpos(ss.getpos() + uct);
-                ss < cipherlen;
+                ss > &cipherlen;
             }
             catch (int) { return false; }
             if (ss.getpos() + cipherlen > size)
@@ -1137,7 +1177,6 @@ namespace ec
                 Alert(2, 10, OnData, pParam);//unexpected_message(10)
                 return false;
             }
-
             _cipher_suite = 0;
             unsigned char* pch = phandshakemsg + ss.getpos();
             for (i = 0; i < cipherlen; i += 2)
@@ -1344,7 +1383,7 @@ namespace ec
                         return -1;
                     }
                     _bhandshake_finished = true;
-                    OnData(pParam, _ucid, TLS_SESSION_HKOK, 0, 0);
+                    OnData(pParam, _ucid, TLS_SESSION_HKOK, _sip, (int)strlen(_sip));
                     break;
                 default:
                     ECTRACE("srv:unkown msgtype=%u\n", p[0]);
@@ -1358,6 +1397,9 @@ namespace ec
             return nrec;
         }
     };
+#define TLSC_ST_OFFLINE    (-1) //断线中
+#define TLSC_ST_CONING     (0)  //连接中
+#define TLSC_ST_SUCCESS    (1)  //通道可用
     /*!
     \brief  TLS client auto reconnet
 
@@ -1375,19 +1417,21 @@ namespace ec
             _nreconnectsec = 5;
             _lastconnectfailed = 0;
             _connecttimeout = 15;
+
+            _nstatus = TLSC_ST_OFFLINE;
         };
         virtual ~cTlsClient() {};
     protected:
         char _sip[30];
         unsigned short _wport;
 
-        int _nsocketerr;
+        volatile int   _nstatus;
+        int     _nsocketerr;
         int     _connecttimeout;
         time_t  _lastconnectfailed;
         int     _nreconnectsec;// reconnect interval seconds
         ec::cEvent _evtwait;
         volatile  SOCKET _sock;
-        cCritical   _cssend;
         cTlsSession_cli      _tls;
         ec::tArray<unsigned char> _pkgrec;
         ec::tArray<unsigned char> _pkgsend;
@@ -1396,6 +1440,7 @@ namespace ec
     protected:
         void closetcpsocket()
         {
+            _nstatus = TLSC_ST_OFFLINE;
             Reset();
             if (_sock == INVALID_SOCKET)
                 return;
@@ -1447,6 +1492,10 @@ namespace ec
                 return false;
             return ec::tcp_send(_sock, _pkgsend.GetBuf(), _pkgsend.GetNum()) == _pkgsend.GetNum();
         }
+        inline int GetStatus()
+        {
+            return _nstatus;
+        }
     protected:
         virtual void OnConnected() = 0; // after TLS channel build
         virtual void OnDisConnected(int where, int nerrcode) = 0;// where:1 disconnected ;-1 connect failed ;  nerrcode:system error
@@ -1466,6 +1515,7 @@ namespace ec
                 return -1;
             else if (datamode == TLS_SESSION_HKOK)
             {
+                pcls->_nstatus = TLSC_ST_SUCCESS;
                 pcls->OnConnected();
                 return 0;
             }
@@ -1517,10 +1567,12 @@ namespace ec
                     _evtwait.Wait(200);
                     return;
                 }
-
+                _nstatus = TLSC_ST_CONING;
                 SOCKET s = tcp_connect(_sip, _wport, _connecttimeout);
                 if (s == INVALID_SOCKET)
                 {
+                    _nstatus = TLSC_ST_OFFLINE;
+
                     _lastconnectfailed = tcur;
                     int nerrcode = 0;
 #ifdef _WIN32
@@ -1535,6 +1587,7 @@ namespace ec
                 }
                 _lastconnectfailed = tcur;
                 _sock = s;
+
                 if (!OnTcpConnected())
                     closetcpsocket();
             }
@@ -1544,6 +1597,7 @@ namespace ec
                 if (!OnTcpRead(_readbuf, nr))
                 {
                     nr = -1;
+                    _lastconnectfailed = ::time(0);
                     break;
                 }
                 nr = ec::tcp_read(_sock, _readbuf, sizeof(_readbuf), 100);
@@ -1552,8 +1606,6 @@ namespace ec
             {
                 closetcpsocket();
                 OnDisConnected(1, _nsocketerr);
-                _lKillTread = 1; //debug 
-
             }
         };
     };
@@ -1578,39 +1630,64 @@ namespace ec
     class cTlsSession_srvMap
     {
     public:
-        cTlsSession_srvMap() :_map(8192)
+        cTlsSession_srvMap(unsigned int ugroups)
         {
+            _ugroups = ugroups;
+            if (_ugroups < 2)
+                _ugroups = 2;
+            if (_ugroups > 16)
+                _ugroups = 16;
+            unsigned int i;
+            _css = (cCritical**)malloc(sizeof(void*) * _ugroups);
+            _maps = (tMap<unsigned int, t_tlsse> **)malloc(sizeof(void*) * _ugroups);
+            for (i = 0; i < _ugroups; i++)
+            {
+                _css[i] = new cCritical;
+                _maps[i] = new tMap<unsigned int, t_tlsse>(4096);
+            }
+        }
+        ~cTlsSession_srvMap()
+        {
+            unsigned int i;
+            for (i = 0; i < _ugroups; i++)
+            {
+                delete _css[i];
+                delete _maps[i];
+            }
+            free(_css);
+            free(_maps);
         }
     protected:
-        tMap<unsigned int, t_tlsse> _map;
-        cCritical _cs;
+        unsigned int _ugroups;
+        tMap<unsigned int, t_tlsse> **_maps;
+        cCritical **_css;
     public:
         void Add(unsigned int ucid, cTlsSession_srv* ps)
         {
-            cSafeLock lck(&_cs);
+            cSafeLock lck(_css[ucid%_ugroups]);
             t_tlsse v;
             v.ucid = ucid;
             v.Pss = ps;
-            _map.SetAt(ucid, v);
+            _maps[ucid%_ugroups]->SetAt(ucid, v);
         }
         void Del(unsigned int ucid)
         {
-            cSafeLock lck(&_cs);
-            _map.RemoveKey(ucid);
+            cSafeLock lck(_css[ucid%_ugroups]);
+            _maps[ucid%_ugroups]->RemoveKey(ucid);
         }
 
         int OnTcpRead(unsigned ucid, const void* pd, size_t dsize, int OnData(void* pParam, unsigned int ucid, int datamode, const void* pd, int dsize), void* pParam)
         {
-            cSafeLock lck(&_cs);
-            t_tlsse* pv = _map.Lookup(ucid);
+            cSafeLock lck(_css[ucid%_ugroups]);
+            t_tlsse* pv = _maps[ucid%_ugroups]->Lookup(ucid);
             if (pv)
                 return pv->Pss->OnTcpRead(pd, dsize, OnData, pParam);
             return -1;
         }
         bool mkr_appdata(unsigned int ucid, ec::tArray<unsigned char>*po, const void* pd, size_t len)
         {
-            cSafeLock lck(&_cs);
-            t_tlsse* pv = _map.Lookup(ucid);
+            cSafeLock lck(_css[ucid%_ugroups]);
+            t_tlsse* pv = _maps[ucid%_ugroups]->Lookup(ucid);
             if (pv)
                 return pv->Pss->MakeAppRecord(po, pd, len);
             return false;
@@ -1620,7 +1697,7 @@ namespace ec
     class cTlsSrvThread : public cTcpSvrWorkThread
     {
     public:
-        cTlsSrvThread(cTlsSession_srvMap* psss) :_send_recs(1024 * 32768)
+        cTlsSrvThread(cTlsSession_srvMap* psss) : _tlsdata(1024 * 128), _send_recs(1024 * 256)
         {
             _psss = psss;
         }
@@ -1630,10 +1707,11 @@ namespace ec
 
         cTlsSession_srvMap* _psss;
     protected:
+        ec::tArray<unsigned char> _tlsdata;
         ec::tArray<unsigned char> _send_recs;
     protected:
         virtual bool    OnAppData(unsigned int ucid, const void* pd, unsigned int usize) { return true; };
-        virtual void    OnHandshakeSuccess(unsigned int ucid) {};
+        virtual void    OnHandshakeSuccess(unsigned int ucid, const char* sip) {};
         virtual void    OnDisconnect(unsigned int ucid, unsigned int uopt, int nerrorcode) {};
     protected:
         virtual void	OnClientDisconnect(unsigned int  ucid, unsigned int uopt, int nerrorcode) //uopt = TCPIO_OPT_XXXX
@@ -1643,7 +1721,18 @@ namespace ec
         };
         virtual bool	OnReadBytes(unsigned int ucid, const void* pdata, unsigned int usize) //return false will disconnect
         {
-            return _psss->OnTcpRead(ucid, pdata, usize, OnData, this) >= 0;
+            _tlsdata.ClearData();
+            int nr = _psss->OnTcpRead(ucid, pdata, usize, OnData, this);
+            if (nr < 0)
+                return false;
+            else if (_tlsdata.GetSize())
+            {
+                if (!OnAppData(ucid, _tlsdata.GetBuf(), (unsigned int)_tlsdata.GetSize()))
+                    return false;
+                _tlsdata.ClearData();
+            }
+            return true;
+
         };
         virtual	void	DoSelfMsg(unsigned int uevt) {};	// uevt = TCPIO_MSG_XXXX
         virtual	void	OnOptComplete(unsigned int ucid, unsigned int uopt) {};//uopt = TCPIO_OPT_XXXX
@@ -1656,17 +1745,21 @@ namespace ec
                 return -1;
             else if (datamode == TLS_SESSION_HKOK)
             {
-                pcls->OnHandshakeSuccess(ucid);
-                return 0;
+                if (pd && *((const char*)pd) && dsize)
+                    pcls->OnHandshakeSuccess(ucid, (const char*)pd);
+                else
+                    pcls->OnHandshakeSuccess(ucid, 0);
             }
             else if (datamode == TLS_SESSION_RET)
             {
                 if (pcls->SendToUcid(ucid, pd, dsize) < 0)
                     return -1;
+                return 0;
             }
-            else if (datamode == TLS_SESSION_APPDATA) {
-                if (!pcls->OnAppData(ucid, pd, dsize))
-                    return -1;
+            else if (datamode == TLS_SESSION_APPDATA)
+            {
+                if (pd && dsize)
+                    pcls->_tlsdata.Add((const unsigned char*)pd, dsize);                
             }
             return 0;
         }
@@ -1682,7 +1775,7 @@ namespace ec
     class cTlsServer : public cTcpServer
     {
     public:
-        cTlsServer() :_pcer(1024 * 4), _prootcer(1024 * 4)
+        cTlsServer() :_pcer(1024 * 4), _prootcer(1024 * 4), _sss(MAX_TCPWORK_THREAD)
         {
             _pRsaPub = 0;
             _pRsaPrivate = 0;
@@ -1783,6 +1876,7 @@ namespace ec
         {
             cTlsSession_srv* psession = new cTlsSession_srv(ucid, _pcer.GetBuf(), _pcer.GetSize(),
                 _prootcer.GetBuf(), _prootcer.GetSize(), _pRsaPub, _pRsaPrivate);
+            psession->SetIP(sip);
             _sss.Add(ucid, psession);
         }
         virtual void	OnRemovedUCID(unsigned int ucid)
@@ -1797,5 +1891,4 @@ namespace ec
         {
         }
     };
-
 };

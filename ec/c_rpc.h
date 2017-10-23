@@ -334,12 +334,37 @@ namespace ec
     class cRpcClientMap
     {
     public:
-        cRpcClientMap() : _map(1024 * 16)
+        cRpcClientMap(unsigned int ugroup)// : _map(1024 * 16)
         {
             _bEncryptData = true;
             _tks = ::time(NULL);
             _tks <<= 24;
             _lseqno = 1;
+
+            _ngroup = ugroup;
+            if (_ngroup < 2)
+                _ngroup = 2;
+            if (_ngroup > 16)
+                _ngroup = 16;
+            unsigned int i;
+            _cs = (cCritical**)malloc(sizeof(void*) * _ngroup);
+            _map = (tMap<unsigned int, cRpcCon*> **)malloc(sizeof(void*) * _ngroup);
+            for (i = 0; i < _ngroup; i++)
+            {
+                _cs[i] = new cCritical;
+                _map[i] = new tMap<unsigned int, cRpcCon*>(4096);
+            }
+        }
+        ~cRpcClientMap()
+        {
+            unsigned int i;
+            for (i = 0; i < _ngroup; i++)
+            {
+                delete _cs[i];
+                delete _map[i];
+            }
+            free(_cs);
+            free(_map);
         }
         long _lseqno;
         inline void SetEncryptData(bool bEncrypt)
@@ -352,46 +377,47 @@ namespace ec
         }
     protected:
         bool _bEncryptData;
+        unsigned int _ngroup;
         unsigned long long _tks;
-        cCritical _cs;
-        tMap<unsigned int, cRpcCon*> _map;
+        cCritical** _cs;
+        tMap<unsigned int, cRpcCon*>** _map;
     public:
         void Add(unsigned int ucid, const char* sip)
         {
-            cSafeLock lck(&_cs);
+            cSafeLock lck(_cs[ucid%_ngroup]);
             cRpcCon* pcli = new cRpcCon(ucid, sip);
             if (pcli)
-                _map.SetAt(ucid, pcli);
+                _map[ucid%_ngroup]->SetAt(ucid, pcli);
         }
 
         bool Del(unsigned int ucid)
         {
-            cSafeLock lck(&_cs);
-            return _map.RemoveKey(ucid);
+            cSafeLock lck(_cs[ucid%_ngroup]);
+            return _map[ucid%_ngroup]->RemoveKey(ucid);
         }
 
         int DoReadData(unsigned int ucid, const unsigned char* pdata, unsigned int usize, tArray<unsigned char>* pout)
         {
-            cSafeLock lck(&_cs);
+            cSafeLock lck(_cs[ucid%_ngroup]);
             cRpcCon* pcli = NULL;
-            if (!_map.Lookup(ucid, pcli) || !pcli)
+            if (!_map[ucid%_ngroup]->Lookup(ucid, pcli) || !pcli)
                 return -1;
             return pcli->DoReadData(pdata, usize, pout);
         }
         int DoLeftData(unsigned int ucid, tArray<unsigned char>* pout)
         {
-            cSafeLock lck(&_cs);
+            cSafeLock lck(_cs[ucid%_ngroup]);
             cRpcCon* pcli = NULL;
-            if (!_map.Lookup(ucid, pcli) || !pcli)
+            if (!_map[ucid%_ngroup]->Lookup(ucid, pcli) || !pcli)
                 return -1;
             return pcli->DoLeftData(pout);
         }
 
         bool GetUserInfo(t_rpcuserinfo* puser)
         {
-            cSafeLock lck(&_cs);
+            cSafeLock lck(_cs[puser->_ucid%_ngroup]);
             cRpcCon* pcli = NULL;
-            if (!_map.Lookup(puser->_ucid, pcli) || !pcli)
+            if (!_map[puser->_ucid%_ngroup]->Lookup(puser->_ucid, pcli) || !pcli)
                 return false;
             puser->_nstatus = pcli->_nstatus;
 
@@ -405,10 +431,10 @@ namespace ec
 
         bool SetUserPsw(const char* susr, unsigned int ucid, const char* spsw)
         {
-            cSafeLock lck(&_cs);
+            cSafeLock lck(_cs[ucid%_ngroup]);
 
             cRpcCon* pcli = NULL;
-            if (!_map.Lookup(ucid, pcli) || !pcli)
+            if (!_map[ucid%_ngroup]->Lookup(ucid, pcli) || !pcli)
                 return false;
             if (!spsw || !(*spsw))
                 strcpy(pcli->_psw, "123456");//
@@ -423,10 +449,10 @@ namespace ec
 
         bool SetUserRandomInfo(unsigned int ucid, char* sout) //sout必须大于40字节
         {
-            cSafeLock lck(&_cs);
+            cSafeLock lck(_cs[ucid%_ngroup]);
 
             cRpcCon* pcli = NULL;
-            if (!_map.Lookup(ucid, pcli) || !pcli)
+            if (!_map[ucid%_ngroup]->Lookup(ucid, pcli) || !pcli)
                 return false;
             _tks++;
             unsigned char usha1[20], uc;
@@ -447,11 +473,11 @@ namespace ec
 
         bool GetUsrInfoSha1(unsigned int ucid, char* pout, char* outusr) //取随机信息的计算摘要,pout >40字节,outusr>=32字节
         {
-            cSafeLock lck(&_cs);
+            cSafeLock lck(_cs[ucid%_ngroup]);
 
             char sbuf[80] = { 0 };
             cRpcCon* pcli = NULL;
-            if (!_map.Lookup(ucid, pcli) || !pcli)
+            if (!_map[ucid%_ngroup]->Lookup(ucid, pcli) || !pcli)
                 return false;
 
             memcpy(sbuf, pcli->_srandominfo, 40);
@@ -475,26 +501,29 @@ namespace ec
 
         void SetUsrStatus(unsigned int ucid, RPCUSRST nst)
         {
-            cSafeLock lck(&_cs);
+            cSafeLock lck(_cs[ucid%_ngroup]);
 
             cRpcCon* pcli = NULL;
-            if (!_map.Lookup(ucid, pcli) || !pcli)
+            if (!_map[ucid%_ngroup]->Lookup(ucid, pcli) || !pcli)
                 return;
             pcli->_nstatus = nst;
         }
 
         int GetTimeOutNoLogin(time_t ltime, time_t timeoutsec, ec::tArray<unsigned int>*pucids)
         {
-            cSafeLock lck(&_cs);
-
-            int npos = 0, nlist = 0;
-
+            unsigned int i;
+            int npos, nlist;
             cRpcCon *p;
             pucids->ClearData();
-            while (_map.GetNext(npos, nlist, p))
+            for (i = 0; i < _ngroup; i++)
             {
-                if (p->_nstatus == 0 && ltime - p->_timeconnect > timeoutsec)
-                    pucids->Add(p->_ucid);
+                cSafeLock lck(_cs[i]);
+                npos = 0, nlist = 0;                
+                while (_map[i]->GetNext(npos, nlist, p))
+                {
+                    if (p->_nstatus == 0 && ltime - p->_timeconnect > timeoutsec)
+                        pucids->Add(p->_ucid);
+                }
             }
             return pucids->GetNum();
         }
@@ -1004,7 +1033,7 @@ namespace ec
     class cRpcBaseServer : public cTcpServer
     {
     public:
-        cRpcBaseServer() : _tmp(1024 * 256), _aucid(256)
+        cRpcBaseServer() : _clients(MAX_TCPWORK_THREAD), _tmp(1024 * 256), _aucid(256)
         {
             _plog = NULL;
             memset(_sname, 0, sizeof(_sname));
