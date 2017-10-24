@@ -17,7 +17,9 @@ ec library is free C++ library.
 #include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
+#include <sys/stat.h>
 #include <unistd.h>
+
 #include<sys/types.h>
 #include<fcntl.h>
 #include<sys/statfs.h>
@@ -217,6 +219,18 @@ namespace ec
 
             return UnlockFileEx(m_hFile, 0, sz.l, sz.h, &op) != 0;
         }
+        size_t getfilesize(const char* s)
+        {
+            if (m_hFile == INVALID_HANDLE_VALUE)
+                return 0;
+            DWORD dwh = 0;
+            size_t ret = GetFileSize(m_hFile,&dwh);
+            #ifdef _WIN64
+            if (dwh)
+                ret = (((size_t)dwh) << 32) | ret;                
+            #endif      
+            return ret;
+        }
 #else
         /*!
         \brief open file
@@ -328,6 +342,13 @@ namespace ec
 
             return !(fcntl(m_hFile, F_SETLKW, &lock) < 0);
 
+        }
+        size_t getfilesize(const char* filepath)
+        {
+            struct stat info;
+            if(!stat(filepath, &info))
+                return info.st_size;
+            return 0;
         }
 #endif
         inline int ReadFrom(long long loff, void *buf, unsigned int ucount)

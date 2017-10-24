@@ -1697,7 +1697,7 @@ namespace ec
     class cTlsSrvThread : public cTcpSvrWorkThread
     {
     public:
-        cTlsSrvThread(cTlsSession_srvMap* psss) : _tlsdata(1024 * 128), _send_recs(1024 * 256)
+        cTlsSrvThread(cTlsSession_srvMap* psss) : _tlsdata(1024 * 128)
         {
             _psss = psss;
         }
@@ -1708,7 +1708,6 @@ namespace ec
         cTlsSession_srvMap* _psss;
     protected:
         ec::tArray<unsigned char> _tlsdata;
-        ec::tArray<unsigned char> _send_recs;
     protected:
         virtual bool    OnAppData(unsigned int ucid, const void* pd, unsigned int usize) { return true; };
         virtual void    OnHandshakeSuccess(unsigned int ucid, const char* sip) {};
@@ -1766,9 +1765,10 @@ namespace ec
     public:
         bool SendAppData(unsigned ucid, const void* pd, size_t len, bool bAddCount = false, unsigned int uSendOpt = TCPIO_OPT_SEND)
         {
-            if (!_psss->mkr_appdata(ucid, &_send_recs, pd, len))
+            ec::tArray<unsigned char> tmp(len + 264 - len%8 + (len/16384) * 256);
+            if (!_psss->mkr_appdata(ucid, &tmp, pd, len))
                 return false;
-            return SendToUcid(ucid, _send_recs.GetBuf(), (unsigned int)_send_recs.GetSize(), bAddCount, uSendOpt) > 0;
+            return SendToUcid(ucid, tmp.GetBuf(), (unsigned int)tmp.GetSize(), bAddCount, uSendOpt) > 0;
         }
     };
 

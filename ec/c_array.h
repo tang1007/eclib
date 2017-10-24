@@ -204,7 +204,11 @@ namespace ec {
         {
             return Replace(pos,rsize,0,0);
         }
-
+        inline void reduceto(size_t size)
+        {
+            if (_usize > size)
+                _usize = size;
+        }
 #ifdef _WIN32
         static int  compare(void* pParam, const void *p1, const void* p2);
 #else
