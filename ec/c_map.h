@@ -67,6 +67,12 @@ namespace ec
         bool	ValueKey(KEY key, VALUE* pcls);
         void    OnRemoveValue(VALUE* pcls);
     public:
+        void InitHashSize(unsigned int size)
+        {
+            if (_ppv || _ncount || size <= _usize)
+                return;
+            _usize = size;            
+        }
         inline int GetCount() const { return _ncount; };
 
         VALUE* SetAt(KEY key, VALUE& newValue, bool bRemoveOld = true)

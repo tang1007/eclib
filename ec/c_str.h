@@ -387,6 +387,24 @@ namespace ec
 #endif
     }
 
+    char *formatpath(char* spath,size_t size)
+    {
+        if (strlen(spath) + 2 < size || !(*spath))
+            return spath;
+        char *s = spath;
+        while (*s)
+        {
+            if (*s == '\\')
+                *s = '/';
+            s++;
+        }
+        if (*(s - 1) != '/')
+        {
+            *s++ = '/';
+            *s = '\0';
+        }
+        return spath;
+    }
     /*!
     \brief GB2312 toutf-8
     \param sizeutf8 [in/out] , in sutf8 bufsize, out utf-8 code length
