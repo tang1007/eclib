@@ -389,7 +389,7 @@ namespace ec
 
     char *formatpath(char* spath,size_t size)
     {
-        if (strlen(spath) + 2 < size || !(*spath))
+        if (strlen(spath) + 2 > size || !(*spath))
             return spath;
         char *s = spath;
         while (*s)
