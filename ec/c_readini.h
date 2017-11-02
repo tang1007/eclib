@@ -38,11 +38,14 @@ namespace ec
         pf = fopen(sfile, "rt");
         if (pf == NULL)
             return -1;
+        int c = fgetc(pf), c2 = fgetc(pf), c3 = fgetc(pf);        
+        if (!(c == 0xef && c2 == 0xbb && c3 == 0xbf)) // not utf8 with bom            
+            fseek(pf, 0, SEEK_SET);
 
         char stmp[4096];
         int nr = 0, nc = 0, nstr = 0, nerr = 0;
 
-        int c, cnext;
+        int cnext;
         unsigned int np = 0;
 
         while ((c = fgetc(pf)) != EOF)
@@ -113,10 +116,14 @@ namespace ec
         if (pf == NULL)
             return -1;
 
+        int c = fgetc(pf), c2 = fgetc(pf), c3 = fgetc(pf);
+        if (!(c == 0xef && c2 == 0xbb && c3 == 0xbf)) // not utf8 with bom            
+            fseek(pf, 0, SEEK_SET);
+
         char stmp[4096];
         int nr = 0, nc = 0, nstr = 0, nerr = 0;
 
-        int c, cnext;
+        int cnext;
         unsigned int np = 0;
 
         while ((c = fgetc(pf)) != EOF)
@@ -196,7 +203,10 @@ namespace ec
 
             OnReadFile();
 
-            int c;
+            int c = fgetc(pf), c2 = fgetc(pf), c3 = fgetc(pf);
+            if (!(c == 0xef && c2 == 0xbb && c3 == 0xbf)) // not utf8 with bom            
+                fseek(pf, 0, SEEK_SET);
+
 	        char *pc = m_szLine;
             int npos = 0;
             *pc = '\0';

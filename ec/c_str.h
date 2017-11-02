@@ -387,7 +387,7 @@ namespace ec
 #endif
     }
 
-    char *formatpath(char* spath,size_t size)
+    inline char *formatpath(char* spath,size_t size)
     {
         if (strlen(spath) + 2 > size || !(*spath))
             return spath;
