@@ -81,6 +81,7 @@ namespace tls
 
 #define TLS_CBCBLKSIZE  16303 // (16384-16-32-1-32)
 
+#define TLS_SESSION_NONE    (-2) 
 #define TLS_SESSION_ERR		(-1) //错误
 #define TLS_SESSION_HKOK	0 //成功
 #define TLS_SESSION_RET		1 //成功，需要向对方发送输出的数据
@@ -736,12 +737,13 @@ namespace ec
         unsigned char _pubkey[1024];//The server pubkey is used to verify the server legitimacy
         ec::tArray<unsigned char> _pkgm;
     public:
-        bool SetServerPubkey(int len, unsigned char *pubkey)
+        bool SetServerPubkey(int len, const unsigned char *pubkey)
         {
             if (!pubkey || len > (int)sizeof(_pubkey))
                 return false;
             _pubkeylen = len;
             memcpy(_pubkey, pubkey, len);
+            return true;
         }
         virtual void Reset()
         {
@@ -998,7 +1000,10 @@ namespace ec
                     break;
                 case tls::hsk_certificate:
                     if (!OnServerCertificate(p, ulen + 4))
+                    {
+                        OnData(pParam, _ucid, TLS_SESSION_ERR, 0, 0);
                         return -1;
+                    }
                     break;
                 case tls::hsk_server_key_exchange:
                     ECTRACE("hsk_server_key_exchange size=%u\n", ulen + 4);
@@ -1007,13 +1012,14 @@ namespace ec
                     ECTRACE("hsk_certificate_request size=%u\n", ulen + 4);
                     break;
                 case tls::hsk_server_hello_done:
-                    if (!OnServerHelloDone(p, ulen + 4, OnData, pParam))
-                        return -1;
+                    if (!OnServerHelloDone(p, ulen + 4, OnData, pParam))                                            
+                        return -1;                    
                     break;
                 case tls::hsk_finished:
                     ECTRACE("** server hsk_finished size=%u\n", ulen + 4);
                     if (!OnServerFinished(p, ulen + 4, OnData, pParam))
                     {
+                        OnData(pParam, _ucid, TLS_SESSION_ERR, 0, 0);
                         ECTRACE("** server hsk_finished chech failed\n");
                         return -1;
                     }
@@ -1419,6 +1425,8 @@ namespace ec
             _connecttimeout = 15;
 
             _nstatus = TLSC_ST_OFFLINE;
+
+            _lastsessionerr = TLS_SESSION_NONE;
         };
         virtual ~cTlsClient() {};
     protected:
@@ -1428,6 +1436,7 @@ namespace ec
         volatile int   _nstatus;
         int     _nsocketerr;
         int     _connecttimeout;
+        int     _lastsessionerr;
         time_t  _lastconnectfailed;
         int     _nreconnectsec;// reconnect interval seconds
         ec::cEvent _evtwait;
@@ -1457,7 +1466,7 @@ namespace ec
         }
         void Reset()
         {
-            _lastconnectfailed = 0;
+            _lastsessionerr = TLS_SESSION_NONE;
             _tls.Reset();
         }
     public:
@@ -1512,9 +1521,13 @@ namespace ec
         {
             cTlsClient* pcls = (cTlsClient*)pParam;
             if (datamode == TLS_SESSION_ERR)
+            {
+                pcls->_lastsessionerr = TLS_SESSION_ERR;
                 return -1;
+            }
             else if (datamode == TLS_SESSION_HKOK)
             {
+                pcls->_lastsessionerr = TLS_SESSION_HKOK;
                 pcls->_nstatus = TLSC_ST_SUCCESS;
                 pcls->OnConnected();
                 return 0;
@@ -1589,7 +1602,10 @@ namespace ec
                 _sock = s;
 
                 if (!OnTcpConnected())
+                {
                     closetcpsocket();
+                    return;
+                }
             }
             nr = ec::tcp_read(_sock, _readbuf, sizeof(_readbuf), 100);
             while (nr > 0)
@@ -1604,8 +1620,10 @@ namespace ec
             }
             if (nr < 0)
             {
+                if (_lastsessionerr == TLS_SESSION_ERR)
+                    _lastconnectfailed = ::time(0);
                 closetcpsocket();
-                OnDisConnected(1, _nsocketerr);
+                OnDisConnected(1, _nsocketerr);                
             }
         };
     };

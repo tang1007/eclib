@@ -164,7 +164,7 @@ namespace ec
         {
             cSafeLock	lock(&_csucid);
             m_uNextID++;
-            while (!m_uNextID || _mapucid.Lookup(m_uNextID)) {
+            while (m_uNextID < 100 || _mapucid.Lookup(m_uNextID)) {
                 m_uNextID++;
             }
             _mapucid.SetAt(m_uNextID, m_uNextID, false);
