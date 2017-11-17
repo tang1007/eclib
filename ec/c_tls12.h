@@ -1845,7 +1845,7 @@ namespace ec
             }
             fclose(pf);
 
-            if (filerootcert)
+            if (filerootcert && *filerootcert)
             {
                 pf = fopen(filerootcert, "rb");
                 if (!pf)

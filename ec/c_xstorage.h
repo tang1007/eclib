@@ -198,7 +198,7 @@ namespace ec
             if (ECSTG_PAGE_SIZE != WriteTo(static_cast<long long>(GetRootPgno()) * ECSTG_PAGE_SIZE, pg, ECSTG_PAGE_SIZE))
             {
                 SetSystemLastError();
-                return -1;
+                //return -1; // debug 201711/15
             }
             Unlock(0, 0);
             return _lasterror == 0 ? 0 : -1;
@@ -242,7 +242,7 @@ namespace ec
                 catch (int)
                 {
                     _lasterror = ECSTG_ERR_MEMERY;
-                    return -1;
+                    break;// return -1; //debug 2017//11/15
                 }
                 if (_head.crc32 != ec::crc32(tmp, sizeof(_head) - 4))
                     _lasterror = -1;

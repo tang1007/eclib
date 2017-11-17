@@ -341,30 +341,13 @@ namespace ec
             _tks <<= 24;
             _lseqno = 1;
 
-            _ngroup = ugroup;
-            if (_ngroup < 2)
-                _ngroup = 2;
-            if (_ngroup > 16)
-                _ngroup = 16;
-            unsigned int i;
-            _cs = (cCritical**)malloc(sizeof(void*) * _ngroup);
-            _map = (tMap<unsigned int, cRpcCon*> **)malloc(sizeof(void*) * _ngroup);
-            for (i = 0; i < _ngroup; i++)
-            {
-                _cs[i] = new cCritical;
-                _map[i] = new tMap<unsigned int, cRpcCon*>(4096);
-            }
+			int i;
+			for (i = 0; i < CPL_SOCKET_GROUPS; i++)
+				_maps[i].InitHashSize(4096);
+            
         }
         ~cRpcClientMap()
-        {
-            unsigned int i;
-            for (i = 0; i < _ngroup; i++)
-            {
-                delete _cs[i];
-                delete _map[i];
-            }
-            free(_cs);
-            free(_map);
+        {           
         }
         long _lseqno;
         inline void SetEncryptData(bool bEncrypt)
@@ -376,48 +359,47 @@ namespace ec
             return _bEncryptData;
         }
     protected:
-        bool _bEncryptData;
-        unsigned int _ngroup;
+        bool _bEncryptData;        
         unsigned long long _tks;
-        cCritical** _cs;
-        tMap<unsigned int, cRpcCon*>** _map;
+        cCritical _css[CPL_SOCKET_GROUPS];
+        tMap<unsigned int, cRpcCon*> _maps[CPL_SOCKET_GROUPS];
     public:
         void Add(unsigned int ucid, const char* sip)
         {
-            cSafeLock lck(_cs[ucid%_ngroup]);
+            cSafeLock lck(&_css[ucid % CPL_SOCKET_GROUPS]);
             cRpcCon* pcli = new cRpcCon(ucid, sip);
             if (pcli)
-                _map[ucid%_ngroup]->SetAt(ucid, pcli);
+                _maps[ucid % CPL_SOCKET_GROUPS].SetAt(ucid, pcli);
         }
 
         bool Del(unsigned int ucid)
         {
-            cSafeLock lck(_cs[ucid%_ngroup]);
-            return _map[ucid%_ngroup]->RemoveKey(ucid);
+            cSafeLock lck(&_css[ucid % CPL_SOCKET_GROUPS]);
+            return _maps[ucid % CPL_SOCKET_GROUPS].RemoveKey(ucid);
         }
 
         int DoReadData(unsigned int ucid, const unsigned char* pdata, unsigned int usize, tArray<unsigned char>* pout)
         {
-            cSafeLock lck(_cs[ucid%_ngroup]);
+            cSafeLock lck(&_css[ucid % CPL_SOCKET_GROUPS]);
             cRpcCon* pcli = NULL;
-            if (!_map[ucid%_ngroup]->Lookup(ucid, pcli) || !pcli)
+            if (!_maps[ucid % CPL_SOCKET_GROUPS].Lookup(ucid, pcli) || !pcli)
                 return -1;
             return pcli->DoReadData(pdata, usize, pout);
         }
         int DoLeftData(unsigned int ucid, tArray<unsigned char>* pout)
         {
-            cSafeLock lck(_cs[ucid%_ngroup]);
+            cSafeLock lck(&_css[ucid % CPL_SOCKET_GROUPS]);
             cRpcCon* pcli = NULL;
-            if (!_map[ucid%_ngroup]->Lookup(ucid, pcli) || !pcli)
+            if (!_maps[ucid % CPL_SOCKET_GROUPS].Lookup(ucid, pcli) || !pcli)
                 return -1;
             return pcli->DoLeftData(pout);
         }
 
         bool GetUserInfo(t_rpcuserinfo* puser)
         {
-            cSafeLock lck(_cs[puser->_ucid%_ngroup]);
+            cSafeLock lck(&_css[puser->_ucid % CPL_SOCKET_GROUPS]);
             cRpcCon* pcli = NULL;
-            if (!_map[puser->_ucid%_ngroup]->Lookup(puser->_ucid, pcli) || !pcli)
+            if (!_maps[puser->_ucid % CPL_SOCKET_GROUPS].Lookup(puser->_ucid, pcli) || !pcli)
                 return false;
             puser->_nstatus = pcli->_nstatus;
 
@@ -431,10 +413,10 @@ namespace ec
 
         bool SetUserPsw(const char* susr, unsigned int ucid, const char* spsw)
         {
-            cSafeLock lck(_cs[ucid%_ngroup]);
+            cSafeLock lck(&_css[ucid % CPL_SOCKET_GROUPS]);
 
             cRpcCon* pcli = NULL;
-            if (!_map[ucid%_ngroup]->Lookup(ucid, pcli) || !pcli)
+            if (!_maps[ucid % CPL_SOCKET_GROUPS].Lookup(ucid, pcli) || !pcli)
                 return false;
             if (!spsw || !(*spsw))
                 strcpy(pcli->_psw, "123456");//
@@ -449,10 +431,10 @@ namespace ec
 
         bool SetUserRandomInfo(unsigned int ucid, char* sout) //sout必须大于40字节
         {
-            cSafeLock lck(_cs[ucid%_ngroup]);
+            cSafeLock lck(&_css[ucid % CPL_SOCKET_GROUPS]);
 
             cRpcCon* pcli = NULL;
-            if (!_map[ucid%_ngroup]->Lookup(ucid, pcli) || !pcli)
+            if (!_maps[ucid % CPL_SOCKET_GROUPS].Lookup(ucid, pcli) || !pcli)
                 return false;
             _tks++;
             unsigned char usha1[20], uc;
@@ -473,11 +455,11 @@ namespace ec
 
         bool GetUsrInfoSha1(unsigned int ucid, char* pout, char* outusr) //取随机信息的计算摘要,pout >40字节,outusr>=32字节
         {
-            cSafeLock lck(_cs[ucid%_ngroup]);
+            cSafeLock lck(&_css[ucid % CPL_SOCKET_GROUPS]);
 
             char sbuf[80] = { 0 };
             cRpcCon* pcli = NULL;
-            if (!_map[ucid%_ngroup]->Lookup(ucid, pcli) || !pcli)
+            if (!_maps[ucid % CPL_SOCKET_GROUPS].Lookup(ucid, pcli) || !pcli)
                 return false;
 
             memcpy(sbuf, pcli->_srandominfo, 40);
@@ -501,10 +483,10 @@ namespace ec
 
         void SetUsrStatus(unsigned int ucid, RPCUSRST nst)
         {
-            cSafeLock lck(_cs[ucid%_ngroup]);
+            cSafeLock lck(&_css[ucid % CPL_SOCKET_GROUPS]);
 
             cRpcCon* pcli = NULL;
-            if (!_map[ucid%_ngroup]->Lookup(ucid, pcli) || !pcli)
+            if (!_maps[ucid % CPL_SOCKET_GROUPS].Lookup(ucid, pcli) || !pcli)
                 return;
             pcli->_nstatus = nst;
         }
@@ -515,11 +497,11 @@ namespace ec
             int npos, nlist;
             cRpcCon *p;
             pucids->ClearData();
-            for (i = 0; i < _ngroup; i++)
+            for (i = 0; i < CPL_SOCKET_GROUPS; i++)
             {
-                cSafeLock lck(_cs[i]);
+                cSafeLock lck(&_css[i]);
                 npos = 0, nlist = 0;                
-                while (_map[i]->GetNext(npos, nlist, p))
+                while (_maps[i].GetNext(npos, nlist, p))
                 {
                     if (p->_nstatus == 0 && ltime - p->_timeconnect > timeoutsec)
                         pucids->Add(p->_ucid);

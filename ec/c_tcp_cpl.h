@@ -26,487 +26,458 @@ ec library is free C++ library.
 #define CPL_SOCKETST_IDLE    0  // idle
 #define CPL_SOCKETST_SEND    1  // sending
 #define CPL_SOCKETST_DEL     2  // deleteing
-
+#define CPL_SOCKET_GROUPS    4  //
 namespace ec
 {
-    struct T_CONFLOW
-    {
-        unsigned int srvid;
-        unsigned int conid;
-        unsigned int flow_r;
-        unsigned int flow_s;
-    };//sizeof() = 16
+	struct T_CONFLOW
+	{
+		unsigned int srvid;
+		unsigned int conid;
+		unsigned int flow_r;
+		unsigned int flow_s;
+	};//sizeof() = 16
 
-      /*!
-      \brief connect client item
-      */
-    struct T_CONITEM
-    {
-        unsigned int	    uID;		 //connect ID,auto grown,not 0
-        int		            nSendNoDone; // only for windows IOCP
+	  /*!
+	  \brief connect client item
+	  */
+	struct T_CONITEM
+	{
+		unsigned int	    uID;		 //connect ID,auto grown,not 0
+		int		            nSendNoDone; // only for windows IOCP
 
-        unsigned long long 	u64Send;	 //
-        unsigned long long	u64Read;	 //
-        long long		    llLoginTime; //time_t
+		unsigned long long 	u64Send;	 //
+		unsigned long long	u64Read;	 //
+		long long		    llLoginTime; //time_t
 
-        SOCKET		        Socket;		 //
-        int                 sendst;      // only for linux,send status CPL_SOCKETST_IDLE:idle; CPL_SOCKETST_SEND:sending; CPL_SOCKETST_DEL:lock to delete;
-        unsigned int		ubytes_s[2]; //send
-        unsigned int		tick_s[2];   //
+		SOCKET		        Socket;		 //
+		int                 sendst;      // only for linux,send status CPL_SOCKETST_IDLE:idle; CPL_SOCKETST_SEND:sending; CPL_SOCKETST_DEL:lock to delete;
+		unsigned int		ubytes_s[2]; //send
+		unsigned int		tick_s[2];   //
 
-        unsigned int		ubytes_r[2]; //read
-        unsigned int		tick_r[2];   //
-    };
+		unsigned int		ubytes_r[2]; //read
+		unsigned int		tick_r[2];   //
+	};
 
-    template<>	inline bool	tMap< unsigned int, T_CONITEM>::ValueKey(unsigned int key, T_CONITEM* pcls)
-    {
-        return key == pcls->uID;
-    }
-    template<> inline void  tMap< unsigned int, T_CONITEM>::OnRemoveValue(T_CONITEM* pval) {};
+	template<>	inline bool	tMap< unsigned int, T_CONITEM>::ValueKey(unsigned int key, T_CONITEM* pcls)
+	{
+		return key == pcls->uID;
+	}
+	template<> inline void  tMap< unsigned int, T_CONITEM>::OnRemoveValue(T_CONITEM* pval) {};
 
-    template<>	inline bool	tMap< unsigned int, unsigned int>::ValueKey(unsigned int key, unsigned int* pcls)
-    {
-        return key == *pcls;
-    }
-    template<> inline void  tMap< unsigned int, unsigned int>::OnRemoveValue(unsigned int* pval) {};
-    
-    class cConnectPool //connect pool
-    {
-    public:
-        cConnectPool(unsigned int ngroup) : _csucid(4000), _mapucid(16384) {            
-            _ngroup = ngroup;
-            if (_ngroup < 2)
-                _ngroup = 2;
-            if (_ngroup > 16)
-                _ngroup = 16;
-            m_uNextID = 0;
-            m_uMaxConnect = 128;
-            m_Locks = (cCritical**)malloc(sizeof(void*) * _ngroup);
-            m_maps = (tMap <unsigned int, T_CONITEM>**)malloc(sizeof(void*) * _ngroup);
-            unsigned int i;
-            for (i = 0; i < _ngroup; i++)
-            {
-                m_Locks[i] = new cCritical;
-                m_maps[i] = new tMap <unsigned int, T_CONITEM>(4096);
-            }
-        };
-        virtual ~cConnectPool() {
-            unsigned int i;
-            for (i = 0; i < _ngroup; i++)
-            {
-                delete m_Locks[i];
-                delete m_maps[i];
-            }
-            free(m_Locks);
-            free(m_maps);
-        };
-    public:
-        static unsigned int GetTicks()
-        {
+	template<>	inline bool	tMap< unsigned int, unsigned int>::ValueKey(unsigned int key, unsigned int* pcls)
+	{
+		return key == *pcls;
+	}
+	template<> inline void  tMap< unsigned int, unsigned int>::OnRemoveValue(unsigned int* pval) {};
+
+	class cConnectPool //connect pool
+	{
+	public:
+		cConnectPool() : _csucid(4000), _mapucid(16384) {			
+			m_uNextID = 0;
+			m_uMaxConnect = 1024;			
+		};
+		virtual ~cConnectPool() {			
+		};
+	public:
+		static unsigned int GetTicks()
+		{
 #ifdef _WIN32
-            return ::GetTickCount();
+			return ::GetTickCount();
 #else
-            struct timespec ts;
-            clock_gettime(CLOCK_MONOTONIC, &ts);
-            return (unsigned int)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+			struct timespec ts;
+			clock_gettime(CLOCK_MONOTONIC, &ts);
+			return (unsigned int)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 #endif
-        }
-    protected:
-        unsigned int _ngroup;
-        unsigned int m_uNextID;
-        unsigned int m_uMaxConnect;					//Max connect num
+		}
+	protected:
+		unsigned int m_uNextID;
+		unsigned int m_uMaxConnect;					//Max connect num
 
-        cEvent       _evtwait;
+		cEvent       _evtwait;
 
-        cCritical    **m_Locks;
-        tMap <unsigned int, T_CONITEM> **m_maps;
+		cCritical    _Locks[CPL_SOCKET_GROUPS];
+		tMap <unsigned int, T_CONITEM> _maps[CPL_SOCKET_GROUPS];
 
-        cCritical  _csucid;
-        tMap <unsigned int, unsigned int> _mapucid;        
-    protected:
-        void SetBps(T_CONITEM* pi, unsigned int usize, bool bread)
-        {
-            unsigned int utk = GetTicks();
-            unsigned int *ptk = pi->tick_s;
-            unsigned int *pbps = pi->ubytes_s;
-            if (bread)
-            {
-                ptk = pi->tick_r;
-                pbps = pi->ubytes_r;
-            }
-            if (utk - ptk[1] > 1000)
-            {
-                ptk[0] = ptk[1];
-                pbps[0] = pbps[1];
-                ptk[1] = utk;
-                pbps[1] = usize;
-            }
-            else
-                pbps[1] += usize;
-        }
+		cCritical  _csucid;
+		tMap <unsigned int, unsigned int> _mapucid;
+	protected:
+		void SetBps(T_CONITEM* pi, unsigned int usize, bool bread)
+		{
+			unsigned int utk = GetTicks();
+			unsigned int *ptk = pi->tick_s;
+			unsigned int *pbps = pi->ubytes_s;
+			if (bread)
+			{
+				ptk = pi->tick_r;
+				pbps = pi->ubytes_r;
+			}
+			if (utk - ptk[1] > 1000)
+			{
+				ptk[0] = ptk[1];
+				pbps[0] = pbps[1];
+				ptk[1] = utk;
+				pbps[1] = usize;
+			}
+			else
+				pbps[1] += usize;
+		}
 
-        unsigned int GetCurBps(T_CONITEM* pi, bool bread)
-        {
-            unsigned int utk = GetTicks();
-            unsigned int *ptk = pi->tick_s;
-            unsigned int *pbps = pi->ubytes_s;
-            if (bread)
-            {
-                ptk = pi->tick_r;
-                pbps = pi->ubytes_r;
-            }
-            if ((utk - ptk[0]) < 2000)
-                return pbps[0];
-            return 0;
-        }
+		unsigned int GetCurBps(T_CONITEM* pi, bool bread)
+		{
+			unsigned int utk = GetTicks();
+			unsigned int *ptk = pi->tick_s;
+			unsigned int *pbps = pi->ubytes_s;
+			if (bread)
+			{
+				ptk = pi->tick_r;
+				pbps = pi->ubytes_r;
+			}
+			if ((utk - ptk[0]) < 2000)
+				return pbps[0];
+			return 0;
+		}
 
-        unsigned int AllocUcid()
-        {
-            cSafeLock	lock(&_csucid);
-            m_uNextID++;
-            while (m_uNextID < 100 || _mapucid.Lookup(m_uNextID)) {
-                m_uNextID++;
-            }
-            _mapucid.SetAt(m_uNextID, m_uNextID, false);
-            return m_uNextID;// not 0
-        }
+		unsigned int AllocUcid()
+		{
+			cSafeLock	lock(&_csucid);
+			m_uNextID++;
+			while (m_uNextID < 100 || _mapucid.Lookup(m_uNextID)) {
+				m_uNextID++;
+			}
+			_mapucid.SetAt(m_uNextID, m_uNextID, false);
+			return m_uNextID;// not 0
+		}
 
-        inline void FreeUcid(unsigned int ucid)
-        {            
-            _csucid.Lock();
-            _mapucid.RemoveKey(ucid);            
-            _csucid.Unlock();
-        }
+		inline void FreeUcid(unsigned int ucid)
+		{
+			_csucid.Lock();
+			_mapucid.RemoveKey(ucid);
+			_csucid.Unlock();
+		}
 
-    public:
-        void	Init(unsigned int uMaxConnect)
-        {
-            m_uMaxConnect = uMaxConnect;
-            if (m_uMaxConnect < 2)
-                m_uMaxConnect = 2;
-        }
+	public:
+		void	Init(unsigned int uMaxConnect)
+		{
+			m_uMaxConnect = uMaxConnect;
+			if (m_uMaxConnect < 2)
+				m_uMaxConnect = 2;
+		}
 
-        bool GetReadAndSendBytes(unsigned int ucid, unsigned long long &llread, unsigned long long& llwrite)
-        {
-            llread = 0;
-            llwrite = 0;
-            cSafeLock	lock(m_Locks[ucid%_ngroup]);
-            T_CONITEM* pi = m_maps[ucid%_ngroup]->Lookup(ucid);
-            if (pi) {
-                llread = pi->u64Read;
-                llwrite = pi->u64Send;
-                return true;
-            }
-            return false;
-        }
-        
-        int GetConFlow( tArray<T_CONFLOW>*po)
-        {
-            po->ClearData();
-            unsigned int i;
-            int npos, nlist;
-            T_CONITEM* pi;
-            T_CONFLOW it;
-            for (i = 0; i < _ngroup; i++)
-            {
-                cSafeLock	lock(m_Locks[i]);                
-                npos = 0;
-                nlist = 0;                                           
-                while (m_maps[i]->GetNext(npos, nlist, pi))
-                {
-                    if (pi)
-                    {
-                        it.srvid = 0;
-                        it.conid = pi->uID;
-                        it.flow_r = GetCurBps(pi, true);
-                        it.flow_s = GetCurBps(pi, false);
-                        po->Add(&it, 1);
-                    }
-                }
-            }
-            return po->GetNum();
-        }
-        
-        bool	IsFull()
-        {
-            cSafeLock	lock(&_csucid);
-            return (_mapucid.GetCount() >= (int)m_uMaxConnect);
-        }
+		bool GetReadAndSendBytes(unsigned int ucid, unsigned long long &llread, unsigned long long& llwrite)
+		{
+			llread = 0;
+			llwrite = 0;
+			cSafeLock	lck(&_Locks[ucid % CPL_SOCKET_GROUPS]);
+			T_CONITEM* pi = _maps[ucid % CPL_SOCKET_GROUPS].Lookup(ucid);
+			if (pi) {
+				llread = pi->u64Read;
+				llwrite = pi->u64Send;
+				return true;
+			}
+			return false;
+		}
 
-        unsigned int Count()
-        {
-            cSafeLock	lock(&_csucid);
-            return _mapucid.GetCount();
-        }
+		int GetConFlow(tArray<T_CONFLOW>*po)
+		{
+			po->ClearData();
+			unsigned int i;
+			int npos, nlist;
+			T_CONITEM* pi;
+			T_CONFLOW it;
+			for (i = 0; i < CPL_SOCKET_GROUPS; i++)
+			{
+				cSafeLock	lock(&_Locks[i]);
+				npos = 0;
+				nlist = 0;
+				while (_maps[i].GetNext(npos, nlist, pi))
+				{
+					if (pi)
+					{
+						it.srvid = 0;
+						it.conid = pi->uID;
+						it.flow_r = GetCurBps(pi, true);
+						it.flow_s = GetCurBps(pi, false);
+						po->Add(&it, 1);
+					}
+				}
+			}
+			return po->GetNum();
+		}
 
-        unsigned int AddItem(SOCKET s)
-        {
-            T_CONITEM it;
-            memset(&it, 0, sizeof(it));
-            it.uID = AllocUcid();
-            it.llLoginTime = ::time(NULL);
-            it.Socket = s;
-            m_Locks[it.uID%_ngroup]->Lock();
-            m_maps[it.uID%_ngroup]->SetAt(it.uID, it);            
-            m_Locks[it.uID%_ngroup]->Unlock();
-            return it.uID;
-        }
+		bool	IsFull()
+		{
+			cSafeLock	lock(&_csucid);
+			return (_mapucid.GetCount() >= (int)m_uMaxConnect);
+		}
 
-        bool	DelItem(unsigned int ucid, T_CONITEM* pitem = NULL)
-        {
-            cSafeLock	lock(m_Locks[ucid%_ngroup]);
-            bool bDel = false;
-            T_CONITEM* pi = m_maps[ucid%_ngroup]->Lookup(ucid);
-            if (pi)
-            {
-                if (pitem)
-                    memcpy(pitem, pi, sizeof(T_CONITEM));
-                bDel = true;
-            }
-            m_maps[ucid%_ngroup]->RemoveKey(ucid);
-            FreeUcid(ucid);
-            return  bDel;
-        }
+		unsigned int Count()
+		{
+			cSafeLock	lock(&_csucid);
+			return _mapucid.GetCount();
+		}
 
-        bool DelAndCloseSocket(unsigned int uID)
-        {
-            cSafeLock	lock(m_Locks[uID%_ngroup]);
-
-            bool bDel = false;
-            T_CONITEM* pi = m_maps[uID%_ngroup]->Lookup(uID);
-            if (pi)
-            {
+		unsigned int AddItem(SOCKET s)
+		{
+			T_CONITEM it;
+			memset(&it, 0, sizeof(it));
+			it.uID = AllocUcid();
+			it.llLoginTime = ::time(NULL);
+			it.Socket = s;
+			_Locks[it.uID % CPL_SOCKET_GROUPS].Lock();
+			_maps[it.uID % CPL_SOCKET_GROUPS].SetAt(it.uID, it);
+			_Locks[it.uID % CPL_SOCKET_GROUPS].Unlock();
+			return it.uID;
+		}
+		
+		bool DelAndCloseSocket(unsigned int uID)
+		{
+			bool bDel = false;
+			T_CONITEM* pi = 0;
+			_Locks[uID % CPL_SOCKET_GROUPS].Lock();
+			pi = _maps[uID % CPL_SOCKET_GROUPS].Lookup(uID);
+			if (pi)
+			{
 #ifdef _WIN32
-                shutdown(pi->Socket, SD_BOTH);
+				shutdown(pi->Socket, SD_BOTH);
 #else
-                shutdown(pi->Socket, SHUT_WR);
+				shutdown(pi->Socket, SHUT_WR);
 #endif
-                closesocket(pi->Socket); // man 7 epoll ,closing a file descriptor cause it to be removed from all epoll sets automatically
-                bDel = true;
-            }
-            m_maps[uID%_ngroup]->RemoveKey(uID);
-            FreeUcid(uID);
-            return  bDel;
-        }
+				closesocket(pi->Socket); // man 7 epoll ,closing a file descriptor cause it to be removed from all epoll sets automatically
+				bDel = true;
+			}
+			_maps[uID % CPL_SOCKET_GROUPS].RemoveKey(uID);
+			_Locks[uID % CPL_SOCKET_GROUPS].Unlock();
 
-        bool OnRead(unsigned int uID, unsigned int usize)
-        {
-            cSafeLock	lock(m_Locks[uID%_ngroup]);
-            T_CONITEM* pi = m_maps[uID%_ngroup]->Lookup(uID);
-            if (pi) {
-                pi->u64Read += usize;
-                SetBps(pi, usize, true);
-                return true;
-            }
-            return false;
-        }
+			FreeUcid(uID);
+			return  bDel;
+		}
 
-        bool OnSend(unsigned int uID, unsigned int usize, bool bDecCount = false)
-        {
-            cSafeLock	lock(m_Locks[uID%_ngroup]);
-            T_CONITEM* pi = m_maps[uID%_ngroup]->Lookup(uID);
-            if (pi) {
-                pi->u64Send += usize;
-                if (bDecCount)
-                    pi->nSendNoDone--;
-                SetBps(pi, usize, false);
-                return true;
-            }
-            return false;
-        }
+		bool OnRead(unsigned int uID, unsigned int usize)
+		{
+			cSafeLock	lock(&_Locks[uID % CPL_SOCKET_GROUPS]);
+			T_CONITEM* pi = _maps[uID % CPL_SOCKET_GROUPS].Lookup(uID);
+			if (pi) {
+				pi->u64Read += usize;
+				SetBps(pi, usize, true);
+				return true;
+			}
+			return false;
+		}
 
-        int	CloseAllSocket(tArray<unsigned int>* pa)
-        {
-            unsigned int i;
-            for (i = 0; i < _ngroup; i++)
-            {
-                cSafeLock	lock(m_Locks[i]);
-                int npos = 0, nlist = 0;
-                T_CONITEM* pi;
-                while (m_maps[i]->GetNext(npos, nlist, pi)) {
-                    if (pa)
-                        pa->Add(pi->uID);
+		bool OnSend(unsigned int uID, unsigned int usize, bool bDecCount = false)
+		{
+			cSafeLock	lock(&_Locks[uID % CPL_SOCKET_GROUPS]);
+			T_CONITEM* pi = _maps[uID % CPL_SOCKET_GROUPS].Lookup(uID);
+			if (pi) {
+				pi->u64Send += usize;
+				if (bDecCount)
+					pi->nSendNoDone--;
+				SetBps(pi, usize, false);
+				return true;
+			}
+			return false;
+		}
+
+		int	CloseAllSocket(tArray<unsigned int>* pa)
+		{
+			unsigned int i;
+			int npos = 0, nlist = 0;
+			T_CONITEM* pi;
+			for (i = 0; i < CPL_SOCKET_GROUPS; i++)
+			{
+				_Locks[i].Lock();
+				npos = 0;
+				nlist = 0;				
+				while (_maps[i].GetNext(npos, nlist, pi)) {
+					if (pa)
+						pa->Add(pi->uID);
 #ifdef _WIN32
-                    shutdown(pi->Socket, SD_BOTH);
+					shutdown(pi->Socket, SD_BOTH);
 #else
-                    shutdown(pi->Socket, SHUT_WR);
+					shutdown(pi->Socket, SHUT_WR);
 #endif
-                    closesocket(pi->Socket);
-                }
-                m_maps[i]->RemoveAll();
-            }
-            _csucid.Lock();
-            _mapucid.RemoveAll();
-            _csucid.Unlock();
-            if (pa)
-                return pa->GetNum();
-            return 0;
-        }
+					closesocket(pi->Socket);
+				}
+				_maps[i].RemoveAll();
+				_Locks[i].Unlock();
+			}
+			_csucid.Lock();
+			_mapucid.RemoveAll();
+			_csucid.Unlock();
+			if (pa)
+				return pa->GetNum();
+			return 0;
+		}
 
-        int  GetSendNoDone(unsigned int uID)
-        {
-            cSafeLock	lock(m_Locks[uID%_ngroup]);
-            T_CONITEM* pi = m_maps[uID%_ngroup]->Lookup(uID);
-            if (pi)
-                return pi->nSendNoDone;
-            return 0;
-        };
+		int  GetSendNoDone(unsigned int uID)
+		{
+			cSafeLock	lock(&_Locks[uID % CPL_SOCKET_GROUPS]);
+			T_CONITEM* pi = _maps[uID % CPL_SOCKET_GROUPS].Lookup(uID);
+			if (pi)
+				return pi->nSendNoDone;
+			return 0;
+		};
 
-        bool SetSendNoDone(unsigned int uID, int n)
-        {
-            cSafeLock	lock(m_Locks[uID%_ngroup]);
-            T_CONITEM* pi = m_maps[uID%_ngroup]->Lookup(uID);
-            if (pi) {
-                pi->nSendNoDone = n;
-                return true;
-            }
-            return false;
-        }
+		bool SetSendNoDone(unsigned int uID, int n)
+		{
+			cSafeLock	lock(&_Locks[uID % CPL_SOCKET_GROUPS]);
+			T_CONITEM* pi = _maps[uID % CPL_SOCKET_GROUPS].Lookup(uID);
+			if (pi) {
+				pi->nSendNoDone = n;
+				return true;
+			}
+			return false;
+		}
 
-        bool	GetVal(unsigned int uID, T_CONITEM* pval)
-        {
-            cSafeLock	lock(m_Locks[uID%_ngroup]);
-            T_CONITEM* pi = m_maps[uID%_ngroup]->Lookup(uID);
-            if (pi) {
-                *pval = *pi;
-                return true;
-            }
-            return false;
-        };
+		bool	GetVal(unsigned int uID, T_CONITEM* pval)
+		{
+			cSafeLock	lock(&_Locks[uID % CPL_SOCKET_GROUPS]);
+			T_CONITEM* pi = _maps[uID % CPL_SOCKET_GROUPS].Lookup(uID);
+			if (pi) {
+				*pval = *pi;
+				return true;
+			}
+			return false;
+		};
 
-        unsigned int GetAll(tArray<T_CONITEM> *pa) // return records
-        {
-            unsigned int i;
-            int npos, nlist;
-            T_CONITEM* pi, t;
-            pa->ClearData();
-            for (i = 0; i < _ngroup; i++)
-            {
-                cSafeLock	lock(m_Locks[i]);                
-                npos = 0;
-                nlist = 0;
-                while (m_maps[i]->GetNext(npos, nlist, pi)) {
-                    t = *pi;
-                    pa->Add(&t, 1);
-                }
-            }
-            return pa->GetSize();
-        }
-    };
+		unsigned int GetAll(tArray<T_CONITEM> *pa) // return records
+		{
+			unsigned int i;
+			int npos, nlist;
+			T_CONITEM* pi, t;
+			pa->ClearData();
+			for (i = 0; i < CPL_SOCKET_GROUPS; i++)
+			{
+				_Locks[i].Lock();
+				npos = 0;
+				nlist = 0;
+				while (_maps[i].GetNext(npos, nlist, pi)) {
+					t = *pi;
+					pa->Add(&t, 1);
+				}
+				_Locks[i].Unlock();
+			}
+			return pa->GetSize();
+		}
+	};
 
-    /*!
-    \brief connect poll for windows CPIO
-    */
-    class cTcpConnectPoll : public cConnectPool
-    {
-    public:
-        cTcpConnectPoll(unsigned int ngroup):cConnectPool(ngroup){};
-        virtual ~cTcpConnectPoll() {};
+	/*!
+	\brief connect poll for windows CPIO
+	*/
+	class cTcpConnectPoll : public cConnectPool
+	{
+	public:
+		cTcpConnectPoll(){
+			int i;
+			for (i = 0; i < CPL_SOCKET_GROUPS; i++)
+				_maps[i].InitHashSize(4096);
+		};
+		virtual ~cTcpConnectPoll() {};
 #ifdef _WIN32
-        HANDLE  ucid_CreateIoCompletionPort(
-            unsigned int uID,
-            HANDLE ExistingCompletionPort,
-            ULONG_PTR CompletionKey,
-            DWORD NumberOfConcurrentThreads
-        )
-        {
-            cSafeLock	lock(m_Locks[uID%_ngroup]);
-            T_CONITEM* pi = m_maps[uID%_ngroup]->Lookup(uID);
-            if (!pi)
-                return NULL;
-            return CreateIoCompletionPort((HANDLE)pi->Socket, ExistingCompletionPort, CompletionKey, NumberOfConcurrentThreads);
-        }
+		HANDLE  ucid_CreateIoCompletionPort(
+			unsigned int uID,
+			HANDLE ExistingCompletionPort,
+			ULONG_PTR CompletionKey,
+			DWORD NumberOfConcurrentThreads
+		)
+		{
+			cSafeLock	lock(&_Locks[uID % CPL_SOCKET_GROUPS]);
+			T_CONITEM* pi = _maps[uID % CPL_SOCKET_GROUPS].Lookup(uID);
+			if (!pi)
+				return NULL;
+			return CreateIoCompletionPort((HANDLE)pi->Socket, ExistingCompletionPort, CompletionKey, NumberOfConcurrentThreads);
+		}
 
-        int	ucid_WSARecv(
-            unsigned int uID,
-            LPWSABUF lpBuffers,
-            DWORD dwBufferCount,
-            LPDWORD lpNumberOfBytesRecvd,
-            LPDWORD lpFlags,
-            LPWSAOVERLAPPED lpOverlapped,
-            LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine
-        )// return 0 ok,-1error
-        {
-            cSafeLock	lock(m_Locks[uID%_ngroup]);
+		int	ucid_WSARecv(
+			unsigned int uID,
+			LPWSABUF lpBuffers,
+			DWORD dwBufferCount,
+			LPDWORD lpNumberOfBytesRecvd,
+			LPDWORD lpFlags,
+			LPWSAOVERLAPPED lpOverlapped,
+			LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine
+		)// return 0 ok,-1error
+		{
+			cSafeLock	lock( &_Locks[uID % CPL_SOCKET_GROUPS]);
+			T_CONITEM* pi = _maps[uID % CPL_SOCKET_GROUPS].Lookup(uID);
+			if (!pi)
+				return SOCKET_ERROR;
+			int nret = WSARecv(pi->Socket, lpBuffers, dwBufferCount, lpNumberOfBytesRecvd, lpFlags, lpOverlapped, lpCompletionRoutine);
+			if (SOCKET_ERROR == nret && ERROR_IO_PENDING == WSAGetLastError())
+				return 0;
+			return nret;
+		}
 
-            T_CONITEM* pi = m_maps[uID%_ngroup]->Lookup(uID);
-            if (!pi)
-                return SOCKET_ERROR;
-            int nret = WSARecv(pi->Socket, lpBuffers, dwBufferCount, lpNumberOfBytesRecvd, lpFlags, lpOverlapped, lpCompletionRoutine);
-            if (SOCKET_ERROR == nret && ERROR_IO_PENDING == WSAGetLastError())
-                return 0;
-            return nret;
-        }
-
-        int ucid_WSASend(
-            unsigned int uID,
-            LPWSABUF lpBuffers,
-            DWORD dwBufferCount,
-            LPDWORD lpNumberOfBytesSent,
-            DWORD dwFlags,
-            LPWSAOVERLAPPED lpOverlapped,
-            LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine,
-            bool bSendCount = false
-        )// return WSASend returns
-        {
-            cSafeLock	lock(m_Locks[uID%_ngroup]);
-            T_CONITEM* pi = m_maps[uID%_ngroup]->Lookup(uID);
-            if (!pi)
-                return SOCKET_ERROR;
-            if (bSendCount)
-                pi->nSendNoDone++;
-            int nret = WSASend(pi->Socket, lpBuffers, dwBufferCount, lpNumberOfBytesSent, dwFlags, lpOverlapped, lpCompletionRoutine);
-            if (SOCKET_ERROR == nret && ERROR_IO_PENDING == WSAGetLastError())
-                return 0;
-            return nret;
-        }
+		int ucid_WSASend(
+			unsigned int uID,
+			LPWSABUF lpBuffers,
+			DWORD dwBufferCount,
+			LPDWORD lpNumberOfBytesSent,
+			DWORD dwFlags,
+			LPWSAOVERLAPPED lpOverlapped,
+			LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine,
+			bool bSendCount = false
+		)// return WSASend returns
+		{
+			cSafeLock	lock(&_Locks[uID % CPL_SOCKET_GROUPS]);
+			T_CONITEM* pi = _maps[uID % CPL_SOCKET_GROUPS].Lookup(uID);
+			if (!pi)
+				return SOCKET_ERROR;
+			if (bSendCount)
+				pi->nSendNoDone++;
+			int nret = WSASend(pi->Socket, lpBuffers, dwBufferCount, lpNumberOfBytesSent, dwFlags, lpOverlapped, lpCompletionRoutine);
+			if (SOCKET_ERROR == nret && ERROR_IO_PENDING == WSAGetLastError())
+				return 0;
+			return nret;
+		}
 #else
 
-        //return send bytes size or -1 for error
-        int Socket_Send(SOCKET s, const void* pbuf, unsigned int nsize)
-        {
-            const char *ps = (const char*)pbuf;
-            unsigned int  nsend = 0;
-            int nret;
-            while (nsend < nsize)
-            {
-                nret = (int)send(s, ps + nsend, nsize - nsend, MSG_DONTWAIT | MSG_NOSIGNAL);
-                if (SOCKET_ERROR == nret)
-                {
-                    if (errno == EAGAIN || errno == EWOULDBLOCK)
-                    {
-                        TIMEVAL tv01 = { 0,1000 * 100 };
-                        fd_set fdw;
-                        FD_ZERO(&fdw);
-                        FD_SET(s, &fdw);
-                        if (-1 == ::select(s + 1, NULL, &fdw, NULL, &tv01))
-                            return SOCKET_ERROR;
-                        continue;
-                    }
-                    else
-                        return SOCKET_ERROR;
-                }
-                else
-                    nsend += nret;
-            }
-            return nsend;
-        };
+		//return send bytes size or -1 for error
+		int Socket_Send(SOCKET s, const void* pbuf, unsigned int nsize)
+		{
+			const char *ps = (const char*)pbuf;
+			unsigned int  nsend = 0;
+			int nret;
+			while (nsend < nsize)
+			{
+				nret = (int)send(s, ps + nsend, nsize - nsend, MSG_DONTWAIT | MSG_NOSIGNAL);
+				if (SOCKET_ERROR == nret)
+				{
+					if (errno == EAGAIN || errno == EWOULDBLOCK)
+					{
+						TIMEVAL tv01 = { 0,1000 * 100 };
+						fd_set fdw;
+						FD_ZERO(&fdw);
+						FD_SET(s, &fdw);
+						if (-1 == ::select(s + 1, NULL, &fdw, NULL, &tv01))
+							return SOCKET_ERROR;
+						continue;
+					}
+					else
+						return SOCKET_ERROR;
+				}
+				else
+					nsend += nret;
+			}
+			return nsend;
+		};
 
-        //send as block ,return send bytes size or -1 for error
-        int ucid_Send(unsigned int uID, const void* pbuf, unsigned int nsize)
-        {            
-            cSafeLock	lock(m_Locks[uID%_ngroup]);
-            T_CONITEM* pi = m_maps[uID%_ngroup]->Lookup(uID);
-            if (!pi)
-                return SOCKET_ERROR;
-            int nsend = Socket_Send(pi->Socket, pbuf, nsize);
-            if (SOCKET_ERROR == nsend)
-                return SOCKET_ERROR;
-            pi->u64Send += nsend;
-            SetBps(pi, nsend, false);
-            return nsend;
-        };
+		//send as block ,return send bytes size or -1 for error
+		int ucid_Send(unsigned int uID, const void* pbuf, unsigned int nsize)
+		{
+			cSafeLock	lock(&_Locks[uID % CPL_SOCKET_GROUPS]);
+			T_CONITEM* pi = _maps[uID % CPL_SOCKET_GROUPS].Lookup(uID);
+			if (!pi)
+				return SOCKET_ERROR;
+			int nsend = Socket_Send(pi->Socket, pbuf, nsize);
+			if (SOCKET_ERROR == nsend)
+				return SOCKET_ERROR;
+			pi->u64Send += nsend;
+			SetBps(pi, nsend, false);
+			return nsend;
+		};
 #endif
-    };
+	};
 } // ec
 #endif // C_TCP_CPL_H

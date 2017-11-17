@@ -573,7 +573,7 @@ namespace ec
     class cTcpServer : public cThread
     {
     public:
-        cTcpServer() : m_ConPool(MAX_TCPWORK_THREAD){
+        cTcpServer(){
             unsigned int i;
             _bkeepalivefast = false;
             _busebnagle = true;
