@@ -47,7 +47,7 @@ namespace ec
             _answer.ClearData();
             MakeWsSend(pdata, size, (unsigned char)wsopcode, &_answer);
             SendAppData(ucid, _answer.GetBuf(), _answer.GetSize(), true);
-            if (_pcfg->_blogdetail && _plog)
+            if (_pcfg->_blogdetail_wss && _plog)
                 _plog->AddLog("MSG:ws read:ucid=%d,Final=%d,opcode=%d,size=%d ", ucid, bFinal, wsopcode, size);
             return true;
         }
@@ -64,7 +64,7 @@ namespace ec
 
             if (atoi(sVersion) < 13) //版本不支持小于13
             {
-                if (_pcfg->_blogdetail && _plog)
+                if (_pcfg->_blogdetail_wss && _plog)
                     _plog->AddLog("MSG:ws sVersion(%s) error :ucid=%d, ", sVersion, ucid);
                 DoBadRequest(ucid);
                 return _httppkg.HasKeepAlive();
@@ -106,7 +106,7 @@ namespace ec
 
             if (atoi(sVersion) != 13)
             {
-                if (_pcfg->_blogdetail && _plog)
+                if (_pcfg->_blogdetail_wss && _plog)
                     _plog->AddLog("MSG:ws sVersion(%s) error :ucid=%d, ", sVersion, ucid);
                 DoBadRequest(ucid);
                 return _httppkg.HasKeepAlive();
@@ -150,7 +150,7 @@ namespace ec
             _pclis->UpgradeWebSocket(ucid);//升级协议为websocket
             SendAppData(ucid, _answer.GetBuf(), _answer.GetSize(), true);//发送
 
-            if (_pcfg->_blogdetail && _plog) {
+            if (_pcfg->_blogdetail_wss && _plog) {
                 _answer.Add((char)0);
                 _plog->AddLog("MSG:Write ucid %d\r\n%s", ucid, _answer.GetBuf());
             }
@@ -209,7 +209,7 @@ namespace ec
         */
         bool DoHttpRequest(unsigned int ucid)
         {
-            if (_pcfg->_blogdetail && _plog)
+            if (_pcfg->_blogdetail_wss && _plog)
             {
                 _plog->AddLog("MSG:read from ucid %u:", ucid);
                 _plog->AddLog2("   %s %s %s\r\n", _httppkg._method, _httppkg._request, _httppkg._version);
@@ -288,7 +288,7 @@ namespace ec
             sfile[0] = '\0';
             tmp[0] = '\0';
 
-            strcpy(sfile, _pcfg->_sroot);
+            strcpy(sfile, _pcfg->_sroot_wss);
 
             url2utf8(_httppkg._request, tmp, (int)sizeof(tmp));
 
@@ -337,7 +337,7 @@ namespace ec
             sprintf(tmp, "Content-Length: %d\r\n\r\n", _filetmp.GetNum());
             _answer.Add(tmp, strlen(tmp));
 
-            if (_pcfg->_blogdetail && _plog)
+            if (_pcfg->_blogdetail_wss && _plog)
             {
                 tArray<char> atmp(4096);
                 atmp.Add(_answer.GetBuf(), _answer.GetSize());
@@ -362,7 +362,7 @@ namespace ec
         {
             const char* sret = "http/1.1 404  not found!\r\nServer:rdb5 websocket server\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:9\r\n\r\nnot found";
             SendAppData(ucid, (void*)sret, (unsigned int)strlen(sret), true);
-            if (_pcfg->_blogdetail && _plog)
+            if (_pcfg->_blogdetail_wss && _plog)
                 _plog->AddLog("MSG:write ucid %u:\r\n%s", ucid, sret);
         }
 
@@ -373,7 +373,7 @@ namespace ec
         {
             const char* sret = "http/1.1 400  Bad Request!\r\nServer:rdb5 websocket server\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:11\r\n\r\nBad Request";
             SendAppData(ucid, (void*)sret, (unsigned int)strlen(sret), true);
-            if (_pcfg->_blogdetail && _plog)
+            if (_pcfg->_blogdetail_wss && _plog)
                 _plog->AddLog("MSG:write ucid %u:\r\n%s", ucid, sret);
         }
 
@@ -393,7 +393,7 @@ namespace ec
         virtual bool    OnAppData(unsigned int ucid, const void* pdata, unsigned int usize)//返回false表示要服务端要断开连接
         {
             bool bret = true;
-            if (_pcfg->_blogdetail && _plog)
+            if (_pcfg->_blogdetail_wss && _plog)
                 _plog->AddLog("MSG:ucid %d read %d bytes!", ucid, usize);
             int nr = _pclis->OnReadData(ucid, (const char*)pdata, usize, &_httppkg);//解析数据，结构存放在_httppkg中
             while (nr == he_ok)
@@ -415,7 +415,7 @@ namespace ec
                     else if (_httppkg._opcode == WS_OP_PING)
                     {
                         OnWsPing(ucid, _httppkg._body.GetBuf(), _httppkg._body.GetSize());
-                        if (_pcfg->_blogdetail && _plog)
+                        if (_pcfg->_blogdetail_wss && _plog)
                             _plog->AddLog("MSG:ucid %d WS_OP_PING!", ucid);
                         bret = true;
                     }
