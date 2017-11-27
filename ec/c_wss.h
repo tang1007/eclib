@@ -56,49 +56,7 @@ namespace ec
         \brief websocket升级处理
         */
         bool DoUpgradeWebSocket(int ucid, const char *skey)
-        {
-            /*
-            char sProtocol[128] = { 0 }, sVersion[128] = { 0 }, tmp[256] = { 0 };
-            _httppkg.GetHeadFiled("Sec-WebSocket-Protocol", sProtocol, sizeof(sProtocol));
-            _httppkg.GetHeadFiled("Sec-WebSocket-Version", sVersion, sizeof(sVersion));
-
-            if (atoi(sVersion) < 13) //版本不支持小于13
-            {
-                if (_pcfg->_blogdetail_wss && _plog)
-                    _plog->AddLog("MSG:ws sVersion(%s) error :ucid=%d, ", sVersion, ucid);
-                DoBadRequest(ucid);
-                return _httppkg.HasKeepAlive();
-            }
-            _answer.ClearData();
-            strcpy(tmp, "http/1.1 101 Switching Protocols\r\n");
-            _answer.Add(tmp, strlen(tmp));
-
-            strcpy(tmp, "Upgrade:websocket\r\nConnection:Upgrade\r\n");
-            _answer.Add(tmp, strlen(tmp));
-
-            if (sProtocol[0])
-            {
-                strcpy(tmp, "Sec-WebSocket-Protocol:");
-                strcat(tmp, sProtocol);
-                strcat(tmp, "\r\n");
-                _answer.Add(tmp, strlen(tmp));
-            }
-
-            char ss[256];
-            strcpy(ss, skey);
-            strcat(ss, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
-
-            char sha1out[20] = { 0 }, base64out[32] = { 0 };
-            encode_sha1(ss, (unsigned int)strlen(ss), sha1out); //SHA1
-            encode_base64(base64out, sha1out, 20);    //BASE64
-
-            strcpy(tmp, "Sec-WebSocket-Accept:");
-            strcat(tmp, base64out);
-            strcat(tmp, "\r\n\r\n");
-            _answer.Add(tmp, strlen(tmp));
-
-            _pclis->UpgradeWebSocket(ucid);//升级协议为websocket
-            */
+        {            
             const char* sc;
             char sProtocol[128] = { 0 }, sVersion[128] = { 0 }, tmp[256] = { 0 };
             _httppkg.GetHeadFiled("Sec-WebSocket-Protocol", sProtocol, sizeof(sProtocol));

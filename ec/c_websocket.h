@@ -1065,7 +1065,7 @@ namespace ec
 
             else if (IsDir(sfile))
             {
-                DoNotFount(ucid);
+                DoNotFount(ucid);				
                 return _httppkg.HasKeepAlive();
             }
             if (!IO::LckRead(sfile, &_filetmp))
