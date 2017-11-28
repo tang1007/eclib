@@ -263,6 +263,9 @@ namespace ec
 			_utimeinit = secs;
 			CalNextDay();
 		}
+		inline int Getjobtime() {
+			return (int)_utimeinit;
+		}
 	protected:
 		unsigned int _utimeinit;
 		time_t		_ti_o;
