@@ -429,7 +429,7 @@ namespace ec
     public:        
         bool StartServer(const char* scfgfile,unsigned int uThreads, unsigned int  uMaxConnect)
         {
-            if (!_cfg.ReadIniFile(scfgfile) || !InitCert(_cfg._ca_server, _cfg._ca_root, _cfg._private_ket))
+            if (!_cfg.ReadIniFile(scfgfile) || !InitCert(_cfg._ca_server, _cfg._ca_root, _cfg._private_key))
                 return false;
             if (!_log.Start(_cfg._slogpath_wss))
                 return false;

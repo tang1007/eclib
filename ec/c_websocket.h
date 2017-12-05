@@ -93,7 +93,7 @@ namespace ec
 
             memset(_ca_server, 0, sizeof(_ca_server));
             memset(_ca_root, 0, sizeof(_ca_root));
-            memset(_private_ket, 0, sizeof(_private_ket));
+            memset(_private_key, 0, sizeof(_private_key));
 
 
         };
@@ -113,7 +113,7 @@ namespace ec
 
         char _ca_server[512];
         char _ca_root[512];
-        char _private_ket[512];
+        char _private_key[512];
 
         tMap<const char*, t_mime> _mime;
     public:
@@ -184,10 +184,10 @@ namespace ec
                     if (lpszKeyVal && *lpszKeyVal)
                         ec::str_ncpy(_ca_server, lpszKeyVal, sizeof(_ca_server));
                 }
-                else if (!stricmp("private_ket", lpszKeyName))
+                else if (!stricmp("private_key", lpszKeyName))
                 {
                     if (lpszKeyVal && *lpszKeyVal)
-                        ec::str_ncpy(_private_ket, lpszKeyVal, sizeof(_private_ket));
+                        ec::str_ncpy(_private_key, lpszKeyVal, sizeof(_private_key));
                 }
             }
             else  if (!stricmp("mime", lpszBlkName))
