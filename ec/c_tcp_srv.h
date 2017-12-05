@@ -954,6 +954,50 @@ namespace ec
                 OnRemovedUCID(pids[i]);
 #endif
         }
+		/*!
+		\return return send bytes,
+		0:memery error;
+		-1: no ucid or IO error ,call OnRemovedUCID
+		*/
+		int	SendToUcid(unsigned int ucid, const void* pbuf, unsigned int usize, bool bAddCount = false, unsigned int uSendOpt = TCPIO_OPT_PUT)
+		{
+			if (!pbuf || !usize)
+				return 0;
+
+#ifdef _WIN32
+			DWORD	dwSend = 0;
+
+			t_cpioblk* pol;
+			pol = m_Mem.Pop(usize);
+
+			if (!pol)
+				return 0;
+
+			memset(&pol->Overlapped, 0, sizeof(OVERLAPPED));
+			pol->WSABuf.len = usize;
+			memcpy(pol->WSABuf.buf, pbuf, usize);
+			pol->uOperate = uSendOpt;
+
+			if (SOCKET_ERROR == m_ConPool.ucid_WSASend(ucid, &(pol->WSABuf), 1, &dwSend, 0, &(pol->Overlapped), NULL, bAddCount))
+			{
+				OnRemovedUCID(ucid);
+				m_ConPool.DelAndCloseSocket(ucid);			
+				m_Mem.Push(pol);
+				return -1;
+			}
+			return (int)usize;
+#else
+			int nret = m_ConPool.ucid_Send(ucid, pbuf, usize);
+			if (SOCKET_ERROR == nret)
+			{
+				OnRemovedUCID(ucid);
+				m_ConPool.DelAndCloseSocket(ucid);				
+				return -1;
+			}
+			m_ConPool.OnSend(ucid, usize, bAddCount);			
+			return nret;
+#endif
+		};
     };
 }// namespace ec
 

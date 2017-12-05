@@ -1028,6 +1028,92 @@ namespace ec
         ec::cLog* _plog;
         ec::tArray<unsigned int> _aucid;
     public:
+		static bool gMakePkg(const void* pd, size_t size, RPCMSGTYPE msgtype, RPCCOMPRESS compress, unsigned int seqno, const unsigned char* pmask, tArray<unsigned char>* pPkg,bool bEncryptData)
+		{			
+			unsigned char shead[sizeof(t_rpcpkg)] = { 0 };
+			pPkg->ClearData();
+			pPkg->Add(shead, sizeof(t_rpcpkg));
+			t_rpcpkg* ph = (t_rpcpkg*)pPkg->GetBuf();
+
+			ph->sync = 0xA9;
+			ph->type = (char)msgtype;
+
+			void* pdata;
+			size_t ulen = size;
+			cReUseMem cpbufc; //压缩内存
+			if (compress == rpccomp_lz4)
+			{
+				ulen = size + (size / 1024) * 32 + 1024;
+				pdata = cpbufc.Alloc(ulen);
+				if (pdata && encode_lz4(pd, size, pdata, &ulen))
+					ph->comp = rpccomp_lz4; //lz4压缩
+				else //压缩失败
+				{
+					pdata = (void*)pd;
+					ph->comp = rpccomp_none; //不压缩
+					ulen = size;
+				}
+			}
+#ifdef RPC_USE_ZLIB
+			else if (compress == rpccomp_zlib)
+			{
+				ulen = size + (size / 1024) * 32 + 1024;
+				pdata = cpbufc.Alloc(ulen);
+				if (pdata && encode_zlib(pd, size, pdata, &ulen))
+					ph->comp = rpccomp_zlib; //zlib压缩
+				else //压缩失败
+				{
+					pdata = (void*)pd;
+					ph->comp = rpccomp_none; //不压缩
+					ulen = size;
+				}
+			}
+#endif
+			else
+			{
+				pdata = (void*)pd;
+				ph->comp = rpccomp_none; //不压缩
+				ulen = size;
+			}
+			if (bEncryptData)
+				ph->cflag = 0;
+			else
+				ph->cflag = 1;
+
+			ph->seqno = CNetInt::NetUInt(seqno);
+			ph->size_en = CNetInt::NetUInt((unsigned int)ulen);
+			ph->size_dn = CNetInt::NetUInt((unsigned int)size);
+
+			if (!pPkg->Add((const unsigned char*)pdata, ulen))
+				return false;
+
+			ph = (t_rpcpkg*)pPkg->GetBuf();//重新读取头部
+
+			unsigned char* puc = pPkg->GetBuf() + sizeof(t_rpcpkg);
+			if (pmask && msgtype >= rpcmsg_request)//应用层消息需要加密
+			{
+				unsigned int ul = (unsigned int)ulen;
+				register unsigned int	crc = 0xffffffff;
+				register unsigned int i;
+
+				for (i = 0; i < ul; i++) //加密同时计算CRC32
+					crc = (crc >> 8) ^ crc32_table[(crc & 0xFF) ^ puc[i]];//加密前验证数据
+				ph->crc32msg = CNetInt::NetUInt(crc ^ 0xffffffff);
+				if (bEncryptData)
+				{
+					unsigned int *pu4 = (unsigned int *)puc, ul4 = ul / 4; //加密
+					unsigned int *pmk4 = (unsigned int*)pmask;
+					for (i = 0; i < ul4; i++)
+						pu4[i] ^= pmk4[i % 5];
+					for (i = ul4 * 4; i < ul; i++)
+						puc[i] ^= pmask[i % 20];
+				}
+			}
+			else
+				ph->crc32msg = CNetInt::NetUInt(crc32(puc, (unsigned int)ulen));
+			ph->crc32head = CNetInt::NetUInt(crc32(ph, 20));
+			return true;
+		}
         inline void SetLogSrv(ec::cLog* plog)
         {
             _plog = plog;
@@ -1047,6 +1133,26 @@ namespace ec
         {
             return _clients.IsEncryptData();
         }
+		/*!
+		\brief 主动推送消息
+		\return -1表示有错,>=0为发送的字节数
+		*/
+		int PutMsg(unsigned int ucid, const void* pdata, size_t usize)
+		{
+			t_rpcuserinfo usrinfo;
+			usrinfo._ucid = ucid;
+			if (!_clients.GetUserInfo(&usrinfo) || usrinfo._nstatus != rpcusr_pass)//取用户信息			
+				return -1; //无此用户或该用户没有登录
+
+			RPCCOMPRESS comp = rpccomp_none;
+			if (usize > 512)
+				comp = rpccomp_lz4;
+			unsigned int seqno = (unsigned int)ec::atomic_addlong(&_clients._lseqno, 1);
+			ec::tArray<unsigned char> putmsg(usize + 1024);			
+			gMakePkg(pdata, usize, rpcmsg_send, comp, seqno, usrinfo._pswsha1, &putmsg, _clients.IsEncryptData());
+			int nret = SendToUcid(ucid, putmsg.GetBuf(), putmsg.GetSize(), true);			
+			return nret;
+		}
     protected:
         virtual int _OnNotify(t_rpcnotify* pnotify) = 0; //只处理logout
         virtual void    OnConnected(unsigned int ucid, const char* sip)
