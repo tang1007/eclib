@@ -33,6 +33,9 @@
 #define SIZE_HTTPMAXREQUEST 16384
 #define SIZE_WSMAXREQUEST   65535
 
+#define HTTPENCODE_NONE    0
+#define HTTPENCODE_DEFLATE 1
+
 #define PROTOCOL_HTTP   0
 #define PROTOCOL_WS     1
 
@@ -352,7 +355,6 @@ namespace ec
 	};
 
 
-
 	/*!
 	\brief http packet from clinet
 
@@ -366,6 +368,7 @@ namespace ec
 			memset(_request, 0, sizeof(_request));
 			memset(_version, 0, sizeof(_version));
 			_comp = 0;
+			
 		};
 		~cHttpPacket() {};
 	public:
@@ -377,9 +380,10 @@ namespace ec
 
 		tArray<t_httpfileds> _headers;
 		tArray<char> _body;
-		int  _fin;   //!< end    
-		int _comp;   //!<压缩标识
-		int  _opcode;//!< operator code
+		int _fin;   //!< end    
+		int _comp;   //!<WS压缩标识
+		
+		int _opcode;//!< operator code
 	protected:
 		bool checkreq()
 		{
@@ -909,7 +913,7 @@ namespace ec
 			pcli->_wscompress = wscompress;
 			pcli->_txt.ClearData();
 		}
-
+		
 		int GetCompress(unsigned int ucid)
 		{
 			cSafeLock lck(&_cs);
@@ -926,7 +930,7 @@ namespace ec
 	class cHttpWorkThread : public cTcpSvrWorkThread
 	{
 	public:
-		cHttpWorkThread(cHttpClientMap* pclis, cHttpCfg*  pcfg, cLog*	plog) : _filetmp(32768), _answer(32768)
+		cHttpWorkThread(cHttpClientMap* pclis, cHttpCfg*  pcfg, cLog*	plog) : _filetmp(32768), _answer(32768), _encodetmp(32768)
 		{
 			_pclis = pclis;
 			_pcfg = pcfg;
@@ -943,6 +947,7 @@ namespace ec
 		cHttpPacket		_httppkg;	//!<报文解析
 		tArray<char>	_filetmp;	//!<文件临时区
 		tArray<char>	_answer;	//!<应答       
+		tArray<char>	_encodetmp;	//!<压缩  
 	protected:
 		/*!
 		\brief 处理websocket接收到的数据
@@ -1010,13 +1015,14 @@ namespace ec
 				_answer.Add(sc, strlen(sc));
 				_answer.Add(tmp, strlen(tmp));
 				_answer.Add("\x0d\x0a", 2);
-			}
+			}			
+
 			int ncompress = 0;
 			if (_httppkg.GetHeadFiled("Sec-WebSocket-Extensions", tmp, sizeof(tmp)))
 			{
 				char st[64] = { 0 };
 				size_t pos = 0, len = strlen(tmp);
-				while (ec::str_getnext(";", tmp, len, pos, st, sizeof(st)))
+				while (ec::str_getnext(";,", tmp, len, pos, st, sizeof(st)))
 				{
 					if (!ec::str_icmp("permessage-deflate", st))
 					{
@@ -1159,10 +1165,7 @@ namespace ec
 			return false;
 #endif
 		}
-
-		/*!
-		\brief 取文件扩展名
-		*/
+		
 		const char *GetFileExtName(const char*s)
 		{
 			const char *pr = NULL;
@@ -1174,13 +1177,14 @@ namespace ec
 			}
 			return pr;
 		}
-
+		
 		/*!
 		\brief 处理GET和HEAD方法
 		*/
 		bool DoGetAndHead(unsigned int ucid, bool bGet = true)
 		{
 			char sfile[1024], tmp[4096];
+			const char* sc;
 			sfile[0] = '\0';
 			tmp[0] = '\0';
 
@@ -1206,16 +1210,16 @@ namespace ec
 			}
 
 			_answer.ClearData();
-			strcpy(tmp, "HTTP/1.1 200 ok\r\n");
-			_answer.Add(tmp, strlen(tmp));
+			sc = "HTTP/1.1 200 ok\r\n";
+			_answer.Add(sc, strlen(sc));
 
-			strcpy(tmp, "Server: rdb5 websocket server\r\n");
-			_answer.Add(tmp, strlen(tmp));
+			sc = "Server: rdb5 websocket server\r\n";
+			_answer.Add(sc, strlen(sc));
 
 			if (_httppkg.HasKeepAlive())
 			{
-				strcpy(tmp, "Connection: keep-alive\r\n");
-				_answer.Add(tmp, strlen(tmp));
+				sc = "Connection: keep-alive\r\n";
+				_answer.Add(sc, strlen(sc));
 			}
 			const char* sext = GetFileExtName(sfile);
 			if (sext && *sext && _pcfg->GetMime(sext, tmp, sizeof(tmp)))
@@ -1226,11 +1230,35 @@ namespace ec
 			}
 			else
 			{
-				strcpy(tmp, "Content-type: application/octet-stream\r\n");
-				_answer.Add(tmp, strlen(tmp));
+				sc = "Content-type: application/octet-stream\r\n";
+				_answer.Add(sc, strlen(sc));
 			}
 
-			sprintf(tmp, "Content-Length: %d\r\n\r\n", _filetmp.GetNum());
+			int necnode = 0;
+			if (_httppkg.GetHeadFiled("Accept-Encoding", tmp, sizeof(tmp)))
+			{
+				char sencode[16] = { 0 };
+				size_t pos = 0;
+				while (ec::str_getnext(";,", tmp, strlen(tmp), pos, sencode, sizeof(sencode)))
+				{
+					if (!ec::str_icmp("deflate", sencode))
+					{
+						sc = "Content-Encoding: deflate\r\n";
+						_answer.Add(sc, strlen(sc));
+						necnode = HTTPENCODE_DEFLATE;
+						break;
+					}
+				}
+			}
+			_encodetmp.ClearData();
+			if (HTTPENCODE_DEFLATE == necnode)
+			{
+				if (Z_OK != ec::wsencode_zlib(_filetmp.GetBuf(), _filetmp.GetSize(), &_encodetmp))
+					return false;
+				sprintf(tmp, "Content-Length: %d\r\n\r\n", _encodetmp.GetNum());
+			}
+			else
+				sprintf(tmp, "Content-Length: %d\r\n\r\n", _filetmp.GetNum());
 			_answer.Add(tmp, strlen(tmp));
 
 			if (_pcfg->_blogdetail && _plog)
@@ -1243,11 +1271,17 @@ namespace ec
 			}
 
 			if (bGet) //get
-				_answer.Add(_filetmp.GetBuf(), _filetmp.GetSize());
+			{
+				if (HTTPENCODE_DEFLATE == necnode)
+					_answer.Add(_encodetmp.GetBuf(), _encodetmp.GetSize());
+				else
+					_answer.Add(_filetmp.GetBuf(), _filetmp.GetSize());
+			}
 
 			SendToUcid(ucid, _answer.GetBuf(), _answer.GetSize(), true);
 			_filetmp.ClearAndFree(0xFFFFF);
 			_answer.ClearAndFree(0xFFFFF);
+			_encodetmp.ClearAndFree(0xFFFFF);
 			return true;
 		}
 
