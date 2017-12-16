@@ -354,6 +354,29 @@ namespace ec
             OnNewLog(_slog);
         }
 
+		void AddLogMem(const void* pm, size_t size)
+		{
+			size_t i;
+			char o[1024];
+			unsigned char ul, uh;
+			const unsigned char* s = (const unsigned char*)pm;
+			for (i = 0; i < size && i < 256; i++)
+			{
+				uh = (s[i] & 0xF0) >> 4;
+				ul = (s[i] & 0x0F);
+				if (uh < 10)
+					o[i * 3] = '0' + uh;
+				else
+					o[i * 3] = 'A' + uh - 10;
+				if (ul < 10)
+					o[i * 3 + 1] = '0' + ul;
+				else
+					o[i * 3 + 1] = 'A' + ul - 10;
+				o[i * 3 + 2] = '\x20';
+			}
+			o[i * 3] = '\0';
+			AddLog2("%s\n", o);
+		}
     protected:
 
         virtual void OnNewLog(const char* slog) {};
