@@ -663,7 +663,7 @@ namespace ec
 			}
 			if (_body.GetSize() > 0xFFFFFF) //must < 16mb
 			{
-				_body.ClearAndFree(0);
+				Resetwscomp();
 				return he_failed;
 			}
 			return he_waitdata;
@@ -767,7 +767,7 @@ namespace ec
 			if (!pdata || !usize || !pout)
 				return he_failed;
 			size_t sizedo = 0;
-
+			pout->Resetwscomp();
 			pout->_nprotocol = _protocol;
 			_txt.Add(pdata, usize);//添加到待处理字符串
 			if (_protocol == PROTOCOL_HTTP)
@@ -799,6 +799,7 @@ namespace ec
 
 		int DoNextData(unsigned int ucid, cHttpPacket* pout)
 		{
+			pout->Resetwscomp();
 			size_t sizedo = 0;
 			if (_protocol == PROTOCOL_HTTP)
 			{
