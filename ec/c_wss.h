@@ -117,7 +117,15 @@ namespace ec
 						sc = "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover";
 						_answer.Add(sc, strlen(sc));
 						_answer.Add("\x0d\x0a", 2);
-						ncompress = 1;
+						ncompress = ws_permessage_deflate;
+						break;
+					}
+					else if (!ec::str_icmp("x-webkit-deflate-frame", st))
+					{
+						sc = "Sec-WebSocket-Extensions: x-webkit-deflate-frame; no_context_takeover";
+						_answer.Add(sc, strlen(sc));
+						_answer.Add("\x0d\x0a", 2);
+						ncompress = ws_x_webkit_deflate_frame;
 						break;
 					}
 				}
@@ -133,116 +141,7 @@ namespace ec
 			}
 			return true;
 		}
-
-	protected:
-
-		/*!
-		\brief WS组发送帧 size < 65536
-		*/
-		bool MakeWsSend(const void* pdata, size_t sizes, unsigned char wsopt, tArray< char>* pout, int ncompress)
-		{
-			const char* pds = (const char*)pdata;
-			size_t slen = sizes;
-			tArray<char> tmp(1024 + sizes - sizes % 1024);
-			unsigned char uc = 0x80 | (0x0F & wsopt);
-			if (ncompress)
-			{
-				if (Z_OK != ec::wsencode_zlib(pdata, sizes, &tmp) || tmp.GetNum() < 6)
-					return false;
-				pds = tmp.GetBuf() + 2;
-				slen = tmp.GetSize() - 6;
-				uc |= 0x40;
-			}
-
-			pout->ClearData();
-			pout->Add((char)uc);
-			if (slen < 126)
-			{
-				uc = (unsigned char)slen;
-				pout->Add((char)uc);
-			}
-			else if (uc < 65536)
-			{
-				uc = 126;
-				pout->Add((char)uc);
-				pout->Add((char)((slen & 0xFF00) >> 8)); //高字节
-				pout->Add((char)(slen & 0xFF)); //低字节
-			}
-			else // < 4G
-			{
-				uc = 127;
-				pout->Add((char)uc);
-				pout->Add((char)0); pout->Add((char)0); pout->Add((char)0); pout->Add((char)0);//high 4 bytes 0
-				pout->Add((char)((slen & 0xFF000000) >> 24));
-				pout->Add((char)((slen & 0x00FF0000) >> 16));
-				pout->Add((char)((slen & 0x0000FF00) >> 8));
-				pout->Add((char)(slen & 0xFF));
-			}
-			pout->Add((const char*)pds, slen);
-			return true;
-		}
-
-		/*!
-		\brief WS组发送帧,支持多帧
-		*/
-		bool MakeWsSend_m(const void* pdata, size_t sizes, unsigned char wsopt, tArray< char>* pout, int ncompress, size_t framesize)
-		{
-			const char* pds = (const char*)pdata;
-			size_t slen = sizes;
-			tArray<char> tmp(2048 + sizes - sizes % 1024);
-			unsigned char uc;
-			if (ncompress)
-			{
-				if (Z_OK != ec::wsencode_zlib(pdata, sizes, &tmp) || tmp.GetNum() < 6)
-					return false;
-				pds = tmp.GetBuf() + 2;
-				slen = tmp.GetSize() - 6;
-			}
-			size_t ss = 0, us;
-			pout->ClearData();
-			while (ss < slen)
-			{
-				uc = 0;
-				if (0 == ss)//第一帧
-				{
-					uc = 0x0F & wsopt;
-					if (ncompress)
-						uc |= 0x40;
-				}
-				us = framesize;
-				if (ss + framesize >= slen) //结束帧
-				{
-					uc |= 0x80;
-					us = slen - ss;
-				}
-				pout->Add((char)uc);
-				if (us < 126)
-				{
-					uc = (unsigned char)us;
-					pout->Add((char)uc);
-				}
-				else if (uc < 65536)
-				{
-					uc = 126;
-					pout->Add((char)uc);
-					pout->Add((char)((us & 0xFF00) >> 8)); //高字节
-					pout->Add((char)(us & 0xFF)); //低字节
-				}
-				else // < 4G
-				{
-					uc = 127;
-					pout->Add((char)uc);
-					pout->Add((char)0); pout->Add((char)0); pout->Add((char)0); pout->Add((char)0);//high 4 bytes 0
-					pout->Add((char)((us & 0xFF000000) >> 24));
-					pout->Add((char)((us & 0x00FF0000) >> 16));
-					pout->Add((char)((us & 0x0000FF00) >> 8));
-					pout->Add((char)(us & 0xFF));
-				}
-				pout->Add((const char*)(pds + ss), us);
-				ss += us;
-			}
-			return true;
-		}
+	protected:		
 		/*!
 		\brief 响应ping,使用PONG回答
 		*/
@@ -290,41 +189,7 @@ namespace ec
 
 			DoBadRequest(ucid);//不支持其他方法
 			return _httppkg.HasKeepAlive();
-		}
-
-		/*!
-		\brief 判断是否是目录
-		*/
-		bool IsDir(const char* s)
-		{
-#ifdef _WIN32
-			struct _stat st;
-			if (_stat(s, &st))
-				return false;
-			if (st.st_mode & S_IFDIR)
-				return true;
-			return false;
-#else
-			struct stat st;
-			if (stat(s, &st))
-				return false;
-			if (st.st_mode & S_IFDIR)
-				return true;
-			return false;
-#endif
-		}
-		
-		const char *GetFileExtName(const char*s)
-		{
-			const char *pr = NULL;
-			while (*s)
-			{
-				if (*s == '.')
-					pr = s;
-				s++;
-			}
-			return pr;
-		}
+		}		
 		
 		/*!
 		\brief 处理GET和HEAD方法

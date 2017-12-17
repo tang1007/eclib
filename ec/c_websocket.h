@@ -30,8 +30,8 @@
 #endif // stricmp
 #endif
 
-#define SIZE_HTTPMAXREQUEST 16384
-#define SIZE_WSMAXREQUEST   65535
+#define SIZE_HTTPMAXREQUEST (1024 * 64)
+#define SIZE_WSMAXREQUEST   (1024 * 256)
 
 #define HTTPENCODE_NONE    0
 #define HTTPENCODE_DEFLATE 1
@@ -46,6 +46,9 @@
 #define WS_OP_CLOSE	    8
 #define WS_OP_PING		9
 #define WS_OP_PONG		10
+
+#define ws_permessage_deflate		1  // for google chrome ,firefox
+#define ws_x_webkit_deflate_frame   2  // for ios safari
 
 namespace ec
 {
@@ -64,7 +67,6 @@ namespace ec
 		char sext[16];
 		char stype[128];
 	};
-
 
 	template<>
 	inline bool tMap<const char*, t_mime> ::ValueKey(const char* key, t_mime* p)
@@ -131,6 +133,215 @@ namespace ec
 		}
 		inflateEnd(&stream);
 		return err;
+	}
+
+	/*!
+	\brief WS组发送帧,单帧,permessage_deflate支持
+	*/
+	inline bool MakeWsSend(const void* pdata, size_t sizes, unsigned char wsopt, tArray< char>* pout, int ncompress)
+	{
+		const char* pds = (const char*)pdata;
+		size_t slen = sizes;
+		tArray<char> tmp(2048 + sizes - sizes % 1024);
+		unsigned char uc = 0x80 | (0x0F & wsopt);
+		if (ncompress)
+		{
+			if (Z_OK != ec::wsencode_zlib(pdata, sizes, &tmp) || tmp.GetNum() < 6)
+				return false;
+			pds = tmp.GetBuf() + 2;
+			slen = tmp.GetSize() - 6;
+			uc |= 0x40;
+		}
+
+		pout->ClearData();
+		pout->Add((char)uc);
+		if (slen < 126)
+		{
+			uc = (unsigned char)slen;
+			pout->Add((char)uc);
+		}
+		else if (uc < 65536)
+		{
+			uc = 126;
+			pout->Add((char)uc);
+			pout->Add((char)((slen & 0xFF00) >> 8)); //高字节
+			pout->Add((char)(slen & 0xFF)); //低字节
+		}
+		else // < 4G
+		{
+			uc = 127;
+			pout->Add((char)uc);
+			pout->Add((char)0); pout->Add((char)0); pout->Add((char)0); pout->Add((char)0);//high 4 bytes 0
+			pout->Add((char)((slen & 0xFF000000) >> 24));
+			pout->Add((char)((slen & 0x00FF0000) >> 16));
+			pout->Add((char)((slen & 0x0000FF00) >> 8));
+			pout->Add((char)(slen & 0xFF));
+		}
+		pout->Add((const char*)pds, slen);
+		return true;
+	}
+
+	/*!
+	\brief WS组发送帧,多帧,permessage_deflate支持
+	*/
+	inline bool MakeWsSend_m(const void* pdata, size_t sizes, unsigned char wsopt, tArray< char>* pout, int ncompress, size_t framesize)
+	{
+		const char* pds = (const char*)pdata;
+		size_t slen = sizes;
+		tArray<char> tmp(2048 + sizes - sizes % 1024);
+		unsigned char uc;
+		if (ncompress)
+		{
+			if (Z_OK != ec::wsencode_zlib(pdata, sizes, &tmp) || tmp.GetNum() < 6)
+				return false;
+			pds = tmp.GetBuf() + 2;
+			slen = tmp.GetSize() - 6;
+		}
+		size_t ss = 0, us;
+		pout->ClearData();
+		while (ss < slen)
+		{
+			uc = 0;
+			if (0 == ss)//第一帧
+			{
+				uc = 0x0F & wsopt;
+				if (ncompress)
+					uc |= 0x40;
+			}
+			us = framesize;
+			if (ss + framesize >= slen) //结束帧
+			{
+				uc |= 0x80;
+				us = slen - ss;
+			}
+			pout->Add((char)uc);
+			if (us < 126)
+			{
+				uc = (unsigned char)us;
+				pout->Add((char)uc);
+			}
+			else if (uc < 65536)
+			{
+				uc = 126;
+				pout->Add((char)uc);
+				pout->Add((char)((us & 0xFF00) >> 8)); //高字节
+				pout->Add((char)(us & 0xFF)); //低字节
+			}
+			else // < 4G
+			{
+				uc = 127;
+				pout->Add((char)uc);
+				pout->Add((char)0); pout->Add((char)0); pout->Add((char)0); pout->Add((char)0);//high 4 bytes 0
+				pout->Add((char)((us & 0xFF000000) >> 24));
+				pout->Add((char)((us & 0x00FF0000) >> 16));
+				pout->Add((char)((us & 0x0000FF00) >> 8));
+				pout->Add((char)(us & 0xFF));
+			}
+			pout->Add((const char*)(pds + ss), us);
+			ss += us;
+		}
+		return true;
+	}
+
+	/*!
+	\brief WS组发送帧,多帧,deflate-frame支持,适合ios safari
+	*/
+	inline bool MakeWsSend_mdf(const void* pdata, size_t sizes, unsigned char wsopt, tArray< char>* pout, size_t framesize)
+	{
+		const char* pds = (const char*)pdata;
+		char* pf;
+		size_t slen = sizes;
+		tArray<char> tmp(2048 + framesize);
+		unsigned char uc;
+		size_t ss = 0, us, fl;
+		pout->ClearData();
+		while (ss < slen)
+		{
+			uc = 0;
+			us = framesize;
+
+			if (0 == ss)//第一帧
+				uc = 0x0F & wsopt;
+			if (us > 256)
+				uc |= 0x40;
+			if (ss + framesize >= slen) //结束帧
+			{
+				uc |= 0x80;
+				us = slen - ss;
+			}
+			pout->Add((char)uc);
+			if (uc & 0x40)
+			{
+				tmp.ClearData();
+				if (Z_OK != ec::wsencode_zlib(pds + ss, us, &tmp) || tmp.GetNum() < 6)
+					return false;
+				pf = tmp.GetBuf() + 2;
+				fl = tmp.GetSize() - 6;
+			}
+			else
+			{
+				pf = (char*)pds + ss;
+				fl = us;
+			}
+
+			if (fl < 126)
+			{
+				uc = (unsigned char)fl;
+				pout->Add((char)uc);
+			}
+			else if (uc < 65536)
+			{
+				uc = 126;
+				pout->Add((char)uc);
+				pout->Add((char)((fl & 0xFF00) >> 8)); //高字节
+				pout->Add((char)(fl & 0xFF)); //低字节
+			}
+			else // < 4G
+			{
+				uc = 127;
+				pout->Add((char)uc);
+				pout->Add((char)0); pout->Add((char)0); pout->Add((char)0); pout->Add((char)0);//high 4 bytes 0
+				pout->Add((char)((fl & 0xFF000000) >> 24));
+				pout->Add((char)((fl & 0x00FF0000) >> 16));
+				pout->Add((char)((fl & 0x0000FF00) >> 8));
+				pout->Add((char)(fl & 0xFF));
+			}
+			pout->Add((const char*)pf, fl);
+			ss += us;
+		}
+		return true;
+	}
+	/*!
+	\brief 判断是否是目录
+	*/
+	inline bool IsDir(const char* s)
+	{
+#ifdef _WIN32
+		struct _stat st;
+		if (_stat(s, &st))
+			return false;
+		if (st.st_mode & S_IFDIR)
+			return true;
+		return false;
+#else
+		struct stat st;
+		if (stat(s, &st))
+			return false;
+		if (st.st_mode & S_IFDIR)
+			return true;
+		return false;
+#endif
+	}
+	inline const char *GetFileExtName(const char*s)
+	{
+		const char *pr = NULL;
+		while (*s)
+		{
+			if (*s == '.')
+				pr = s;
+			s++;
+		}
+		return pr;
 	}
 
 	/*!
@@ -367,7 +578,7 @@ namespace ec
 			memset(_method, 0, sizeof(_method));
 			memset(_request, 0, sizeof(_request));
 			memset(_version, 0, sizeof(_version));
-			_comp = 0;
+			_fin = 0;
 			
 		};
 		~cHttpPacket() {};
@@ -379,10 +590,8 @@ namespace ec
 		char _sline[1024];
 
 		tArray<t_httpfileds> _headers;
-		tArray<char> _body;
-		int _fin;   //!< end    
-		int _comp;   //!<WS压缩标识
-		
+		tArray<char> _body; //已解压的完整消息
+		int _fin;   //!< end  已不用了  
 		int _opcode;//!< operator code
 	protected:
 		bool checkreq()
@@ -569,106 +778,141 @@ namespace ec
 		}
 		void Resetwscomp()
 		{
-			_body.ClearAndFree(16384);
-			_comp = 0;
+			_body.ClearAndFree(1024 * 512);
 		}
-		int WebsocketParse(const char* stxt, size_t usize, size_t &sizedo)
+
+		class CWsFrame
 		{
-			if (usize < 2)
-				return he_waitdata;
-
-			int i;
-			size_t datalen = 0;
-			size_t datapos = 2;
-			unsigned char* pu = (unsigned char*)stxt;
-
-			_nprotocol = PROTOCOL_WS;
-
-			_fin = pu[0] & 0x80;
-			if (!_body.GetSize())
+		public:
+			CWsFrame() : _f(1024 * 64){
+			}
+			int _opt;
+			int _fin;
+			int _comp;
+			tArray<char> _f;
+		public:
+			int  parseonframe(const char* stxt, size_t usize, int ncomp)//分离原始帧
 			{
-				_comp = (pu[0] & 0x40) ? 1 : 0;
+				_opt = 0;
+				_fin = 0;
+				_comp = 0;
+				_f.ClearData();
+				if (usize < 2)
+					return 0;
+				int i;
+				size_t datalen = 0, sizedo = 0;
+				size_t datapos = 2;
+				unsigned char* pu = (unsigned char*)stxt;
+
+				_fin = pu[0] & 0x80;				
+				_comp = (pu[0] & 0x40) ? ws_permessage_deflate : 0;
+				_opt = (pu[0] & 0x0F);
+
+				int bmask = pu[1] & 0x80;
+				int payloadlen = pu[1] & 0x7F;
+
+				//client can not use mask
+				if (bmask)
+					datapos += 4;
+
+				if (payloadlen == 126)
+				{
+					datapos += 2;
+					if (usize < datapos)
+						return he_waitdata;
+
+					datalen = pu[2];
+					datalen <<= 8;
+					datalen |= pu[3];
+				}
+				else if (payloadlen == 127)
+				{
+					datapos += 8;
+					if (usize < datapos)
+						return he_waitdata;
+
+					for (i = 0; i < 8; i++)
+					{
+						if (i > 0)
+							datalen <<= 8;
+						datalen |= pu[2 + i];
+					}
+				}
+				else
+				{
+					datalen = payloadlen;
+					if (usize < datapos)
+						return he_waitdata;
+				}
+				if (usize < datapos + datalen)
+					return 0;
+				sizedo = datapos + datalen;
+
+				_f.ClearData();
+				int ns = 0;
 				if (_comp)
 				{
-					_body.Add('\x78');
-					_body.Add('\x9c');
+					_f.Add('\x78');
+					_f.Add('\x9c');
+					ns = 2;
 				}
-			}
-			_opcode = (pu[0] & 0x0F);
-
-			int bmask = pu[1] & 0x80;
-			int payloadlen = pu[1] & 0x7F;
-
-			//client can not use mask
-			if (bmask)
-				datapos += 4;
-
-			if (payloadlen == 126)
-			{
-				datapos += 2;
-				if (usize < datapos)
-					return he_waitdata;
-
-				datalen = pu[2];
-				datalen <<= 8;
-				datalen |= pu[3];
-			}
-			else if (payloadlen == 127)
-			{
-				datapos += 8;
-				if (usize < datapos)
-					return he_waitdata;
-
-				for (i = 0; i < 8; i++)
+				_f.Add(stxt + datapos, datalen);
+				if (bmask)
+				{					
+					unsigned char* p = (unsigned char*)_f.GetBuf() + ns;
+					int n = _f.GetNum() - ns;
+					for (i = 0; i < n; i++)
+						p[i] = p[i] ^ pu[datapos - 4 + i % 4];					
+				}
+				if (ncomp == ws_x_webkit_deflate_frame && _comp) //帧解压 deflate_frame
 				{
-					if (i > 0)
-						datalen <<= 8;
-					datalen |= pu[2 + i];
+					_comp = 0;
+					tArray<char> tmp(2048 + _f.GetSize() - _f.GetSize() % 1024);					
+					tmp.Add(_f.GetBuf(), _f.GetSize());
+					_f.ClearData();
+					if (Z_OK != ec::wsdecode_zlib(tmp.GetBuf(), tmp.GetSize(), &_f))
+						return -1;					
 				}
+				return (int)sizedo;
 			}
-			else
-			{
-				datalen = payloadlen;
-				if (usize < datapos)
-					return he_waitdata;
+		};
+
+		int WebsocketParse(const char* stxt, size_t usize, size_t &sizedo, int ncomp)//支持多帧
+		{
+			CWsFrame f;
+			const char *pd = stxt;
+			int ndo = 0, msgcomp = 0;
+			sizedo = 0;
+			_body.ClearData();
+			while(sizedo < usize && (ndo = f.parseonframe(pd, usize - sizedo, ncomp)) > 0)
+			{				
+				if (!sizedo)
+				{
+					_opcode = f._opt;
+					msgcomp = f._comp;
+				}
+				sizedo += ndo;
+				_body.Add(f._f.GetBuf(), f._f.GetSize());
+				if (f._fin) //结束帧
+				{			
+					_fin = f._fin;
+					if (msgcomp) // ws_permessage_deflate
+					{
+						tArray<char> tmp(1024);
+						tmp.Add(_body.GetBuf(), _body.GetSize());
+						_body.ClearData();
+						if (Z_OK != ec::wsdecode_zlib(tmp.GetBuf(), tmp.GetSize(), &_body))
+							return he_failed ;
+					}					
+					return he_ok;
+				}	
+				pd += ndo;
 			}
-			if (usize < datapos + datalen)
+			if(0 == ndo)
 				return he_waitdata;
-			sizedo = datapos + datalen;
-
-			if (bmask)
-			{
-				tArray<char> tmp(1024);
-				tmp.Add(stxt + datapos, datalen);
-				unsigned char* p = (unsigned char*)tmp.GetBuf();
-				int n = tmp.GetNum();
-				for (i = 0; i < n; i++)
-					p[i] = p[i] ^ pu[datapos - 4 + i % 4];
-				_body.Add(tmp.GetBuf(), tmp.GetSize());
-			}
-			else
-				_body.Add(stxt + datapos, datalen);
-
-			if (_fin) // uncompress
-			{
-				if (_comp)
-				{
-					tArray<char> tmp(1024 + _body.GetSize() * 5 - (_body.GetSize() * 5) % 1024);
-					if (Z_OK != ec::wsdecode_zlib(_body.GetBuf(), _body.GetSize(), &tmp))
-						return he_failed;
-					_body.ClearData();
-					_body.Add(tmp.GetBuf(), tmp.GetSize());
-				}
-				return he_ok;
-			}
-			if (_body.GetSize() > 0xFFFFFF) //must < 16mb
-			{
-				Resetwscomp();
-				return he_failed;
-			}
-			return he_waitdata;
+			return he_failed;
 		}
-
+		
 		inline bool HasKeepAlive()
 		{
 			return CheckHeadFiled("Connection", "keep-alive");
@@ -752,7 +996,7 @@ namespace ec
 		};
 		~cHttpClient() {};
 	public:
-		int  _wscompress;
+		int  _wscompress; // ws_x_webkit_deflate_frame or ws_permessage_deflate
 		int					_protocol;//!< HTTP_PROTOCOL:http; WEB_SOCKET:websocket        
 		unsigned int        _ucid; //!<UCID
 		char _sip[32];				//!<ip address
@@ -780,11 +1024,12 @@ namespace ec
 					if (nr >= he_failed || _txt.GetSize() > SIZE_HTTPMAXREQUEST)
 						_txt.ClearData();
 				}
+				_txt.ReduceMem(1024 * 16);
 				return nr;
 			}
 
 			//下面按照websocket处理
-			int nr = pout->WebsocketParse(_txt.GetBuf(), _txt.GetSize(), sizedo);
+			int nr = pout->WebsocketParse(_txt.GetBuf(), _txt.GetSize(), sizedo, _wscompress);
 			if (nr == he_ok)
 			{
 				_txt.LeftMove(sizedo);
@@ -794,6 +1039,7 @@ namespace ec
 				if (nr >= he_failed || _txt.GetSize() > SIZE_WSMAXREQUEST)
 					_txt.ClearData();
 			}
+			_txt.ReduceMem(1024 * 16);
 			return nr;
 		}
 
@@ -811,11 +1057,12 @@ namespace ec
 					if (nr >= he_failed || _txt.GetSize() > SIZE_HTTPMAXREQUEST)
 						_txt.ClearData();
 				}
+				_txt.ReduceMem(1024 * 16);
 				return nr;
 			}
 
 			//下面按照websocket处理
-			int nr = pout->WebsocketParse(_txt.GetBuf(), _txt.GetSize(), sizedo);
+			int nr = pout->WebsocketParse(_txt.GetBuf(), _txt.GetSize(), sizedo, _wscompress);
 			if (nr == he_ok)
 			{
 				_txt.LeftMove(sizedo);
@@ -825,10 +1072,10 @@ namespace ec
 				if (nr >= he_failed || _txt.GetSize() > SIZE_WSMAXREQUEST)
 					_txt.ClearData();
 			}
+			_txt.ReduceMem(1024 * 16);
 			return nr;
 		}
 	};
-
 
 	template<>
 	inline bool	tMap<unsigned int, cHttpClient*>::ValueKey(unsigned int key, cHttpClient** pcls)
@@ -1030,7 +1277,15 @@ namespace ec
 						sc = "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover";
 						_answer.Add(sc, strlen(sc));
 						_answer.Add("\x0d\x0a", 2);
-						ncompress = 1;
+						ncompress = ws_permessage_deflate;
+						break;
+					}
+					else if (!ec::str_icmp("x-webkit-deflate-frame", st))
+					{
+						sc = "Sec-WebSocket-Extensions: x-webkit-deflate-frame; no_context_takeover";
+						_answer.Add(sc, strlen(sc));
+						_answer.Add("\x0d\x0a", 2);
+						ncompress = ws_x_webkit_deflate_frame;
 						break;
 					}
 				}
@@ -1048,116 +1303,9 @@ namespace ec
 			return true;
 		}
 
-	protected:
-
-		/*!
-		\brief WS组发送帧
-		*/
-		bool MakeWsSend(const void* pdata, size_t sizes, unsigned char wsopt, tArray< char>* pout, int ncompress)
-		{
-			const char* pds = (const char*)pdata;
-			size_t slen = sizes;
-			tArray<char> tmp(2048 + sizes - sizes % 1024);
-			unsigned char uc = 0x80 | (0x0F & wsopt);
-			if (ncompress)
-			{
-				if (Z_OK != ec::wsencode_zlib(pdata, sizes, &tmp) || tmp.GetNum() < 6)
-					return false;
-				pds = tmp.GetBuf() + 2;
-				slen = tmp.GetSize() - 6;
-				uc |= 0x40;
-			}
-
-			pout->ClearData();
-			pout->Add((char)uc);
-			if (slen < 126)
-			{
-				uc = (unsigned char)slen;
-				pout->Add((char)uc);
-			}
-			else if (uc < 65536)
-			{
-				uc = 126;
-				pout->Add((char)uc);
-				pout->Add((char)((slen & 0xFF00) >> 8)); //高字节
-				pout->Add((char)(slen & 0xFF)); //低字节
-			}
-			else // < 4G
-			{
-				uc = 127;
-				pout->Add((char)uc);
-				pout->Add((char)0); pout->Add((char)0); pout->Add((char)0); pout->Add((char)0);//high 4 bytes 0
-				pout->Add((char)((slen & 0xFF000000) >> 24));
-				pout->Add((char)((slen & 0x00FF0000) >> 16));
-				pout->Add((char)((slen & 0x0000FF00) >> 8));
-				pout->Add((char)(slen & 0xFF));
-			}
-			pout->Add((const char*)pds, slen);
-			return true;
-		}
-
-		/*!
-		\brief WS组发送帧,支持多帧
-		*/
-		bool MakeWsSend_m(const void* pdata, size_t sizes, unsigned char wsopt, tArray< char>* pout, int ncompress,size_t framesize)
-		{
-			const char* pds = (const char*)pdata;
-			size_t slen = sizes;
-			tArray<char> tmp(2048 + sizes - sizes % 1024);
-			unsigned char uc;
-			if (ncompress)
-			{
-				if (Z_OK != ec::wsencode_zlib(pdata, sizes, &tmp) || tmp.GetNum() < 6)
-					return false;
-				pds = tmp.GetBuf() + 2;
-				slen = tmp.GetSize() - 6;				
-			}
-			size_t ss = 0,us;
-			pout->ClearData();
-			while (ss < slen)
-			{
-				uc = 0;
-				if (0 == ss)//第一帧
-				{
-					uc = 0x0F & wsopt;
-					if (ncompress)
-						uc |= 0x40;
-				}				
-				us = framesize;
-				if (ss + framesize >= slen) //结束帧
-				{
-					uc |= 0x80;
-					us = slen - ss;
-				}
-				pout->Add((char)uc);
-				if (us < 126)
-				{
-					uc = (unsigned char)us;
-					pout->Add((char)uc);
-				}
-				else if (uc < 65536)
-				{
-					uc = 126;
-					pout->Add((char)uc);
-					pout->Add((char)((us & 0xFF00) >> 8)); //高字节
-					pout->Add((char)(us & 0xFF)); //低字节
-				}
-				else // < 4G
-				{
-					uc = 127;
-					pout->Add((char)uc);
-					pout->Add((char)0); pout->Add((char)0); pout->Add((char)0); pout->Add((char)0);//high 4 bytes 0
-					pout->Add((char)((us & 0xFF000000) >> 24));
-					pout->Add((char)((us & 0x00FF0000) >> 16));
-					pout->Add((char)((us & 0x0000FF00) >> 8));
-					pout->Add((char)(us & 0xFF));
-				}
-				pout->Add((const char*)(pds + ss), us);
-				ss += us;
-			}						
-			return true;
-		}
-
+	public:	
+		
+		protected:
 		/*!
 		\brief 响应ping,使用PONG回答
 		*/
@@ -1207,39 +1355,7 @@ namespace ec
 			return _httppkg.HasKeepAlive();
 		}
 
-		/*!
-		\brief 判断是否是目录
-		*/
-		bool IsDir(const char* s)
-		{
-#ifdef _WIN32
-			struct _stat st;
-			if (_stat(s, &st))
-				return false;
-			if (st.st_mode & S_IFDIR)
-				return true;
-			return false;
-#else
-			struct stat st;
-			if (stat(s, &st))
-				return false;
-			if (st.st_mode & S_IFDIR)
-				return true;
-			return false;
-#endif
-		}
 		
-		const char *GetFileExtName(const char*s)
-		{
-			const char *pr = NULL;
-			while (*s)
-			{
-				if (*s == '.')
-					pr = s;
-				s++;
-			}
-			return pr;
-		}
 		
 		/*!
 		\brief 处理GET和HEAD方法
