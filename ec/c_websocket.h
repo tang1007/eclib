@@ -1057,9 +1057,9 @@ namespace ec
 		{
 			const char* pds = (const char*)pdata;
 			size_t slen = sizes;
-			tArray<char> tmp(1024 + sizes - sizes % 1024);
+			tArray<char> tmp(2048 + sizes - sizes % 1024);
 			unsigned char uc = 0x80 | (0x0F & wsopt);
-			if (ncompress && slen > 256)
+			if (ncompress)
 			{
 				if (Z_OK != ec::wsencode_zlib(pdata, sizes, &tmp) || tmp.GetNum() < 6)
 					return false;
@@ -1093,6 +1093,68 @@ namespace ec
 				pout->Add((char)(slen & 0xFF));
 			}
 			pout->Add((const char*)pds, slen);
+			return true;
+		}
+
+		/*!
+		\brief WS组发送帧,支持多帧
+		*/
+		bool MakeWsSend_m(const void* pdata, size_t sizes, unsigned char wsopt, tArray< char>* pout, int ncompress,size_t framesize)
+		{
+			const char* pds = (const char*)pdata;
+			size_t slen = sizes;
+			tArray<char> tmp(2048 + sizes - sizes % 1024);
+			unsigned char uc;
+			if (ncompress)
+			{
+				if (Z_OK != ec::wsencode_zlib(pdata, sizes, &tmp) || tmp.GetNum() < 6)
+					return false;
+				pds = tmp.GetBuf() + 2;
+				slen = tmp.GetSize() - 6;				
+			}
+			size_t ss = 0,us;
+			pout->ClearData();
+			while (ss < slen)
+			{
+				uc = 0;
+				if (0 == ss)//第一帧
+				{
+					uc = 0x0F & wsopt;
+					if (ncompress)
+						uc |= 0x40;
+				}				
+				us = framesize;
+				if (ss + framesize >= slen) //结束帧
+				{
+					uc |= 0x80;
+					us = slen - ss;
+				}
+				pout->Add((char)uc);
+				if (us < 126)
+				{
+					uc = (unsigned char)us;
+					pout->Add((char)uc);
+				}
+				else if (uc < 65536)
+				{
+					uc = 126;
+					pout->Add((char)uc);
+					pout->Add((char)((us & 0xFF00) >> 8)); //高字节
+					pout->Add((char)(us & 0xFF)); //低字节
+				}
+				else // < 4G
+				{
+					uc = 127;
+					pout->Add((char)uc);
+					pout->Add((char)0); pout->Add((char)0); pout->Add((char)0); pout->Add((char)0);//high 4 bytes 0
+					pout->Add((char)((us & 0xFF000000) >> 24));
+					pout->Add((char)((us & 0x00FF0000) >> 16));
+					pout->Add((char)((us & 0x0000FF00) >> 8));
+					pout->Add((char)(us & 0xFF));
+				}
+				pout->Add((const char*)(pds + ss), us);
+				ss += us;
+			}						
 			return true;
 		}
 
@@ -1337,7 +1399,8 @@ namespace ec
 						bret = OnWebSocketData(ucid, _httppkg._fin, _httppkg._opcode, _httppkg._body.GetBuf(), _httppkg._body.GetSize());
 					else if (_httppkg._opcode == WS_OP_CLOSE)
 					{
-						_plog->AddLog("MSG:ucid %d WS_OP_CLOSE!", ucid);
+						if(_plog)
+							_plog->AddLog("MSG:ucid %d WS_OP_CLOSE!", ucid);
 						return false; //返回false后底层会断开连接
 					}
 
