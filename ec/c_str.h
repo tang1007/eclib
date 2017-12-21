@@ -406,51 +406,57 @@ namespace ec
         return spath;
     }
     /*!
-    \brief GB2312 toutf-8
-    \param sizeutf8 [in/out] , in sutf8 bufsize, out utf-8 code length
+    \brief GB2312 to utf-8
+    \param sizeout [in/out] , in outbufsize, out strlen(out)
     */
-    inline bool gb2utf8(const char* sgb, size_t sizegb, char *sutf8, size_t &sizeutf8)
+    inline bool gb2utf8(const char* in, size_t sizein, char *out, size_t &sizeout)
     {
-        *sutf8 = 0;
+        *out = 0;		
+		if (!in || !(*in))
+			return true;
 #ifdef _WIN32
-        int i = MultiByteToWideChar(CP_ACP, 0, sgb, (int)sizegb, NULL, 0);
+        int i = MultiByteToWideChar(CP_ACP, 0, in, (int)sizein, NULL, 0);
+		if (!i)
+		{
+			str_ncpy(out, in, sizeout);
+			return false;
+		}
         wchar_t* sUnicode = new wchar_t[i + 1];
-        MultiByteToWideChar(CP_ACP, 0, sgb, (int)sizegb, sUnicode, i); //to unicode
+        MultiByteToWideChar(CP_ACP, 0, in, (int)sizein, sUnicode, i); //to unicode
 
-        int nout = WideCharToMultiByte(CP_UTF8, 0, sUnicode, i, sutf8, (int)sizeutf8, NULL, NULL); //to utf-8
-        sizeutf8 = nout;
-        if (sizeutf8 > 0)
-            sutf8[sizeutf8] = 0;
-        else
-        {
-            sizeutf8 = 0;
-            sutf8[0] = 0;
-        }
+        int nout = WideCharToMultiByte(CP_UTF8, 0, sUnicode, i, out, (int)sizeout - 1 , NULL, NULL); //to utf-8
+		sizeout = nout;
+        if (sizeout > 0)
+			out[sizeout] = 0;
+        else        
+			str_ncpy(out, in,sizeout);        
+		delete []sUnicode;
         return nout > 0;
 #else
         iconv_t cd;
-        char **pin = (char**)&sgb;
-        char **pout = &sutf8;
+        char **pin = (char**)&in;
+        char **pout = &out;
 
         cd = iconv_open("UTF-8//IGNORE", "GBK");
         if (cd == (iconv_t)-1)
         {
-            strncpy(sutf8, sgb, sizeutf8);
-            sizeutf8 = strlen(sutf8);
-            return true;
+            str_ncpy(out, in, sizeout);
+			sizeout = strlen(out);
+            return false;
         }
-        size_t inlen = sizegb;
-        size_t outlen = sizeutf8;
+        size_t inlen = sizein;
+        size_t outlen = sizeout - 1;
         if (iconv(cd, pin, &inlen, pout, &outlen) == (size_t)(-1))
         {
-            iconv_close(cd);
-            sizeutf8 = 0;
+            iconv_close(cd);            
+			str_ncpy(out, in, sizeout);
+			sizeout = strlen(out);
             return false;
         }
         iconv_close(cd);
-        sizeutf8 = sizeutf8 - outlen;
-        if (outlen > 0)
-            *sutf8 = 0;
+		sizeout = sizeout - outlen;
+        if (outlen >= 0)
+            *out = 0;
         return true;
 #endif
     }
@@ -461,6 +467,181 @@ namespace ec
         return gb2utf8(sgb, sizegb, sutf8, sz);
     }
 
+	/*!
+	\brief utf8 - gbk
+	\param sizeout [in/out] , in outbufsize, out strlen(out)
+	*/
+	inline bool utf82gbk(const char* in, size_t sizein, char *out, size_t &sizeout)
+	{
+		*out = 0;
+		if (!in || !(*in))
+			return true;
+#ifdef _WIN32
+		int i = MultiByteToWideChar(CP_UTF8, 0, in, (int)sizein, NULL, 0);
+		if (!i)
+		{
+			str_ncpy(out, in, sizeout);
+			sizeout = strlen(out);
+			return false;
+		}
+		wchar_t* sUnicode = new wchar_t[i + 1];
+		MultiByteToWideChar(CP_UTF8, 0, in, (int)sizein, sUnicode, i); //to unicode
+
+		int nout = WideCharToMultiByte(CP_ACP, 0, sUnicode, i, out, (int)sizeout - 1, NULL, NULL); //to utf-8
+		sizeout = nout;
+		if (sizeout > 0)
+			out[sizeout] = 0;
+		else
+		{
+			str_ncpy(out, in, sizeout);
+			sizeout = strlen(out);
+		}
+		delete[]sUnicode;
+		return nout > 0;
+#else
+		iconv_t cd;
+		char **pin = (char**)&in;
+		char **pout = &out;
+
+		cd = iconv_open("GBK//IGNORE","UTF-8");
+		if (cd == (iconv_t)-1)
+		{
+			str_ncpy(out, in, sizeout);
+			sizeout = strlen(out);
+			return false;
+		}
+		size_t inlen = sizein;
+		size_t outlen = sizeout - 1;
+		if (iconv(cd, pin, &inlen, pout, &outlen) == (size_t)(-1))
+		{
+			iconv_close(cd);			
+			str_ncpy(out, in, sizeout);
+			sizeout = strlen(out);
+			return false;
+	}
+		iconv_close(cd);
+		sizeout = sizeout - outlen;
+		if (outlen >= 0)
+			*out = 0;
+		return true;
+#endif
+	}
+
+	inline bool utf82gbk_s(const char* utf8, size_t sizeutf8, char *sgbk, size_t sizeout)
+	{
+		size_t sz = sizeout;
+		return utf82gbk(utf8, sizeutf8, sgbk, sz);
+	}
+
+
+	/*!
+	\brief 快速小字符串转换,in 小于4096 unicode字符,转换不成功则原样拷贝,sizeout必须足够，否则会截断
+	*/
+	inline bool str_gbk2utf8(const char* in, size_t sizein, char *out, size_t sizeout)
+	{		
+		*out = 0;
+		if (!in || !(*in))
+			return true;
+#ifdef _WIN32
+		wchar_t tmp[4096];
+		int i = MultiByteToWideChar(CP_ACP, 0, in, (int)sizein, tmp, (int)sizeof(tmp));
+		if (!i)
+		{
+			str_ncpy(out, in, sizeout);
+			return false;
+		}		
+		i = WideCharToMultiByte(CP_UTF8, 0, tmp, i, out, (int)sizeout - 1, NULL, NULL); //to utf-8
+		if (!i)
+		{
+			str_ncpy(out, in, sizeout);
+			return false;
+		}
+
+		if (i > 0)
+			out[i] = 0;
+		else
+			str_ncpy(out, in, sizeout);		
+		return i > 0;
+#else
+		iconv_t cd;
+		char **pin = (char**)&in;
+		char **pout = &out;
+
+		cd = iconv_open("UTF-8//IGNORE", "GBK");
+		if (cd == (iconv_t)-1)
+		{
+			str_ncpy(out, in, sizeout);
+			sizeout = strlen(out);
+			return false;
+		}
+		size_t inlen = sizein;
+		size_t outlen = sizeout - 1;
+		if (iconv(cd, pin, &inlen, pout, &outlen) == (size_t)(-1))
+		{
+			iconv_close(cd);
+			str_ncpy(out, in, sizeout);
+			return false;
+		}
+		iconv_close(cd);		
+		*out = 0;
+		return true;
+#endif
+	}
+
+	/*!
+	\brief 快速小字符串转换,in小于4096 unicode字符,转换不成功则原样拷贝,sizeout必须足够，否则会截断
+	*/
+	inline bool str_utf82gbk(const char* in, size_t sizein, char *out, size_t sizeout)
+	{
+		*out = 0;
+		if (!in || !(*in))
+			return true;
+#ifdef _WIN32
+		wchar_t tmp[4096];
+		int i = MultiByteToWideChar(CP_UTF8, 0, in, (int)sizein, tmp, (int)sizeof(tmp));
+		if (!i)
+		{
+			str_ncpy(out, in, sizeout);
+			return false; 
+		}
+		i = WideCharToMultiByte(CP_ACP, 0, tmp, i, out, (int)sizeout - 1, NULL, NULL); //to utf-8
+		if (!i)
+		{
+			str_ncpy(out, in, sizeout);
+			return false;
+		}
+
+		if (i > 0)
+			out[i] = 0;
+		else
+			str_ncpy(out, in, sizeout);
+		return i > 0;
+#else
+		iconv_t cd;
+		char **pin = (char**)&in;
+		char **pout = &out;
+
+		cd = iconv_open( "GBK","UTF-8//IGNORE");
+		if (cd == (iconv_t)-1)
+		{
+			str_ncpy(out, in, sizeout);
+			sizeout = strlen(out);
+			return false;
+		}
+		size_t inlen = sizein;
+		size_t outlen = sizeout - 1;
+		if (iconv(cd, pin, &inlen, pout, &outlen) == (size_t)(-1))
+		{
+			iconv_close(cd);
+			str_ncpy(out, in, sizeout);
+			return false;
+		}
+		iconv_close(cd);
+		*out = 0;
+		return true;
+#endif
+	}
+	
     class cAp // auto free pointer
     {
     public:
