@@ -578,6 +578,8 @@ namespace ec
 			memset(_method, 0, sizeof(_method));
 			memset(_request, 0, sizeof(_request));
 			memset(_version, 0, sizeof(_version));
+			memset(_sline, 0, sizeof(_sline));
+			memset(_sorgfirstline, 0, sizeof(_sorgfirstline));
 			_fin = 0;
 			
 		};
@@ -587,7 +589,8 @@ namespace ec
 		char _method[32];  //!< get ,head
 		char _request[512];//!< requet URL
 		char _version[32];
-		char _sline[1024];
+		char _sline[512];
+		char _sorgfirstline[512];
 
 		tArray<t_httpfileds> _headers;
 		tArray<char> _body; //已解压的完整消息
@@ -617,7 +620,7 @@ namespace ec
 				return he_failed;
 			if (!ul)
 				return he_waitdata;
-
+			memcpy(_sorgfirstline, _sline,sizeof(_sline));
 			cParseText wp(_sline, ul);
 			if (!wp.GetNextWord(_method, sizeof(_method))) //method
 				return he_waitdata;
@@ -1169,7 +1172,7 @@ namespace ec
 			if (!_map.Lookup(ucid, pcli) || !pcli)
 				return 0;
 			return pcli->_wscompress;
-		}
+		}		
 	};
 
 	/*!
@@ -1218,6 +1221,16 @@ namespace ec
 		*/
 		bool DoUpgradeWebSocket(int ucid, const char *skey)
 		{
+			if (_pcfg->_blogdetail_wss && _plog)
+			{
+				char stmp[128] = { 0 };
+				_plog->AddLog("MSG: ucid %u upgrade websocket", ucid);
+				if (_httppkg.GetHeadFiled("Origin", stmp, sizeof(stmp)))
+					_plog->AddLog2("\tOrigin: %s\n", stmp);
+				if (_httppkg.GetHeadFiled("Sec-WebSocket-Extensions", stmp, sizeof(stmp)))
+					_plog->AddLog2("\tSec-WebSocket-Extensions: %s\n", stmp);
+			}
+
 			const char* sc;
 			char sProtocol[128] = { 0 }, sVersion[128] = { 0 }, tmp[256] = { 0 };
 			_httppkg.GetHeadFiled("Sec-WebSocket-Protocol", sProtocol, sizeof(sProtocol));
@@ -1291,15 +1304,12 @@ namespace ec
 				}
 			}
 			_answer.Add("\x0d\x0a", 2);
-
-			_pclis->UpgradeWebSocket(ucid, ncompress);//升级协议为websocket
-
-			SendToUcid(ucid, _answer.GetBuf(), _answer.GetSize(), true);//发送
-
-			if (_pcfg->_blogdetail && _plog) {
+			_pclis->UpgradeWebSocket(ucid, ncompress);
+			SendToUcid(ucid, _answer.GetBuf(), _answer.GetSize(), true);
+			if (_pcfg->_blogdetail && _plog) {				
 				_answer.Add((char)0);
-				_plog->AddLog("MSG:Write ucid %d\r\n%s", ucid, _answer.GetBuf());
-			}
+				_plog->AddLog("MSG: ucid %d upggrade WS success\r\n%s", ucid, _answer.GetBuf());
+			}			
 			return true;
 		}
 
@@ -1323,28 +1333,12 @@ namespace ec
 		bool DoHttpRequest(unsigned int ucid)
 		{
 			if (_pcfg->_blogdetail && _plog)
-			{
-				_plog->AddLog("MSG:read from ucid %u:", ucid);
-				_plog->AddLog2("   %s %s %s\r\n", _httppkg._method, _httppkg._request, _httppkg._version);
-				int i, n = _httppkg._headers.GetNum();
-				t_httpfileds* pa = _httppkg._headers.GetBuf();
-				for (i = 0; i < n; i++)
-					_plog->AddLog2("    %s:%s\r\n", pa[i].name, pa[i].args);
-				_plog->AddLog2("\r\n");
-			}
-			else
-			{
-				_plog->AddLog("MSG:ucid %u:%s %s %s", ucid, _httppkg._method, _httppkg._request, _httppkg._version);
-			}
+				_plog->AddLog("MSG:ucid %u read:%s", ucid, _httppkg._sorgfirstline);
 			if (!stricmp("GET", _httppkg._method)) //GET
 			{
 				char skey[128];
 				if (_httppkg.GetWebSocketKey(skey, sizeof(skey))) //web_socket升级
-				{
-					if (_plog)
-						_plog->AddLog("MSG:ucid %u Upgrade websocket", ucid);
-					return DoUpgradeWebSocket(ucid, skey); //处理Upgrade中的Get
-				}
+					return DoUpgradeWebSocket(ucid, skey); //处理Upgrade中的Get				
 				else
 					return DoGetAndHead(ucid);
 			}
@@ -1354,7 +1348,6 @@ namespace ec
 			DoBadRequest(ucid);//不支持其他方法
 			return _httppkg.HasKeepAlive();
 		}
-
 		
 		
 		/*!
@@ -1473,6 +1466,8 @@ namespace ec
 			SendToUcid(ucid, (void*)sret, (unsigned int)strlen(sret), true);
 			if (_pcfg->_blogdetail && _plog)
 				_plog->AddLog("MSG:write ucid %u:\r\n%s", ucid, sret);
+			else if (_plog)
+				_plog->AddLog("MSG:write ucid %u not found(404)", ucid);
 		}
 
 		/*!
@@ -1484,6 +1479,8 @@ namespace ec
 			SendToUcid(ucid, (void*)sret, (unsigned int)strlen(sret), true);
 			if (_pcfg->_blogdetail && _plog)
 				_plog->AddLog("MSG:write ucid %u:\r\n%s", ucid, sret);
+			else if(_plog)
+				_plog->AddLog("MSG:write ucid %u bad request(400)", ucid);
 		}
 
 	protected:
@@ -1492,7 +1489,7 @@ namespace ec
 		*/
 		virtual void	OnClientDisconnect(unsigned int  ucid, unsigned int uopt, int nerrorcode) //uopt = TCPIO_OPT_XXXX
 		{
-			if (_pclis->Del(ucid) && _plog)
+			if (_pclis->Del(ucid) && _plog && _pcfg->_blogdetail)
 				_plog->AddLog("MSG:ucid %u disconnected!", ucid);
 		};
 
@@ -1560,12 +1557,13 @@ namespace ec
 
 		virtual void    OnConnected(unsigned int  ucid, const char* sip)
 		{
-			_log.AddLog("MSG:ucid %u TCP connected from IP:%s!", ucid, sip);
+			if(_cfg._blogdetail)
+				_log.AddLog("MSG:ucid %u TCP connected from IP:%s!", ucid, sip);
 			_clients.Add(ucid, sip);
 		};
 		virtual void	OnRemovedUCID(unsigned int ucid)
 		{
-			if (_clients.Del(ucid))
+			if (_clients.Del(ucid) && _cfg._blogdetail)
 				_log.AddLog("MSG:ucid %u disconnected!", ucid);
 		};
 		virtual void    CheckNotLogin() {};

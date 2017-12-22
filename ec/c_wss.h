@@ -58,6 +58,15 @@ namespace ec
 		*/
 		bool DoUpgradeWebSocket(int ucid, const char *skey)
 		{
+			if (_pcfg->_blogdetail_wss && _plog)
+			{
+				char stmp[128] = { 0 };
+				_plog->AddLog("MSG: ucid %u upgrade websocket",ucid);				
+				if (_httppkg.GetHeadFiled("Origin", stmp, sizeof(stmp)))
+					_plog->AddLog2("\tOrigin: %s\n", stmp);
+				if (_httppkg.GetHeadFiled("Sec-WebSocket-Extensions", stmp, sizeof(stmp)))
+					_plog->AddLog2("\tSec-WebSocket-Extensions: %s\n", stmp);
+			}
 			const char* sc;
 			char sProtocol[128] = { 0 }, sVersion[128] = { 0 }, tmp[256] = { 0 };
 			_httppkg.GetHeadFiled("Sec-WebSocket-Protocol", sProtocol, sizeof(sProtocol));
@@ -66,7 +75,7 @@ namespace ec
 			if (atoi(sVersion) != 13)
 			{
 				if (_pcfg->_blogdetail_wss && _plog)
-					_plog->AddLog("MSG:ws sVersion(%s) error :ucid=%d, ", sVersion, ucid);
+					_plog->AddLog("MSG:WSS sVersion(%s) error :ucid=%d, ", sVersion, ucid);
 				DoBadRequest(ucid);
 				return _httppkg.HasKeepAlive();
 			}
@@ -131,14 +140,12 @@ namespace ec
 				}
 			}
 			_answer.Add("\x0d\x0a", 2);
-
-			_pclis->UpgradeWebSocket(ucid, ncompress);//升级协议为websocket
-			SendAppData(ucid, _answer.GetBuf(), _answer.GetSize(), true);//发送
-
-			if (_pcfg->_blogdetail_wss && _plog) {
+			_pclis->UpgradeWebSocket(ucid, ncompress);
+			SendAppData(ucid, _answer.GetBuf(), _answer.GetSize(), true);
+			if (_pcfg->_blogdetail_wss && _plog) {				
 				_answer.Add((char)0);
-				_plog->AddLog("MSG:Write ucid %d\r\n%s", ucid, _answer.GetBuf());
-			}
+				_plog->AddLog("MSG: ucid %u upggrade WSS success\r\n%s", ucid, _answer.GetBuf());
+			}			
 			return true;
 		}
 	protected:		
@@ -157,30 +164,14 @@ namespace ec
 		\return 返回true表示成功，返回false会导致底层断开这个连接
 		*/
 		bool DoHttpRequest(unsigned int ucid)
-		{
+		{			
 			if (_pcfg->_blogdetail_wss && _plog)
-			{
-				_plog->AddLog("MSG:read from ucid %u:", ucid);
-				_plog->AddLog2("   %s %s %s\r\n", _httppkg._method, _httppkg._request, _httppkg._version);
-				int i, n = _httppkg._headers.GetNum();
-				t_httpfileds* pa = _httppkg._headers.GetBuf();
-				for (i = 0; i < n; i++)
-					_plog->AddLog2("    %s:%s\r\n", pa[i].name, pa[i].args);
-				_plog->AddLog2("\r\n");
-			}
-			else
-			{
-				_plog->AddLog("MSG:ucid %u:%s %s %s", ucid, _httppkg._method, _httppkg._request, _httppkg._version);
-			}
+				_plog->AddLog("MSG:ucid %u read:%s", ucid, _httppkg._sorgfirstline);
 			if (!stricmp("GET", _httppkg._method)) //GET
 			{
 				char skey[128];
-				if (_httppkg.GetWebSocketKey(skey, sizeof(skey))) //web_socket升级
-				{
-					if (_plog)
-						_plog->AddLog("MSG:ucid %u Upgrade websocket", ucid);
-					return DoUpgradeWebSocket(ucid, skey); //处理Upgrade中的Get
-				}
+				if (_httppkg.GetWebSocketKey(skey, sizeof(skey))) //websocket upgrade
+					return DoUpgradeWebSocket(ucid, skey);
 				else
 					return DoGetAndHead(ucid);
 			}
@@ -282,7 +273,6 @@ namespace ec
 				_plog->AddLog("MSG:write ucid %u:", ucid);
 				_plog->AddLog2("%s", atmp.GetBuf());
 			}
-
 			if (bGet) //get
 			{
 				if (HTTPENCODE_DEFLATE == necnode)
@@ -306,6 +296,8 @@ namespace ec
 			SendAppData(ucid, (void*)sret, (unsigned int)strlen(sret), true);
 			if (_pcfg->_blogdetail_wss && _plog)
 				_plog->AddLog("MSG:write ucid %u:\r\n%s", ucid, sret);
+			else if(_plog)
+				_plog->AddLog("MSG:write ucid %u not found(404)", ucid);
 		}
 
 		/*!
@@ -317,6 +309,8 @@ namespace ec
 			SendAppData(ucid, (void*)sret, (unsigned int)strlen(sret), true);
 			if (_pcfg->_blogdetail_wss && _plog)
 				_plog->AddLog("MSG:write ucid %u:\r\n%s", ucid, sret);
+			else if (_plog)
+				_plog->AddLog("MSG:write ucid %u bad request(400)", ucid);
 		}
 
 	protected:
@@ -335,8 +329,6 @@ namespace ec
 		virtual bool    OnAppData(unsigned int ucid, const void* pdata, unsigned int usize)//返回false表示要服务端要断开连接
 		{
 			bool bret = true;
-			if (_pcfg->_blogdetail_wss && _plog)
-				_plog->AddLog("MSG:ucid %d read %d bytes!", ucid, usize);
 			int nr = _pclis->OnReadData(ucid, (const char*)pdata, usize, &_httppkg);//解析数据，结构存放在_httppkg中
 			while (nr == he_ok)
 			{
@@ -396,12 +388,13 @@ namespace ec
 		virtual void    OnConnected(unsigned int  ucid, const char* sip)
 		{
 			cTlsServer::OnConnected(ucid, sip);
-			_log.AddLog("MSG:ucid %u TCP connected from IP:%s!", ucid, sip);
+			if(_cfg._blogdetail_wss)
+				_log.AddLog("MSG:ucid %u TCP connected from IP:%s!", ucid, sip);
 			_clients.Add(ucid, sip);
 		};
 		virtual void	OnRemovedUCID(unsigned int ucid)
 		{
-			if (_clients.Del(ucid))
+			if (_clients.Del(ucid) && _cfg._blogdetail_wss)
 				_log.AddLog("MSG:ucid %u disconnected!", ucid);
 			cTlsServer::OnRemovedUCID(ucid);
 		};
