@@ -28,6 +28,17 @@ namespace ec
             s[i++] = 0;
     }
 
+	inline void str_trimright(char* s, size_t nsize)
+	{
+		size_t i;
+		if (!nsize || !s)
+			return;		
+		i = nsize - 1;
+		s[i--] = '\0';
+		while ( i >= 0 && (s[i] == '\x20' || s[i] == '\t'))
+			s[i--] = '\0';
+	}
+
     inline void str_trim(char *s)
     {
         if (!*s)
