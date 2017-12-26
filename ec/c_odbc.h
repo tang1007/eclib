@@ -259,7 +259,7 @@ namespace ec
 		SQLUSMALLINT ColNum;				
 		SQLCHAR      ColName[ODBCFDNAMELEN];
 		SQLSMALLINT  NameLength;
-		SQLSMALLINT  DataType;
+		SQLSMALLINT  DataType; //SQL_CHAR ,...,SQL_DATETIME,SQL_VARCHAR
         SQLULEN      ColumnSize;
         SQLSMALLINT  DecimalDigits;
         SQLSMALLINT  Nullable;				//  SQL_NO_NULLS; SQL_NULLABLE ; SQL_NULLABLE_UNKNOWN
@@ -360,7 +360,7 @@ namespace ec
 		}
 
 		//执行查询SQL语句,和sqlite3_exec 类似
-		int Exec_SelSql(const char* sql, int(*OnRead)(void* pobj, int nargc, char** data, char** columns), void* pParam, ec::cLog* plog = 0)
+		int Exec_SelSql(const char* sql, int(*OnRead)(void* pobj, int nargc, char** data, char** columns), void* pParam, ec::tArray<ODBC_FDINFO>*pfldinfo = 0,ec::cLog* plog = 0)
 		{
 			DBRET dbr = Open();
 			if (dbr != DBE_OK)
@@ -376,15 +376,21 @@ namespace ec
 			}
 			if (!GetFieldInfo())
 				return -1;
+			if (pfldinfo)
+				pfldinfo->ClearData();
 			for (unsigned int i = 0; i < _ucols; i++)
-				fs.Add(_fds[i].ColumnSize + 4 - _fds[i].ColumnSize % 4);
+			{
+				fs.Add(_fds[i].ColumnSize + sizeof(SQLLEN) - _fds[i].ColumnSize % sizeof(SQLLEN));
+				if (pfldinfo)
+					pfldinfo->Add(&_fds[i], 1);
+			}
 			size_t sizerd = 0;
 			for (int i = 0; i < fs.GetNum(); i++)
-				sizerd += fs[i] + sizeof(SQLINTEGER);
+				sizerd += fs[i] + sizeof(SQLLEN);
 
 			ec::cAp bufs(sizerd * SQL_ROW_ARRAY_SIZE);
 
-			SQLINTEGER		NumRowsFetched;
+			SQLLEN		NumRowsFetched;
 			SQLUSMALLINT	RowStatusArray[SQL_ROW_ARRAY_SIZE];
 
 			SQLSetStmtAttr(_hrd, SQL_ATTR_ROW_BIND_TYPE, (SQLPOINTER)sizerd, SQL_IS_UINTEGER);
@@ -395,22 +401,22 @@ namespace ec
 			char *pb = (char *)bufs.getbuf();
 			for (int i = 0; i < fs.GetNum(); i++)
 			{
-				SQLBindCol(_hrd, i + 1, SQL_C_CHAR, pb, fs[i], (SQLINTEGER*)(pb + fs[i]));
-				pb += fs[i] + sizeof(SQLINTEGER);
+				SQLBindCol(_hrd, i + 1, SQL_C_CHAR, pb, fs[i], (SQLLEN*)(pb + fs[i]));
+				pb += fs[i] + sizeof(SQLLEN);
 			}
-			SQLINTEGER len;
+			SQLLEN len;
 			ec::tArray<char*> keys(32);
 			ec::tArray<char*> datas(32);
 			while ((rc = SQLFetchScroll(_hrd, SQL_FETCH_NEXT, 0)) != SQL_NO_DATA)
 			{
-				if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)//SQL_SUCCESS_WITH_INFO一般是字符串右截断或类型转换丢失精度
+				if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
 				{
 					if (DBE_CON == ec::CODBC_WKS::LogDbErr(plog, "ERR: SQLFetchScroll @ Exec_SelSql ", SQL_HANDLE_STMT, _hrd))
 						return DBE_CON;
 					return DBE_EXEC;
 				}
 
-				for (SQLINTEGER i = 0; i < NumRowsFetched; i++)
+				for (SQLLEN i = 0; i < NumRowsFetched; i++)
 				{
 					if (RowStatusArray[i] == SQL_ROW_SUCCESS || RowStatusArray[i] == SQL_ROW_SUCCESS_WITH_INFO)
 					{
@@ -421,18 +427,19 @@ namespace ec
 						pb += i * sizerd;
 						for (int j = 0; j < fs.GetNum(); j++)
 						{
-							len = *((SQLINTEGER*)(pb + fs[j]));
+							len = *((SQLLEN*)(pb + fs[j]));
 							if (len < 0)
 								*pb = '\0';
 							else
 							{
 								if (len >(int)fs[j])
 									len = (int)fs[j];
+								pb[len] = '\0';
 								ec::str_trimright(pb, len);
 							}
 							keys.Add((char*)_fds[j].ColName);
 							datas.Add(pb);
-							pb += fs[j] + sizeof(SQLINTEGER);
+							pb += fs[j] + sizeof(SQLLEN);
 						}
 						if (keys.GetNum() > 0)
 							OnRead(pParam, keys.GetNum(), datas.GetBuf(), keys.GetBuf());
