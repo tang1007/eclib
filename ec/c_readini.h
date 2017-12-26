@@ -280,11 +280,11 @@ namespace ec
             char *pline = m_szLine, *pt;
             while ((*pline == ' ' || *pline == '\t') && *pline != '\0')
                 pline++;
-            if (*pline == '\0' || *pline == ';')
+			if (*pline == '\0' || *pline == ';' || *pline == '#')
                 return;
 
             pt = pline;
-            while (*pt != '\0' && *pt != ';')
+			while (*pt != '\0' && *pt != ';' && *pt != '#')
                 pt++;
             *pt = '\0';
             while (pt > m_szLine)
