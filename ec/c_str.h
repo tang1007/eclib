@@ -33,8 +33,7 @@ namespace ec
 		size_t i;
 		if (!nsize || !s)
 			return;		
-		i = nsize - 1;
-		s[i--] = '\0';
+		i = nsize - 1;		
 		while ( i >= 0 && (s[i] == '\x20' || s[i] == '\t'))
 			s[i--] = '\0';
 	}
