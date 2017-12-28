@@ -239,13 +239,19 @@ namespace ec
 	class cDayTimeJob
 	{
 	public:
+		cDayTimeJob()
+		{
+			SetTime(0, 0, 0);
+		}
 		cDayTimeJob(int hour, int min, int sec)
 		{
 			SetTime(hour, min, sec);
 		}
-		bool IsJobTime()
+		bool IsJobTime(time_t cur = 0)
 		{
-			time_t tcur = ::time(NULL);
+			time_t tcur = cur;
+			if(!cur)
+				tcur = ::time(NULL);
 			if ((tcur - _ti_o) >= _ti_add)
 			{
 				CalNextDay();
