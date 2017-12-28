@@ -203,6 +203,9 @@ namespace ec
         inline size_t getpos() { return _pos; };
         inline size_t leftsize() { return _size - _pos; }
         inline void* getp() { return _ps; };
+		inline bool iseof() {
+			return _pos == _size;
+		}
     protected:
         size_t	_pos;
         size_t	_size;
