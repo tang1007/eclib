@@ -697,6 +697,12 @@ namespace ec
             _size = _p ? newsize : 0;
             return _p != 0;
         }
+		bool upsizeto(size_t newsize, bool bkeepdata = false)
+		{
+			if (_size >= newsize)
+				return true;
+			return resize(newsize, bkeepdata);
+		}
     protected:
         size_t _size;
         void* _p;
