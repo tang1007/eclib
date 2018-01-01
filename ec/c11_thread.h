@@ -16,30 +16,25 @@ namespace ec
 	class cThread
 	{
 	public:
-		cThread() :_bRuning(0), _bKilling(0)
+		cThread():_bRuning(0),_bKilling(0)
 		{
-			_pevt = nullptr;
-			_pdojob = nullptr;
-			_pdoarg = nullptr;
-			_pthread = nullptr;
-		};
-		virtual ~cThread() {
-			if (_pthread != nullptr)
-				delete _pthread;
 		}
-		bool IsRun() { return 0 != _bRuning; };
+		virtual ~cThread() {
+			StopThread();
+		}
 	protected:
 		std::atomic_int	_bRuning;
 		std::atomic_int	_bKilling;
 
-		std::thread *_pthread;
-		cEvent*		 _pevt;
-		void		*_pdoarg;
-		bool(*_pdojob)(void *); //return false will stop thread    
+		std::thread *_pthread = nullptr;
+		cEvent* _pevt = nullptr;  // trigger event
+
+		void *_pdoarg = nullptr;
+		bool(*_pdojob)(void *) = nullptr; // Non-derived use, return false will stop thread    
 	public:
 		void StartThread(cEvent* pevt, bool(*dojob)(void *) = nullptr, void*  pargs = nullptr)
 		{
-			if (_bRuning)
+			if (nullptr != _pthread)
 				return;
 			_pevt = pevt;
 			_pdojob = dojob;
@@ -57,7 +52,8 @@ namespace ec
 				_pthread = nullptr;
 			}
 		}
-		bool Killing() { return 0 != _bKilling; };
+		inline bool IsRun() { return 0 != _bRuning; };
+		inline bool Killing() { return 0 != _bKilling; };
 	private:
 		static void ThreadProcess(void* pargs)
 		{
@@ -70,13 +66,11 @@ namespace ec
 			OnStart();
 			_bKilling = 0;
 			_bRuning = 1;
-			while (!_bKilling)
-			{
+			while (!_bKilling) {
 				if (!_pevt || _pevt->Wait(100)) {
 					if (!_pdojob)
 						dojob();
-					else
-					{
+					else {
 						if (!_pdojob(_pdoarg))
 							break;
 					}

@@ -13,18 +13,18 @@ namespace ec {
 	class cEvent
 	{
 	public:
-		cEvent(bool bInitiallyOwn = false, bool bManualReset = false)
+		cEvent(bool bInitiallyOwn = false, bool bManualReset = false) :_nready(bInitiallyOwn), _bManualReset(bManualReset)
 		{
-			_nready = bInitiallyOwn;
-			_bManualReset = bManualReset;
 		}
-		bool SetEvent() {
+		bool SetEvent()
+		{
 			std::unique_lock<std::mutex> lck(_mtx);
 			_nready = true;
 			_cv.notify_one();
 			return true;
 		};
-		bool ResetEvent() {
+		bool ResetEvent()
+		{
 			std::unique_lock<std::mutex> lck(_mtx);
 			_nready = false;
 			return true;
