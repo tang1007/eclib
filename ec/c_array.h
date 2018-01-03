@@ -69,6 +69,15 @@ namespace ec {
         inline int	GetNum() const { return (int)_usize; };
         inline unsigned int GetBufSize() { return (unsigned int)_ubufsize; };
         inline void SetDataSize(unsigned int n) { _usize = n; };
+		inline size_t size() {
+			return _usize;
+		}
+		inline void clear() {
+			_usize = 0;
+		}
+		inline size_t capacity() {
+			return _ubufsize;
+		}		
         bool Add(T obj)
         {
             if (!Grown(1))
@@ -94,7 +103,7 @@ namespace ec {
         void SetGrowSize(size_t ugrowsize) {
             _ugrown = ugrowsize;
             if (_ugrown % 4)
-                _ugrown += 8 - (_ugrown % 8);
+                _ugrown += 4 - (_ugrown % 4);
             if (_ugrown > MAX_CARRAY_SIZE)
                 _ugrown = MAX_CARRAY_SIZE;
         };
