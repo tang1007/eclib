@@ -114,11 +114,13 @@ namespace ec
 		};
 		inline bool empty() const noexcept
 		{
-			return !(_pbuf && _usize);
+			return !_pbuf || !_usize;
 		}
 		iterator begin() noexcept
 		{
 			iterator ir = 0;
+			if (nullptr == _ppv || !_usize)
+				return ~ir;
 			for (size_type i = 0; i < _uhashsize; i++)
 			{
 				if (_ppv[i])
@@ -159,7 +161,7 @@ namespace ec
 		};
 		value_type* get(key_type key) noexcept
 		{
-			if (nullptr == _ppv)
+			if (nullptr == _ppv || !_usize)
 				return nullptr;
 			size_type upos = _Hasher()(key) % _uhashsize;
 			t_node* pnode;
@@ -179,18 +181,21 @@ namespace ec
 		}
 		void clear() noexcept
 		{
-			if (!_ppv || !_usize)
+			if (!_ppv)
 				return;
-			t_node* ppre, *pNode;
-			for (size_type i = 0; i < _uhashsize; i++)
+			if (_usize)
 			{
-				pNode = _ppv[i];
-				while (pNode)
+				t_node* ppre, *pNode;
+				for (size_type i = 0; i < _uhashsize; i++)
 				{
-					ppre = pNode;
-					pNode = pNode->pNext;
-					_DelVal()(ppre->value);
-					delete ppre;
+					pNode = _ppv[i];
+					while (pNode)
+					{
+						ppre = pNode;
+						pNode = pNode->pNext;
+						_DelVal()(ppre->value);
+						delete ppre;
+					}
 				}
 			}
 			delete[] _ppv;
@@ -199,7 +204,7 @@ namespace ec
 		};
 		bool erase(key_type key) noexcept
 		{
-			if (nullptr == _ppv)
+			if (nullptr == _ppv || !_usize)
 				return false;
 			size_type upos = _Hasher()(key) % _uhashsize;
 			t_node** ppNodePrev;
@@ -222,7 +227,7 @@ namespace ec
 		value_type* next(iterator& i) noexcept
 		{
 			value_type* pv = nullptr;
-			if (nullptr == _ppv || (i >> 32) >= _uhashsize) {
+			if (nullptr == _ppv || (i >> 32) >= _uhashsize || !_usize) {
 				i = end();
 				return pv;
 			}
