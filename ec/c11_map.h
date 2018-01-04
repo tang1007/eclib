@@ -23,41 +23,9 @@ limitations under the License.
 
 #pragma once
 #include <cstdint>
+#include "c11_hash.h"
 namespace ec
-{
-	template<class _Kty> // hash class
-	struct hash
-	{
-		size_t operator()(_Kty key)
-		{
-			if (sizeof(size_t) == 8)
-				return (((size_t)key) * 11400714819323198485ULL);
-			return (((size_t)key) * 2654435769U);
-		}
-	};
-	template<>
-	struct hash<const char*>
-	{
-		size_t  operator()(const char*  key)
-		{
-			register unsigned int uHash = 0;
-			while (char ch = *key++)
-				uHash = uHash * 31 + ch;
-			return uHash;
-		}
-	};
-	template<>
-	struct hash<char*>
-	{
-		size_t operator()(char*  key)
-		{
-			register unsigned int uHash = 0;
-			while (char ch = *key++)
-				uHash = uHash * 31 + ch;
-			return uHash;
-		}
-	};
-
+{	
 	template<class _Kty, class _Ty> // is _Kty is equal to the key in class _Ty
 	struct key_equal
 	{
