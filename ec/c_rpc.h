@@ -1486,7 +1486,7 @@ namespace ec
                 int nr = ConnectIn();
                 if (nr < 0)
                 {
-                    ec::atomic_setlong(&_lKillTread, 1);
+                    setkill(1);
                     if (_funevt)
                         _funevt(_clsevt, (RPC_CLINET_EVT)nr);//通知                    
                     return;
@@ -1494,7 +1494,7 @@ namespace ec
             }
             if (_bdisconnect) //主动断开
             {
-                ec::atomic_setlong(&_lKillTread, 1);
+				setkill(1);
                 _bdisconnect = 0;
                 if (_sock != INVALID_SOCKET)
                 {
@@ -1522,7 +1522,7 @@ namespace ec
             }
             if (nr < 0)
             {
-                ec::atomic_setlong(&_lKillTread, 1);
+				setkill(1);
                 if (_sock != INVALID_SOCKET)
                 {
                     _nstatus = -1;
