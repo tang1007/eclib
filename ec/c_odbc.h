@@ -20,6 +20,8 @@
 #include "c_log.h"
 #include "c_trace.h"
 #include "c_str.h"
+#include "c_array.h"
+#include "c11_vector.h"
 typedef int						DBRET;
 #define DBDSNSTR_LEN			1024
 
@@ -357,6 +359,96 @@ namespace ec
 				return true;
 			}
 			return false;
+		}
+
+		//执行查询SQL语句,和sqlite3_exec 类似
+		int Exec_SelSql(const char* sql, int(*OnRead)(void* pobj, int nargc, char** data, char** columns), void* pParam, ec::vector<ODBC_FDINFO>*pfldinfo = 0, ec::cLog* plog = 0)
+		{
+			DBRET dbr = Open();
+			if (dbr != DBE_OK)
+				return dbr;
+			SQLRETURN		rc;
+			ec::tArray<size_t> fs(32);
+			rc = SQLExecDirect(_hrd, (SQLCHAR*)sql, SQL_NTS);
+			if (SQL_SUCCESS != rc)
+			{
+				if (DBE_CON == ec::CODBC_WKS::LogDbErr(plog, "ERR: SQLExecDirect  @ Exec_SelSql", SQL_HANDLE_STMT, _hrd))
+					return DBE_CON;
+				return DBE_EXEC;
+			}
+			if (!GetFieldInfo())
+				return -1;
+			if (pfldinfo)
+				pfldinfo->clear();
+			for (unsigned int i = 0; i < _ucols; i++)
+			{
+				fs.Add(_fds[i].ColumnSize + sizeof(SQLLEN) - _fds[i].ColumnSize % sizeof(SQLLEN));
+				if (pfldinfo)
+					pfldinfo->add(&_fds[i], 1);
+			}
+			size_t sizerd = 0;
+			for (int i = 0; i < fs.GetNum(); i++)
+				sizerd += fs[i] + sizeof(SQLLEN);
+
+			ec::cAp bufs(sizerd * SQL_ROW_ARRAY_SIZE);
+
+			SQLLEN		NumRowsFetched;
+			SQLUSMALLINT	RowStatusArray[SQL_ROW_ARRAY_SIZE];
+
+			SQLSetStmtAttr(_hrd, SQL_ATTR_ROW_BIND_TYPE, (SQLPOINTER)sizerd, SQL_IS_UINTEGER);
+			SQLSetStmtAttr(_hrd, SQL_ATTR_ROW_ARRAY_SIZE, (SQLPOINTER)SQL_ROW_ARRAY_SIZE, SQL_IS_UINTEGER);
+			SQLSetStmtAttr(_hrd, SQL_ATTR_ROW_STATUS_PTR, RowStatusArray, 0);
+			SQLSetStmtAttr(_hrd, SQL_ATTR_ROWS_FETCHED_PTR, &NumRowsFetched, 0);
+
+			char *pb = (char *)bufs.getbuf();
+			for (int i = 0; i < fs.GetNum(); i++)
+			{
+				SQLBindCol(_hrd, i + 1, SQL_C_CHAR, pb, fs[i], (SQLLEN*)(pb + fs[i]));
+				pb += fs[i] + sizeof(SQLLEN);
+			}
+			SQLLEN len;
+			ec::tArray<char*> keys(32);
+			ec::tArray<char*> datas(32);
+			while ((rc = SQLFetchScroll(_hrd, SQL_FETCH_NEXT, 0)) != SQL_NO_DATA)
+			{
+				if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
+				{
+					if (DBE_CON == ec::CODBC_WKS::LogDbErr(plog, "ERR: SQLFetchScroll @ Exec_SelSql ", SQL_HANDLE_STMT, _hrd))
+						return DBE_CON;
+					return DBE_EXEC;
+				}
+
+				for (SQLLEN i = 0; i < NumRowsFetched; i++)
+				{
+					if (RowStatusArray[i] == SQL_ROW_SUCCESS || RowStatusArray[i] == SQL_ROW_SUCCESS_WITH_INFO)
+					{
+						keys.ClearData();
+						datas.ClearData();
+
+						pb = (char *)bufs.getbuf();
+						pb += i * sizerd;
+						for (int j = 0; j < fs.GetNum(); j++)
+						{
+							len = *((SQLLEN*)(pb + fs[j]));
+							if (len < 0)
+								*pb = '\0';
+							else
+							{
+								if (len >(int)fs[j])
+									len = (int)fs[j];
+								pb[len] = '\0';
+								ec::str_trimright(pb, len);
+							}
+							keys.Add((char*)_fds[j].ColName);
+							datas.Add(pb);
+							pb += fs[j] + sizeof(SQLLEN);
+						}
+						if (keys.GetNum() > 0)
+							OnRead(pParam, keys.GetNum(), datas.GetBuf(), keys.GetBuf());
+					}
+				}
+			}
+			return DBE_OK;
 		}
 
 		//执行查询SQL语句,和sqlite3_exec 类似
