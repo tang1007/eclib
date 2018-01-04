@@ -9,7 +9,9 @@
 
 #ifndef C_EVENT_H
 #define C_EVENT_H
-
+#ifdef USE_ECLIB_C11
+#include "c11_event.h"
+#else
 #ifndef _WIN32
 #include <pthread.h>
 #include <sys/time.h>
@@ -118,6 +120,6 @@ namespace ec {
 #endif
 
 }; // namespace ec
-
+#endif
 #endif // C_EVENT_H
 

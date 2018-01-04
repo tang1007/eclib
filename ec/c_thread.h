@@ -9,7 +9,9 @@ ec library is free C++ library.
 */
 #ifndef C_THREAD_H
 #define C_THREAD_H
-
+#ifdef USE_ECLIB_C11
+#include "c11_thread.h"
+#else
 #include "c_event.h"
 #include "c_atomic.h"
 namespace ec {
@@ -57,6 +59,7 @@ namespace ec {
                 Sleep(100);            
         }
         bool Killing() { return 0 != atomic_addlong(&_lKillTread, 0); };
+		inline void setkill(int n) { atomic_setlong(&_lKillTread, n); };
     private:
         static void ThreadProcess(void* pargs)
         {
@@ -139,6 +142,7 @@ namespace ec {
             }
         }
         bool Killing() { return 0 != atomic_addlong(&_lKillTread, 0); };
+		inline void setkill(int n) { atomic_setlong(&_lKillTread, n); };
         static void* ThreadProcess(void* pargs)
         {
             cThread* pt = (cThread*)pargs;
@@ -174,5 +178,6 @@ namespace ec {
     };
 #endif
 }; //namespace ec
+#endif
 #endif
 
