@@ -28,6 +28,7 @@ namespace ec
 	{
 	public:
 		cCritical() = default;
+		cCritical(unsigned int ucount) {};
 		inline void Lock() { lock(); }
 		inline void Unlock() { unlock(); }
 	};
