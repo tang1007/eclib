@@ -439,7 +439,7 @@ namespace ec
             {
                 if (TCPIO_MSG_EXIT == BytesTransferred)
                 {
-                    InterlockedExchange(&_lKillTread, 1); // stop thread
+                    setkill(1); // stop thread
                     return;
                 }
                 if (TCPIO_MSG_SELF == (TCPIO_MSG_SELF & BytesTransferred))
