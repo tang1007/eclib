@@ -1,7 +1,7 @@
 ﻿/*!
 \file c11_vector.h
 \author	kipway@outlook.com
-\update 2018.1.3
+\update 2018.1.4
 
 eclib class vector with c++11. fast noexcept simple vector. members of a vector can only be simple types, pointers and structures
 
@@ -79,6 +79,11 @@ namespace ec
 		{
 			_usize = 0;
 		}
+		inline void clear(size_type shrinksize) noexcept
+		{
+			_usize = 0;
+			shrink(shrinksize);
+		}
 		inline size_type capacity() const noexcept
 		{
 			return _ubufsize;
@@ -144,6 +149,16 @@ namespace ec
 		{
 			while (first != last)
 				fun(*first++);
+		}
+		void for_each(void*param, void(*fun)(value_type& val, void* param)) noexcept
+		{
+			for (size_type i = 0; i < _usize; i++)
+				fun(_pbuf[i], param);
+		}
+		void for_each(void*param, iterator first, iterator last, void(*fun)(value_type& val, void* param)) noexcept
+		{
+			while (first != last)
+				fun(*first++, param);
 		}
 		inline value_type* data() noexcept
 		{
@@ -214,7 +229,16 @@ namespace ec
 		}
 		void shrink(size_type size) noexcept
 		{
-			if (!_pbuf || _ubufsize <= size || _usize >= size)
+			if (!_pbuf || _ubufsize <= size)
+				return;
+			if (!size && !_usize)
+			{
+				free(_pbuf);
+				_pbuf = 0;
+				_ubufsize = 0;
+				return;
+			}
+			if (_usize >= size)
 				return;
 			value_type* pnew = (value_type*)malloc(size * sizeof(value_type));
 			if (!pnew)
