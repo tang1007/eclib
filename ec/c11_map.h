@@ -114,7 +114,7 @@ namespace ec
 		};
 		inline bool empty() const noexcept
 		{
-			return !_pbuf || !_usize;
+			return !_ppv || !_usize;
 		}
 		iterator begin() noexcept
 		{
