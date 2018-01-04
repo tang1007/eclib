@@ -114,6 +114,11 @@ namespace ec
 		{
 			return add(val);
 		}
+		inline void pop_back()
+		{
+			if (_usize > 0)
+				_usize--;
+		}
 		inline value_type& operator [](size_type pos)
 		{
 			return _pbuf[pos];
