@@ -68,6 +68,7 @@ namespace ec
 		}
 		inline bool IsRun() { return 0 != _bRuning; };
 		inline bool Killing() { return 0 != _bKilling; };
+		inline void setkill(int n) { _bKilling = n; };
 	private:
 		static void ThreadProcess(void* pargs)
 		{
@@ -81,7 +82,7 @@ namespace ec
 			_bKilling = 0;
 			_bRuning = 1;
 			while (!_bKilling) {
-				if (!_pevt || _pevt->Wait(100)) {
+				if (!_pevt || _pevt->Wait(200)) {
 					if (!_pdojob)
 						dojob();
 					else {
