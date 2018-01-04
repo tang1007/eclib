@@ -3,7 +3,7 @@
 \author	kipway@outlook.com
 \update 2018.1.3
 
-eclib class hash with c++11. 
+eclib class hash with c++11. Separated from c11_map.h
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib
