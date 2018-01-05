@@ -350,7 +350,8 @@ namespace ec {
 		}
 		inline bool Delete(size_type pos, size_type rsize)
 		{
-			return erase(pos, rsize);
+			erase(pos, rsize);
+			return true;
 		}
 		inline void reduceto(size_type size)
 		{
