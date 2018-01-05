@@ -5,6 +5,11 @@ ec library is free C++ library.
 
 \author	 kipway@outlook.com
 */
+
+#ifndef USE_ECLIB_C11
+#define USE_ECLIB_C11 1 // 1: use std::thread,std:mutex,std::condition_variable and c++11 style code. 0:normal
+#endif
+
 #ifndef C_SYSTEM_H
 #define C_SYSTEM_H
 

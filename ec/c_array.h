@@ -27,7 +27,7 @@ limitations under the License.
 #include <stdlib.h>
 #include <memory.h>
 #include <stdint.h>
-#ifdef USE_ECLIB_C11
+#if (0 != USE_ECLIB_C11)
 #include <cstdint>
 #include <algorithm>
 #endif
@@ -258,7 +258,7 @@ namespace ec {
 				_usize -= size;
 			}
 		}		
-#ifdef USE_ECLIB_C11
+#if (0 != USE_ECLIB_C11)
 		inline void sort(bool(*cmp)(const value_type& v1, const value_type& v2))
 		{
 			if (_usize > 1)

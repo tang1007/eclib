@@ -9,7 +9,7 @@ ec library is free C++ library.
 */
 #ifndef C_THREAD_H
 #define C_THREAD_H
-#ifdef USE_ECLIB_C11
+#if (0 != USE_ECLIB_C11)
 #include "c11_thread.h"
 #else
 #include "c_event.h"

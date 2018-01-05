@@ -10,7 +10,7 @@ ec library is free C++ library.
 
 #ifndef C_RITICAL_H
 #define C_RITICAL_H
-#ifdef USE_ECLIB_C11
+#if (0 != USE_ECLIB_C11)
 #include "c11_critical.h"
 #else
 #ifdef _WIN32

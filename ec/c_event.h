@@ -9,7 +9,7 @@
 
 #ifndef C_EVENT_H
 #define C_EVENT_H
-#ifdef USE_ECLIB_C11
+#if (0 != USE_ECLIB_C11)
 #include "c11_event.h"
 #else
 #ifndef _WIN32
