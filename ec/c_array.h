@@ -90,10 +90,6 @@ namespace ec {
 		{
 			return SIZE_MAX / sizeof(value_type);
 		}
-		inline value_type& operator [](int nindex)
-		{
-			return _pbuf[nindex];
-		}
 		inline value_type& operator [](size_type pos)
 		{
 			return _pbuf[pos];
