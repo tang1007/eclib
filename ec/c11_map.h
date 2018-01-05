@@ -246,6 +246,16 @@ namespace ec
 				pv = next(i);
 			}
 		}
+		void for_each(void* param, void(*fun)(value_type& val, void* param)) noexcept
+		{
+			iterator i = begin();
+			value_type* pv = next(i);
+			while (pv)
+			{
+				fun(*pv, param);
+				pv = next(i);
+			}
+		}
 	private:
 		iterator _nexti(unsigned int ih, unsigned int il) noexcept
 		{
