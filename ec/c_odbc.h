@@ -1,9 +1,24 @@
-/*
-\file tOdbc.h
-\brief ODBC class
+/*!
+\file c_odbc.h
+\author kipway@outlook.com
+\update 2018.1.11
 
-   TOM library is free C++ library.
-\author jiangyong,13212314895@126.com
+eclib odbc class
+
+eclib Copyright (c) 2017-2018, kipway
+source repository : https://github.com/kipway/eclib
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 #ifndef _TODBC_H
