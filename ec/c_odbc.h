@@ -254,27 +254,25 @@ namespace ec
 		}
 	};
 
-	#define ODBCFDNAMELEN  128
-	#define ODBCFD_MAXCOLS 64
+	#define ODBCFDNAMELEN  128	
 	struct ODBC_FDINFO
 	{
 		SQLUSMALLINT ColNum;				
-		SQLCHAR      ColName[ODBCFDNAMELEN];
+		SQLCHAR      ColName[ODBCFDNAMELEN]; //mssql 128,mysql 64 
 		SQLSMALLINT  NameLength;
 		SQLSMALLINT  DataType; //SQL_CHAR ,...,SQL_DATETIME,SQL_VARCHAR
         SQLULEN      ColumnSize;
         SQLSMALLINT  DecimalDigits;
-        SQLSMALLINT  Nullable;				//  SQL_NO_NULLS; SQL_NULLABLE ; SQL_NULLABLE_UNKNOWN
+        SQLSMALLINT  Nullable;	//  SQL_NO_NULLS; SQL_NULLABLE ; SQL_NULLABLE_UNKNOWN
 	};
 #define SQL_ROW_ARRAY_SIZE 256
 	class CODBC_RD // recordset
 	{
 	public:
-		CODBC_RD(CODBC_DB* pdb)
+		CODBC_RD(CODBC_DB* pdb) : _fds(32)
 		{
 			_pdb = pdb;
 			_hrd = NULL;
-			_ucols = 0;
 		}
 		virtual ~CODBC_RD()
 		{
@@ -283,9 +281,8 @@ namespace ec
 	protected:
 		SQLHSTMT	_hrd;
 		CODBC_DB*	_pdb;
-	
-		unsigned int	_ucols;
-		ODBC_FDINFO _fds[ODBCFD_MAXCOLS];
+			
+		tArray<ODBC_FDINFO> _fds;
 	public:
 		DBRET Open(bool bScrollable = true, int nCursorType = SQL_CURSOR_STATIC)
 		{
@@ -340,22 +337,23 @@ namespace ec
 			ret = ::SQLNumResultCols(_hrd,&snNum);
 			if(ret != SQL_SUCCESS)
 				return false;
-			for(i = 0;i < snNum && i< ODBCFD_MAXCOLS;i++)
+			ODBC_FDINFO t;
+			_fds.clear();
+			for(i = 0;i < snNum;i++)
 			{
-				memset(&_fds[i],0,sizeof(ODBC_FDINFO));
-				ret = ::SQLDescribeCol(_hrd,i+1,(SQLCHAR*)_fds[i].ColName,ODBCFDNAMELEN,&_fds[i].NameLength,&_fds[i].DataType,&_fds[i].ColumnSize,&_fds[i].DecimalDigits,&_fds[i].Nullable);
+				memset(&t,0,sizeof(ODBC_FDINFO));
+				ret = ::SQLDescribeCol(_hrd,i+1,(SQLCHAR*)t.ColName,ODBCFDNAMELEN,&t.NameLength,&t.DataType,&t.ColumnSize,&t.DecimalDigits,&t.Nullable);
 				if(ret != SQL_SUCCESS)
 					return false;
-				_fds[i].ColNum = i+1;
+				_fds.add(t);
 			}
-			_ucols = i;
 			return true;
 		}
-		inline unsigned int GetColNum(){return _ucols;}
-		bool   GetColInfo(unsigned int uIndex,ODBC_FDINFO* p)
+		inline size_t GetColNum(){return _fds.size();}
+		bool   GetColInfo(size_t upos,ODBC_FDINFO* p)
 		{
-			if(uIndex < _ucols){
-				memcpy(p,&_fds[uIndex],sizeof(ODBC_FDINFO));
+			if(upos < _fds.size()){
+				memcpy(p,&_fds[upos],sizeof(ODBC_FDINFO));
 				return true;
 			}
 			return false;
@@ -376,11 +374,11 @@ namespace ec
 					return DBE_CON;
 				return DBE_EXEC;
 			}
-			if (!GetFieldInfo())
+			if (!GetFieldInfo() || !_fds.size())
 				return -1;
 			if (pfldinfo)
 				pfldinfo->clear();
-			for (unsigned int i = 0; i < _ucols; i++)
+			for (auto i = 0; i < _fds.size(); i++)
 			{
 				fs.Add(_fds[i].ColumnSize + sizeof(SQLLEN) - _fds[i].ColumnSize % sizeof(SQLLEN));
 				if (pfldinfo)
@@ -466,11 +464,11 @@ namespace ec
 					return DBE_CON;
 				return DBE_EXEC;
 			}
-			if (!GetFieldInfo())
+			if (!GetFieldInfo() || !_fds.size())
 				return -1;
 			if (pfldinfo)
 				pfldinfo->ClearData();
-			for (unsigned int i = 0; i < _ucols; i++)
+			for (auto i = 0; i < _fds.size(); i++)
 			{
 				fs.Add(_fds[i].ColumnSize + sizeof(SQLLEN) - _fds[i].ColumnSize % sizeof(SQLLEN));
 				if (pfldinfo)
