@@ -106,7 +106,12 @@ namespace ec
 		bool set(key_type key, value_type& Value) noexcept
 		{
 			if (nullptr == _ppv)
-				return false;
+			{
+				_ppv = new t_node*[_uhashsize];
+				if (nullptr == _ppv)
+					return false;
+				memset(_ppv, 0, sizeof(t_node*) * _uhashsize);
+			}			
 			size_type upos = _Hasher()(key) % _uhashsize;
 			t_node* pnode;
 			for (pnode = _ppv[upos]; pnode != nullptr; pnode = pnode->pNext)
