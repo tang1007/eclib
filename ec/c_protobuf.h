@@ -158,7 +158,8 @@ namespace ec
 			{
 				if (len < 8)
 					return false;
-				len -= 8;
+				pd += 8;
+				len -= 8;				
 				break;
 			}
 			case 2: //Length - delimited
@@ -168,14 +169,16 @@ namespace ec
 					return false;
 				if (len < datalen)
 					return false;
-				len -= datalen;
+				pd += len;
+				len -= datalen;				
 				break;
 			}
 			case 5: //32 bit
 			{
 				if (len < 4)
 					return false;
-				len -= 4;
+				pd += 4;
+				len -= 4;				
 				break;
 			}
 			default:
