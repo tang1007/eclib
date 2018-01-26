@@ -1,11 +1,11 @@
 ﻿/*!
 \file c_protobuf.h
 \author kipway@outlook.com
-\update 2018.1.26
+\update 2018.1.26 
 
 eclib class base_protobuf ,parse google protocol buffer
 
-not support start_group and end_group
+not support start_group and end_group 
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib
