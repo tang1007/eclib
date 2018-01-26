@@ -114,7 +114,7 @@ namespace ec
 			uint32_t key;
 			if (!get_varint(pd, len, key))
 				return false;
-			wire_type = key & 0x03;
+			wire_type = key & 0x07;
 			field_number = key >> 3;
 			return true;
 		}
