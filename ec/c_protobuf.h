@@ -169,7 +169,7 @@ namespace ec
 					return false;
 				if (len < datalen)
 					return false;
-				pd += len;
+				pd += datalen;
 				len -= datalen;				
 				break;
 			}
