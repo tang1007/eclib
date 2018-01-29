@@ -1,7 +1,7 @@
 ﻿/*!
 \file c_protobuf.h
 \author kipway@outlook.com
-\update 2018.1.26 
+\update 2018.1.29 
 
 eclib class base_protobuf ,parse google protocol buffer
 
@@ -22,18 +22,21 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-#include <stdlib.h>
 #include <stdint.h>
 #include <memory.h>
 #include "c11_vector.h"
-#define pb_varint  0  //
-#define pb_fixed64 1  //
-#define pb_length_delimited  2  //
+#define pb_varint  0  // Varint
+#define pb_fixed64 1  // 64-bit
+#define pb_length_delimited  2  // Length-delimited
 #define pb_start_group  3 // deprecated not support
 #define pb_end_group  4   //deprecated not support
-#define pb_fixed32 5  //
+#define pb_fixed32 5  // 32-bit
 namespace ec
 {	
+	/*!
+	\brief encode and decode 
+	see https://developers.google.com/protocol-buffers/docs/encoding
+	*/
 	class base_protobuf //base class for encode and decode protobuf
 	{
 	public:
@@ -54,12 +57,11 @@ namespace ec
 			return (int)((v >> 1) ^ (-(int64_t)(v & 1)));
 		}
 		template<class _Tp>
-		inline bool get_varint(const uint8_t* &pd, size_t &len, _Tp &out) const  //get Varint uint32_t or uint64_t
+		inline bool get_varint(const uint8_t* &pd, size_t &len, _Tp &out) const  //get Varint (Base 128 Varints)
 		{
 			int nbit = 0;
 			out = 0;
-			do
-			{
+			do{
 				out |= (*pd & 0x7F) << nbit;
 				nbit += 7;
 				pd++;
@@ -67,14 +69,12 @@ namespace ec
 			} while (*(pd - 1) & 0x80 && len > 0 && nbit < 8 * sizeof(_Tp));
 			return nbit <= 8 * sizeof(_Tp);
 		}
-
 		template<class _Tp>
-		bool out_varint(_Tp v, ec::vector<uint8_t>* pout) const //out Varint uint32_t or uint64_t
+		bool out_varint(_Tp v, ec::vector<uint8_t>* pout) const //out Varint (Base 128 Varints)
 		{
 			int nbit = 0;
 			uint8_t out = 0;
-			do
-			{
+			do{
 				out = (v >> nbit) & 0x7F;
 				nbit += 7;
 				if (v >> nbit) {
@@ -88,9 +88,8 @@ namespace ec
 			} while (nbit < 8 * sizeof(_Tp));
 			return nbit <= 8 * sizeof(_Tp);
 		}
-
 		template<class _Tp>
-		inline bool get_fixed(const uint8_t* &pd, size_t &len, _Tp &out) const  //get fixed32 or fixed64
+		inline bool get_fixed(const uint8_t* &pd, size_t &len, _Tp &out) const  //get 32-bit and 64-bit (fixed32,sfixed32,fixed64,sfixed64,float,double)
 		{
 			if (len < sizeof(_Tp) || (sizeof(_Tp) != 4 && sizeof(_Tp) != 8))
 				return false;
@@ -99,16 +98,14 @@ namespace ec
 			len -= sizeof(_Tp);
 			return true;
 		}
-
 		template<class _Tp>
-		inline bool out_fixed(_Tp v, ec::vector<uint8_t>* pout) const  //out fixed32 or fixed64
+		inline bool out_fixed(_Tp v, ec::vector<uint8_t>* pout) const  //out 32-bit and 64-bit (fixed32,sfixed32,fixed64,sfixed64,float,double)
 		{
 			if ((sizeof(_Tp) != 4 && sizeof(_Tp) != 8))
 				return false;
 			pout->add((uint8_t*)&v, sizeof(_Tp));
 			return true;
 		}
-
 		inline bool get_key(const uint8_t* &pd, size_t &len, uint32_t &field_number, uint32_t &wire_type) const //get field_number and  wire_type
 		{
 			uint32_t key;
@@ -122,7 +119,7 @@ namespace ec
 		{
 			pout->clear();
 			uint32_t ul = 0;
-			if (!get_varint(pd, len, ul)) //get length
+			if (!get_varint(pd, len, ul))
 				return false;
 			if (len < ul)
 				return false;
@@ -134,7 +131,7 @@ namespace ec
 		inline bool get_length_delimited(const uint8_t* &pd, size_t &len, void* pout, size_t &outlen) const //get string, bytes
 		{
 			uint32_t ul = 0;
-			if (!get_varint(pd, len, ul)) //get length
+			if (!get_varint(pd, len, ul))
 				return false;
 			if (len < ul || outlen < ul)
 				return false;
@@ -186,14 +183,14 @@ namespace ec
 			}
 			return true;
 		}
-		inline bool out_length_delimited(const uint8_t* pd, size_t len, ec::vector<uint8_t>* pout) const //out string, bytes
+		inline bool out_length_delimited(const uint8_t* pd, size_t len, ec::vector<uint8_t>* pout) const // out string, bytes
 		{
 			if (!out_varint(len, pout))
 				return false;
 			pout->add(pd, len);
 			return true;
 		}
-		inline bool out_key(uint32_t field_number, uint32_t wire_type, ec::vector<uint8_t>* pout) const
+		inline bool out_key(uint32_t field_number, uint32_t wire_type, ec::vector<uint8_t>* pout) const // out field_number and  wire_type
 		{
 			uint32_t v = (field_number << 3) | (wire_type & 0x07);
 			return out_varint(v, pout);
