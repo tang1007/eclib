@@ -192,7 +192,7 @@ namespace ec
 			sfile[0] = '\0';
 			tmp[0] = '\0';
 
-			strcpy(sfile, _pcfg->_sroot);
+			strcpy(sfile, _pcfg->_sroot_wss);
 
 			url2utf8(_httppkg._request, tmp, (int)sizeof(tmp));
 
@@ -217,7 +217,7 @@ namespace ec
 			sc = "HTTP/1.1 200 ok\r\n";
 			_answer.Add(sc, strlen(sc));
 
-			sc = "Server: rdb5 websocket server\r\n";
+			sc = "Server: kipway websocket server\r\n";
 			_answer.Add(sc, strlen(sc));
 
 			if (_httppkg.HasKeepAlive())
@@ -292,7 +292,7 @@ namespace ec
 		*/
 		void DoNotFount(unsigned int ucid)
 		{
-			const char* sret = "http/1.1 404  not found!\r\nServer:rdb5 websocket server\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:9\r\n\r\nnot found";
+			const char* sret = "http/1.1 404  not found!\r\nServer:kipway websocket server\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:9\r\n\r\nnot found";
 			SendAppData(ucid, (void*)sret, (unsigned int)strlen(sret), true);
 			if (_pcfg->_blogdetail_wss && _plog)
 				_plog->AddLog("MSG:write ucid %u:\r\n%s", ucid, sret);
@@ -305,7 +305,7 @@ namespace ec
 		*/
 		void DoBadRequest(unsigned int ucid)
 		{
-			const char* sret = "http/1.1 400  Bad Request!\r\nServer:rdb5 websocket server\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:11\r\n\r\nBad Request";
+			const char* sret = "http/1.1 400  Bad Request!\r\nServer:kipway websocket server\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:11\r\n\r\nBad Request";
 			SendAppData(ucid, (void*)sret, (unsigned int)strlen(sret), true);
 			if (_pcfg->_blogdetail_wss && _plog)
 				_plog->AddLog("MSG:write ucid %u:\r\n%s", ucid, sret);
