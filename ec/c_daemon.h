@@ -55,6 +55,11 @@ namespace ec
     class cDaemonFrame
     {
     public:
+		struct t_msg
+		{
+			long mtype;
+			char mtext[];
+		};
         class cIpcMsg
         {
         public:
@@ -62,23 +67,36 @@ namespace ec
             {
                 _qid = msgget(key, IPC_CREAT | 0666);
             }
-            int snd(const char* str)
-            {
-                if (_qid < 0)
-                    return -1;
-                return msgsnd(_qid, str, strlen(str), IPC_NOWAIT);
-            }
+			int snd(const char* str)
+			{
+				if (_qid < 0)
+					return -1;
+				t_msg *pmsg = (t_msg*)malloc(strlen(str) + sizeof(t_msg) + 1);
+				if (!pmsg)
+					return -1;
+				pmsg->mtype = 1;
+				memcpy(pmsg->mtext, str, strlen(str) + 1);
+				int nr = msgsnd(_qid, pmsg, strlen(str) + 1, IPC_NOWAIT);
+				free(pmsg);
+				return nr;
+			}
 
-            int rcv(char* pbuf, size_t szbuf)
-            {
-                if (_qid < 0)
-                    return -1;
-                ssize_t szr = msgrcv(_qid, pbuf, szbuf, 0, IPC_NOWAIT);
-                if (szr < 0 || szr >= (ssize_t)szbuf)
-                    return -1;
-                *(pbuf + szr) = '\0';
-                return (int)szr;
-            }
+			int rcv(char* pbuf, size_t szbuf)
+			{
+				if (_qid < 0)
+					return -1;
+				t_msg *pmsg = (t_msg*)malloc(szbuf + sizeof(t_msg));
+				if (!pmsg)
+					return -1;
+				ssize_t szr = msgrcv(_qid, pmsg, szbuf, 0, IPC_NOWAIT);
+				if (szr < 0) {
+					free(pmsg);
+					return -1;
+				}
+				memcpy(pbuf, pmsg->mtext, szr);
+				free(pmsg);
+				return (int)szr;
+			}
             int del()
             {
                 if (_qid < 0)
