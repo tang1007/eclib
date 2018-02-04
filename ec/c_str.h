@@ -674,7 +674,11 @@ namespace ec
         inline size_t getsize() {
             return _size;
         };
+		inline size_t size() {
+			return _size;
+		};
         inline void* getbuf() { return _p; };
+		inline void* data() { return _p; };
         bool resize(size_t newsize, bool bkeepdata = false)
         {
             if (bkeepdata)
