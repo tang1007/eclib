@@ -1,7 +1,7 @@
 ﻿/*!
 \file c11_vector.h
 \author	kipway@outlook.com
-\update 2018.1.4
+\update 2018.2.4 add expand() and set_size()
 
 eclib class vector with c++11. fast noexcept simple vector. members of a vector can only be simple types, pointers and structures
 
@@ -71,6 +71,13 @@ namespace ec
 			if (_ugrown > max_size())
 				_ugrown = max_size();
 		};
+		bool set_size(size_t size)
+		{
+			if (_ubufsize < size)
+				return false;
+			_usize = size;
+			return true;
+		}
 		inline size_type size() const noexcept
 		{
 			return _usize;
@@ -248,6 +255,23 @@ namespace ec
 			free(_pbuf);
 			_pbuf = pnew;
 			_ubufsize = size;
+		}
+		bool expand(size_type size) noexcept
+		{
+			if (_ubufsize >= size)
+				return true;
+			value_type* pnew = (value_type*)malloc(size * sizeof(value_type));
+			if (!pnew)
+				return false;
+			if (_pbuf)
+			{
+				if(_usize)
+					memcpy(pnew, _pbuf, _usize * sizeof(value_type));
+				free(_pbuf);
+			}
+			_pbuf = pnew;
+			_ubufsize = size;
+			return true;
 		}
 	protected:
 		bool _grown(size_type usize = 1) noexcept
