@@ -1,7 +1,7 @@
 ﻿/*!
 \file c_ipc.h
 \author	kipway@outlook.com
-\update 2018.2.4
+\update 2018.2.5
 
 InterProcess Communication with socket
 
@@ -65,20 +65,23 @@ namespace ec
 			uint8_t  flag;
 			uint32_t msglen;
 		};
-	public:
-		static bool make(ec::vector<uint8_t>* pout, const void *pmsg, size_t sizemsg)
+	public:		
+		static int send(SOCKET sock, const void *pmsg, size_t sizemsg)
 		{
 			if (sizemsg > IPCMSG_MAXSIZE)
-				return false;
+				return ECIPC_ST_SEND_PKGERR;
 			unsigned char head[8]; //sync(1),flag(1),pkglen(4)
 			ec::cStream ss(head, sizeof(head));
-			ss < (uint8_t)0xF5;
-			ss < (uint8_t)0x10;
+			ss < (uint8_t)0xF5;		
+			ss < (uint8_t)0x10;		
 			ss < (uint32_t)(sizemsg);
-			pout->clear();
-			pout->add(head, 6);
-			pout->add((uint8_t*)pmsg, sizemsg);
-			return true;
+			int ns = tcp_send(sock, head, 6);
+			if (ns < 0)
+				return ECIPC_ST_SEND_ERR;
+			ns = tcp_send(sock, pmsg, (int)sizemsg);
+			if (ns < 0)
+				return ECIPC_ST_SEND_ERR;
+			return ns;
 		}
 	protected:
 		ec::vector<uint8_t>	_rbuf;
@@ -124,10 +127,11 @@ namespace ec
 	class cIpc_s : public ec::cThread //ipc server
 	{
 	public:
-		cIpc_s() : _busenagle(false), m_wport(0), m_sListen(INVALID_SOCKET), _sclient(INVALID_SOCKET), _nlogin(0), _msgr(1024 * 32), _msgs(1024 * 32) {
+		cIpc_s() : _busenagle(false), m_wport(0), m_sListen(INVALID_SOCKET), _sclient(INVALID_SOCKET), _nlogin(0), _msgr(1024 * 32) {
 			_psw[0] = '\0';
 		}
 		virtual ~cIpc_s() {
+			StopIpcs();
 		}
 	protected:
 		bool    _busenagle;
@@ -138,7 +142,6 @@ namespace ec
 		std::atomic_int _nlogin;
 		ipcpkg  _pkg;
 		ec::vector<uint8_t> _msgr;
-		ec::vector<uint8_t> _msgs;
 		ec::cCritical _cs;
 	protected:
 		virtual	void dojob() {
@@ -315,33 +318,33 @@ namespace ec
 		void StopIpcs()
 		{
 			StopThread();
+			if (INVALID_SOCKET != m_sListen) {
 #ifdef _WIN32
-			shutdown(m_sListen, SD_BOTH);
-			closesocket(m_sListen);
+				shutdown(m_sListen, SD_BOTH);
+				closesocket(m_sListen);
 #else
-			shutdown(m_sListen, SHUT_WR);
-			close(m_sListen);
+				shutdown(m_sListen, SHUT_WR);
+				close(m_sListen);
 #endif
+				m_sListen = INVALID_SOCKET;
+			}
 		}
 		int send(const void* pd, size_t size) //return send bytes numbers; <0:error
 		{
 			ec::cSafeLock lck(&_cs);
 			if (!_nlogin)
 				return ECIPC_ST_SEND_NOTLOGIN;
-			if (!_pkg.make(&_msgs, pd, size))
-				return ECIPC_ST_SEND_PKGERR;
-			int ns = tcp_send(_sclient, _msgs.data(), (int)_msgs.size());
-			if (ns < 0)
-				return ECIPC_ST_SEND_ERR;
-			return ns;
+			return _pkg.send(_sclient, pd,size);
 		}
 	};
 	class cIpc_c : public ec::cThread //ipc client
 	{
 	public:
-		cIpc_c() :_port(0), _psw{ 0 }, _sclient(INVALID_SOCKET), _nlogin(0), _msgr(1024*32), _msgs(1024*32){
+		cIpc_c() :_port(0), _psw{ 0 }, _sclient(INVALID_SOCKET), _nlogin(0), _msgr(1024*32){
 		}
-
+		virtual ~cIpc_c() {
+			StopThread();
+		}
 	public:
 		bool StartIpcc(uint16_t port, const char* psw)
 		{
@@ -364,12 +367,7 @@ namespace ec
 			ec::cSafeLock lck(&_cs);
 			if (!_nlogin)
 				return ECIPC_ST_SEND_NOTLOGIN;
-			if (!_pkg.make(&_msgs, pd, size))
-				return ECIPC_ST_SEND_PKGERR;
-			int ns = tcp_send(_sclient, _msgs.data(), (int)_msgs.size());
-			if (ns < 0)
-				return ECIPC_ST_SEND_ERR;
-			return ns;
+			return _pkg.send(_sclient, pd, size);			
 		}
 	protected:
 		uint16_t _port;
@@ -377,8 +375,7 @@ namespace ec
 		SOCKET   _sclient;
 		std::atomic_int _nlogin;
 		ipcpkg  _pkg;
-		ec::vector<uint8_t> _msgr;
-		ec::vector<uint8_t> _msgs;
+		ec::vector<uint8_t> _msgr;		
 		ec::cCritical _cs;
 	protected:		
 		virtual bool OnMsg() = 0; //Processes messages in _msgr, returning true if successful, false will disconnect	
@@ -429,8 +426,7 @@ namespace ec
 				_sclient = tcp_connect("127.0.0.1", _port, 2);
 				if (INVALID_SOCKET == _sclient)
 					continue;
-				_pkg.make(&_msgs, _psw, strlen(_psw) + 1);//send login message
-				nr = tcp_send(_sclient, _msgs.data(), (int)_msgs.size());
+				nr = _pkg.send(_sclient, _psw, (int)strlen(_psw) + 1);//send login message
 				if (SOCKET_ERROR == nr)
 				{
 					closeclient();
@@ -451,7 +447,8 @@ namespace ec
 						}
 					}
 				}
-			}			
+				closeclient();
+			}				
 		}		
 	};
 }
