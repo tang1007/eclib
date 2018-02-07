@@ -1,11 +1,9 @@
 /*!
 \file c_tls12.h
-\version 0.01
-TLS 1.2 (rfc5246) safe channel client
+\author	kipway@outlook.com
+\update 2018.2.7
 
-ec library is free C++ library.
-\author jiangyong
-
+eclib TLS1.2(rfc5246) server and client class
 support:
 CipherSuite TLS_RSA_WITH_AES_128_CBC_SHA256 = { 0x00,0x3C };
 CipherSuite TLS_RSA_WITH_AES_256_CBC_SHA256 = { 0x00,0x3D };
@@ -14,6 +12,20 @@ will add MAC secrets = 20byte
 CipherSuite TLS_RSA_WITH_AES_128_CBC_SHA = {0x00,0x2F};
 CipherSuite TLS_RSA_WITH_AES_256_CBC_SHA = {0x00,0x35};
 
+eclib Copyright (c) 2017-2018, kipway
+source repository : https://github.com/kipway/eclib
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 #pragma once
 
@@ -1079,6 +1091,8 @@ namespace ec
         }
         virtual bool MakeAppRecord(ec::tArray<unsigned char>*po, const void* pd, size_t size)
         {
+			if (!pd || !size)
+				return false;
             po->ClearData();
             if (!_bhandshake_finished)
                 return false;
@@ -1715,7 +1729,7 @@ namespace ec
     class cTlsSrvThread : public cTcpSvrWorkThread
     {
     public:
-        cTlsSrvThread(cTlsSession_srvMap* psss) : _tlsdata(1024 * 128)
+        cTlsSrvThread(cTlsSession_srvMap* psss) : _tlsdata(1024 * 128), _tlsrectmp(1024 * 128)
         {
             _psss = psss;
         }
@@ -1724,8 +1738,9 @@ namespace ec
         }
 
         cTlsSession_srvMap* _psss;
-    protected:
+	private:
         ec::tArray<unsigned char> _tlsdata;
+		ec::tArray<unsigned char> _tlsrectmp;
     protected:
         virtual bool    OnAppData(unsigned int ucid, const void* pd, unsigned int usize) { return true; };
         virtual void    OnHandshakeSuccess(unsigned int ucid, const char* sip) {};
@@ -1780,13 +1795,19 @@ namespace ec
             }
             return 0;
         }
-    public:
+    protected:
         bool SendAppData(unsigned ucid, const void* pd, size_t len, bool bAddCount = false, unsigned int uSendOpt = TCPIO_OPT_SEND)
         {
-            ec::tArray<unsigned char> tmp(len + 264 - len%8 + (len/16384) * 256);
-            if (!_psss->mkr_appdata(ucid, &tmp, pd, len))
-                return false;
-            return SendToUcid(ucid, tmp.GetBuf(), (unsigned int)tmp.GetSize(), bAddCount, uSendOpt) > 0;
+			_tlsrectmp.set_grow(len + 264 - len % 8 + (len / 16384) * 256);            
+			if (!_psss->mkr_appdata(ucid, &_tlsrectmp, pd, len)) {
+				_tlsrectmp.clear();
+				_tlsrectmp.shrink(0xFFFFF);
+				return false;
+			}
+            bool bret =  SendToUcid(ucid, _tlsrectmp.GetBuf(), (unsigned int)_tlsrectmp.GetSize(), bAddCount, uSendOpt) > 0;
+			_tlsrectmp.clear();
+			_tlsrectmp.shrink(0xFFFFF);
+			return bret;
         }
     };
 

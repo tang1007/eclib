@@ -1,9 +1,25 @@
 ﻿/*!
 \file w_websocket.h
-\brief websocket protocol,http protocol only support get,head ; websocket protocol support Sec-WebSocket-Version:13
-\date 2016.8.14
+\author	kipway@outlook.com
+\update 2018.2.7
 
-\author	 kipway@outlook.com
+eclib websocket protocol 
+http protocol only support get and head. websocket protocol support Sec-WebSocket-Version:13
+
+eclib Copyright (c) 2017-2018, kipway
+source repository : https://github.com/kipway/eclib
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 #ifndef C_WEBSOCKET_H
@@ -30,6 +46,7 @@
 #endif // stricmp
 #endif
 
+#define EC_SIZE_WSS_FRAME 65535
 #define SIZE_HTTPMAXREQUEST (1024 * 64)
 #define SIZE_WSMAXREQUEST   (1024 * 256)
 
@@ -184,18 +201,18 @@ namespace ec
 	/*!
 	\brief WS组发送帧,多帧,permessage_deflate支持
 	*/
-	inline bool MakeWsSend_m(const void* pdata, size_t sizes, unsigned char wsopt, tArray< char>* pout, int ncompress, size_t framesize)
+	inline bool MakeWsSend_m(const void* pdata, size_t sizes, unsigned char wsopt, tArray< char>* pout, int ncompress, size_t framesize, tArray< char>* ptmp)
 	{
 		const char* pds = (const char*)pdata;
-		size_t slen = sizes;
-		tArray<char> tmp(2048 + sizes - sizes % 1024);
+		size_t slen = sizes;		
+		ptmp->set_grow(2048 + sizes - sizes % 1024);
 		unsigned char uc;
 		if (ncompress)
 		{
-			if (Z_OK != ec::wsencode_zlib(pdata, sizes, &tmp) || tmp.GetNum() < 6)
+			if (Z_OK != ec::wsencode_zlib(pdata, sizes, ptmp) || ptmp->GetNum() < 6)
 				return false;
-			pds = tmp.GetBuf() + 2;
-			slen = tmp.GetSize() - 6;
+			pds = ptmp->GetBuf() + 2;
+			slen = ptmp->GetSize() - 6;
 		}
 		size_t ss = 0, us;
 		pout->ClearData();
@@ -246,12 +263,12 @@ namespace ec
 	/*!
 	\brief WS组发送帧,多帧,deflate-frame支持,适合ios safari
 	*/
-	inline bool MakeWsSend_mdf(const void* pdata, size_t sizes, unsigned char wsopt, tArray< char>* pout, size_t framesize)
+	inline bool MakeWsSend_mdf(const void* pdata, size_t sizes, unsigned char wsopt, tArray< char>* pout, size_t framesize, tArray< char>* ptmp)
 	{
 		const char* pds = (const char*)pdata;
 		char* pf;
-		size_t slen = sizes;
-		tArray<char> tmp(2048 + framesize);
+		size_t slen = sizes;		
+		ptmp->set_grow(2048 + framesize);
 		unsigned char uc;
 		size_t ss = 0, us, fl;
 		pout->ClearData();
@@ -272,11 +289,11 @@ namespace ec
 			pout->Add((char)uc);
 			if (uc & 0x40)
 			{
-				tmp.ClearData();
-				if (Z_OK != ec::wsencode_zlib(pds + ss, us, &tmp) || tmp.GetNum() < 6)
+				ptmp->ClearData();
+				if (Z_OK != ec::wsencode_zlib(pds + ss, us, ptmp) || ptmp->GetNum() < 6)
 					return false;
-				pf = tmp.GetBuf() + 2;
-				fl = tmp.GetSize() - 6;
+				pf = ptmp->GetBuf() + 2;
+				fl = ptmp->GetSize() - 6;
 			}
 			else
 			{
@@ -1195,6 +1212,7 @@ namespace ec
 		cLog*			_plog;		//!<日志
 
 		cHttpClientMap*	_pclis;		//!<连接客户MAP
+	private:
 		cHttpPacket		_httppkg;	//!<报文解析
 		tArray<char>	_filetmp;	//!<文件临时区
 		tArray<char>	_answer;	//!<应答       
@@ -1203,17 +1221,35 @@ namespace ec
 		/*!
 		\brief 处理websocket接收到的数据
 		\return 返回true表示成功，false表示失败，底层会断开这个连接
-		\remark 派生类重载这个函数,处理接受到的数据，如果需要应答，直接使用SendToUcid方法应答
+		\remark 派生类重载这个函数,处理接受到的数据，如果需要应答，直接使用ws_send_ucid方法应答
 		*/
 		virtual bool OnWebSocketData(unsigned int ucid, int bFinal, int wsopcode, const void* pdata, size_t size)//重载这个函数处理websocket接收数据
 		{
-			//简单回显，原样应答发送
-			_answer.ClearData();
-			MakeWsSend(pdata, size, (unsigned char)wsopcode, &_answer, _pclis->GetCompress(ucid));
-			SendToUcid(ucid, _answer.GetBuf(), _answer.GetSize(), true);
 			if (_pcfg->_blogdetail && _plog)
 				_plog->AddLog("MSG:ws read:ucid=%d,Final=%d,opcode=%d,size=%d ", ucid, bFinal, wsopcode, size);
-			return true;
+			return ws_send_ucid(ucid, pdata, size, WS_OP_TXT) > 0;//简单回显，原样应答发送			
+		}
+		int ws_send_ucid(unsigned int ucid, const void* pdata, size_t size, unsigned char wsopt, bool bAddCount = false, unsigned int uSendOpt = TCPIO_OPT_SEND) //返回-1表示错误,大于0表示发送的字节数
+		{
+			bool bsend;
+			int ncomp = _pclis->GetCompress(ucid);
+			if (ncomp == ws_x_webkit_deflate_frame) //deflate-frame压缩
+				bsend = ec::MakeWsSend_mdf(pdata, size, wsopt, &_answer, EC_SIZE_WSS_FRAME,&_encodetmp);
+			else
+				bsend = ec::MakeWsSend_m(pdata, size, wsopt, &_answer, size > 256 && ncomp, EC_SIZE_WSS_FRAME,&_encodetmp);
+			if (!bsend)	{
+				if (_plog && _pcfg->_blogdetail)
+					_plog->AddLog("ERR: send ucid %u make wsframe failed,size %u", ucid, (unsigned int)size);
+				return -1;
+			}
+			int n = SendToUcid(ucid, _answer.GetBuf(), _answer.GetSize(), bAddCount, uSendOpt);
+			if (_plog && n <= 0)
+				_plog->AddLog("ERR: send ucid %u failed size(%u/%u)", ucid, (unsigned int)size, (unsigned int)_answer.GetSize());
+			_answer.clear();
+			_answer.shrink(0xFFFFF);
+			_encodetmp.clear();
+			_encodetmp.shrink(0xFFFFF);
+			return n;
 		}
 	private:
 		/*!
@@ -1221,7 +1257,7 @@ namespace ec
 		*/
 		bool DoUpgradeWebSocket(int ucid, const char *skey)
 		{
-			if (_pcfg->_blogdetail_wss && _plog)
+			if (_pcfg->_blogdetail && _plog)
 			{
 				char stmp[128] = { 0 };
 				_plog->AddLog("MSG: ucid %u upgrade websocket", ucid);
@@ -1311,9 +1347,7 @@ namespace ec
 				_plog->AddLog("MSG: ucid %d upggrade WS success\r\n%s", ucid, _answer.GetBuf());
 			}			
 			return true;
-		}
-
-	public:	
+		}		
 		
 		protected:
 		/*!
@@ -1451,9 +1485,12 @@ namespace ec
 			}
 
 			SendToUcid(ucid, _answer.GetBuf(), _answer.GetSize(), true);
-			_filetmp.ClearAndFree(0xFFFFF);
-			_answer.ClearAndFree(0xFFFFF);
-			_encodetmp.ClearAndFree(0xFFFFF);
+			_filetmp.clear();
+			_filetmp.shrink(0xFFFFF);
+			_answer.clear();
+			_answer.shrink(0xFFFFF);
+			_encodetmp.clear();
+			_encodetmp.shrink(0xFFFFF);
 			return true;
 		}
 
