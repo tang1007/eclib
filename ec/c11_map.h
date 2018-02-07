@@ -147,7 +147,7 @@ namespace ec
 		bool get(key_type key, value_type& Value) noexcept
 		{
 			value_type* pv = get(key);
-			if (nullptr == _ppv)
+			if (nullptr == pv)
 				return false;
 			Value = *pv;
 			return true;
