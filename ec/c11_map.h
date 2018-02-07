@@ -1,7 +1,7 @@
 ﻿/*!
 \file c11_map.h
 \author	kipway@outlook.com
-\update 2018.1.3
+\update 2018.2.7
 
 eclib class map with c++11. fast noexcept unordered hashmap with safety iterator
 
