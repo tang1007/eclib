@@ -515,7 +515,7 @@ int main(int argc, char* argv[])
 					printf("args error!\n");
 					break;
 				}
-				nst = srv.send(sdata, sizeof(sdata) + 1);
+				nst = srv.send(sdata, strlen(sdata) + 1);
 				if (nst < 0)
 					printf("send error:%d\n", nst);
 			}
@@ -525,7 +525,7 @@ int main(int argc, char* argv[])
 					printf("args error!\n");
 					break;
 				}
-				nst = cli.send(sdata, sizeof(sdata) + 1);
+				nst = cli.send(sdata, strlen(sdata) + 1);
 				if (nst < 0)
 					printf("send error:%d\n", nst);
 			}
