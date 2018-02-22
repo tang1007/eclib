@@ -22,6 +22,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+#pragma once
 #include <stdint.h>
 #include <memory.h>
 #include "c11_vector.h"
@@ -136,6 +137,22 @@ namespace ec
 			if (len < ul || outlen < ul)
 				return false;
 			memcpy(pout, pd, ul);
+			pd += ul;
+			len -= ul;
+			outlen = ul;
+			return true;
+		}
+		inline bool get_string(const uint8_t* &pd, size_t &len, char* pout, size_t outlen) const 
+		{
+			uint32_t ul = 0,lv;
+			if (!get_varint(pd, len, ul))
+				return false;
+			if (outlen <= ul) // Truncated
+				lv = outlen - 1; 
+			else
+				lv = ul;			
+			memcpy(pout, pd, lv);
+			pout[lv] = '0';
 			pd += ul;
 			len -= ul;
 			outlen = ul;
