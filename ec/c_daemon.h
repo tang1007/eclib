@@ -1,7 +1,7 @@
 ﻿/*!
 \file c_daemon.h
 \author kipway@outlook.com
-\update 2018.1.4
+\update 2018.2.25
 
 eclib class cDaemonFrame , for linux daemon server
 
@@ -27,6 +27,7 @@ namespace ec {
     class cDaemon
     {
     public:
+		virtual ~cDaemon() {};
         virtual bool start() = 0;
         virtual bool stop() = 0;
     };
