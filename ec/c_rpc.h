@@ -1790,14 +1790,22 @@ namespace ec
             return _nstatus == 1;
         }
     };
-
+#ifdef _ARM_LINUX
+#define SIZE_RPC_CLI_BUF_GROWN (64* 1024)
+#define SIZE_RPC_CLI_BUF_UP (80 * 1024)
+#else
+#define SIZE_RPC_CLI_BUF_GROWN (256* 1024)
+#define SIZE_RPC_CLI_BUF_UP (1024 * 1024)
+#endif
     /*!
     \breif RPC auto reconnect client
     */
     class cRpcAutoClient : public cTcpCli
     {
     public:
-        cRpcAutoClient() : _rbuf(256 * 1024), _msgs(256 * 1024), _msgr(256 * 1024), _msgput(256 * 1024) {
+        cRpcAutoClient() : _rbuf(SIZE_RPC_CLI_BUF_GROWN), _msgs(SIZE_RPC_CLI_BUF_GROWN), _msgr(SIZE_RPC_CLI_BUF_GROWN), _msgput(SIZE_RPC_CLI_BUF_GROWN),
+			_cpbufc(SIZE_RPC_CLI_BUF_UP), _cpbufu(SIZE_RPC_CLI_BUF_UP)
+		{
             _bEncryptData = true;
             _wport = 0;
             _sip[0] = 0;
@@ -1856,8 +1864,8 @@ namespace ec
                 nr = DoLeftData(&_msgr);
             };
             _cpbufu.Free();
-            _msgs.ClearAndFree(1024 * 1024 * 2);
-            _msgr.ClearAndFree(1024 * 1024 * 2);
+            _msgs.shrink(SIZE_RPC_CLI_BUF_UP);
+            _msgr.shrink(SIZE_RPC_CLI_BUF_UP);
         }
     protected:
         char _usr[32];
