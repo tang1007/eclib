@@ -152,7 +152,7 @@ namespace ec
 			else
 				lv = ul;			
 			memcpy(pout, pd, lv);
-			pout[lv] = '0';
+			pout[lv] = '\0';
 			pd += ul;
 			len -= ul;
 			outlen = ul;
