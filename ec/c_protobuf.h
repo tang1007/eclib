@@ -144,7 +144,8 @@ namespace ec
 		}
 		inline bool get_string(const uint8_t* &pd, size_t &len, char* pout, size_t outlen) const 
 		{
-			uint32_t ul = 0,lv;
+			uint32_t ul = 0;
+			size_t lv;
 			if (!get_varint(pd, len, ul))
 				return false;
 			if (outlen <= ul) // Truncated
