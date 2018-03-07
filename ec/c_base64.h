@@ -6,6 +6,9 @@ MODP_B64 - High performance base64 encoder/decoder
 Version 1.3 -- 17-Mar-2006
 http://modp.com/release/base64
 
+
+fix: decode_base64_le bug in BusyBox Linux ARM system by kipway 2018.3.7
+
 */
 #ifndef C_BASE64_H
 #define C_BASE64_H
