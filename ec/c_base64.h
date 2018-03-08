@@ -484,7 +484,7 @@ namespace ec
 			*p++ = ((uint8_t*)(&x))[0];
 			*p++ = ((uint8_t*)(&x))[1];
 			*p = ((uint8_t*)(&x))[2];
-			return (chunks + 1) * 3;
+			return (int)(chunks + 1) * 3;
 			break;
 		case 1:  /* with padding this is an impossible case */
 			x = d0[y[0]];
@@ -502,7 +502,7 @@ namespace ec
 		}
 		if (x >= BADCHAR)
 			return -1;
-		return 3 * chunks + (6 * leftover) / 8;
+		return 3 * (int)chunks + (6 * leftover) / 8;
 	}
 
 	inline int decode_base64(char* dest, const char* src, int len)
