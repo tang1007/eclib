@@ -637,6 +637,11 @@ namespace ec
             if (SetNoBlock(sAccept) < 0)
                 return;
 #endif
+			if (m_ConPool.IsFull())
+			{
+				closesocket(sAccept);
+				return;
+			}
             DoConnected(sAccept, addrClient.sin_addr);
         };
     protected:
