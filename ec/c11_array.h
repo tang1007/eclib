@@ -96,26 +96,20 @@ namespace ec {
 		{
 			return !_size;
 		}
-		void for_each(void(*fun)(value_type& val)) noexcept
+		inline bool full() const noexcept
+		{
+			return _size >= _bufsize;
+		}		
+		void for_each(std::function<void (value_type& val)> fun) noexcept
 		{
 			for (size_type i = 0; i < _size; i++)
 				fun(_data[i]);
 		}
-		void for_each(iterator first, iterator last, void(*fun)(value_type& val)) noexcept
+		void for_each(iterator first, iterator last, std::function<void(value_type& val)> fun) noexcept
 		{
 			while (first != last)
 				fun(*first++);
-		}
-		void for_each(void*param, void(*fun)(value_type& val, void* param)) noexcept
-		{
-			for (size_type i = 0; i < _size; i++)
-				fun(_data[i], param);
-		}
-		void for_each(void*param, iterator first, iterator last, void(*fun)(value_type& val, void* param)) noexcept
-		{
-			while (first != last)
-				fun(*first++, param);
-		}
+		}		
 		inline value_type* data() noexcept
 		{
 			return &_data[0];
@@ -124,5 +118,37 @@ namespace ec {
 		{
 			return &_data[0];
 		}
+		bool erase(value_type &val) noexcept
+		{
+			for (size_type i = 0; i < _size; i++) {
+				if (val == _data[i]) {
+					while (i + 1 < _size) {
+						_data[i] = _data[i + 1];
+						i++;
+					}
+					_size--;
+					return true;
+				}
+			}
+			return false;
+		}
+		bool erase(size_type pos) noexcept
+		{
+			if (pos >= _size)
+				return false;
+			while (pos + 1 < _size) {
+				_data[pos] = _data[pos + 1];
+				pos++;
+			}
+			_size--;
+			return true;
+		}					
+		value_type* find(std::function <bool(value_type& val)> fun) {
+			for (size_type i = 0; i < _size; i++) {
+				if (fun(_data[i]))
+					return &_data[i];
+			}
+			return nullptr;
+		}		
 	};
 }

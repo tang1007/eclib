@@ -149,26 +149,16 @@ namespace ec
 		{
 			return !(_pbuf && _usize);
 		}
-		void for_each(void(*fun)(value_type& val)) noexcept
+		void for_each(std::function<void(value_type& val)> fun) noexcept
 		{
 			for (size_type i = 0; i < _usize; i++)
 				fun(_pbuf[i]);
 		}
-		void for_each(iterator first, iterator last, void(*fun)(value_type& val)) noexcept
+		void for_each(iterator first, iterator last, std::function<void(value_type& val)> fun) noexcept
 		{
 			while (first != last)
 				fun(*first++);
-		}
-		void for_each(void*param, void(*fun)(value_type& val, void* param)) noexcept
-		{
-			for (size_type i = 0; i < _usize; i++)
-				fun(_pbuf[i], param);
-		}
-		void for_each(void*param, iterator first, iterator last, void(*fun)(value_type& val, void* param)) noexcept
-		{
-			while (first != last)
-				fun(*first++, param);
-		}
+		}		
 		inline value_type* data() noexcept
 		{
 			return _pbuf;
