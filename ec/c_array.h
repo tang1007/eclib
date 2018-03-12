@@ -156,7 +156,9 @@ namespace ec {
 		}
 		bool add(const value_type *pbuf, size_type usize = 1)
 		{
-			if (!usize || !_grown(usize))
+			if (!usize || !pbuf)
+				return true;
+			if (!_grown(usize))
 				return false;
 			memcpy(_pbuf + _usize, pbuf, usize * sizeof(value_type));
 			_usize += usize;
