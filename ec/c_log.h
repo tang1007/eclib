@@ -1,7 +1,7 @@
 /*!
 \file c_log.h
 \author kipway@outlook.com
-\update 2018.2.24
+\update 2018.3.12
 
 eclib class cLog
 
@@ -51,12 +51,24 @@ limitations under the License.
 #define LOG_SVAE_SEC    10
 #endif
 #ifndef RUNLOG_BUFSIZE
+#ifdef _ARM_LINUX
+#define RUNLOG_BUFSIZE		(1024 * 128)
+#else
 #define RUNLOG_BUFSIZE		(1024 * 512)
 #endif
-#ifndef MAX_LOG_SIZE
-#define MAX_LOG_SIZE		(1024 * 32)
 #endif
+#ifndef MAX_LOG_SIZE
+#ifdef _ARM_LINUX
+#define MAX_LOG_SIZE		(1024 * 32)
+#else
+#define MAX_LOG_SIZE		(1024 * 16)
+#endif
+#endif
+#ifdef _ARM_LINUX
+#define MAX_LOGFILE_SIZE	(1024 * 1024 * 1)
+#else
 #define MAX_LOGFILE_SIZE	(1024 * 1024 * 8)
+#endif
 namespace ec
 {
     class cLog : public cThread
