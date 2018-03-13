@@ -264,9 +264,9 @@ namespace ec {
 				FD_SET(_slisten, &fdr);
 				smax = _slisten;
 			}
-			_socks.for_each([&fdr](t_id &s) {FD_SET(s.s, &fdr);	});
-			_socks.for_each([&fde](t_id &s) {FD_SET(s.s, &fde);	});
-			_socks.for_each([&smax](t_id &s) {if (s.s > smax) smax = s.s; });
+			_socks.for_each([&](t_id &s) {FD_SET(s.s, &fdr); if (s.s > smax) smax = s.s;});
+			_socks.for_each([&](t_id &s) {FD_SET(s.s, &fde);});
+
 #ifdef _WIN32
 			nret = ::select(0, &fdr, NULL, &fde, &tv01);
 #else
