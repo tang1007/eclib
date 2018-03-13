@@ -1,7 +1,7 @@
 /*!
 \file c11_array.h
 \author	kipway@outlook.com
-\update 2018.3.9
+\update 2018.3.13
 
 eclib class stack array with c++11.
 
@@ -67,7 +67,8 @@ namespace ec {
 			if (!usize || !pbuf)
 				return true;
 			if (_size + usize > _bufsize)
-				memcpy(&_data[_size], pbuf, usize * sizeof(value_type));
+				return false;
+			memcpy(&_data[_size], pbuf, usize * sizeof(value_type));
 			_size += usize;
 			return true;
 		};
