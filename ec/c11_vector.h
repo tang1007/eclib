@@ -23,6 +23,7 @@ limitations under the License.
 #pragma once
 #include <cstdint>
 #include <algorithm>
+#include <functional>
 namespace ec
 {
 	template<typename _Tp>

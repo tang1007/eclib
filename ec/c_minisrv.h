@@ -50,6 +50,7 @@ limitations under the License.
 #ifndef MAX_CONS_TCPMINISRV
 #	define MAX_CONS_TCPMINISRV 16 //less 64
 #endif
+
 namespace ec {
 
 	class cMiniSrv : public ec::cThread
@@ -66,6 +67,11 @@ namespace ec {
 			int  status;
 			int64_t timecon;
 			void* pcls;
+		};
+		enum idst {
+			st_err = -1,
+			st_login_no = 0,
+			st_login_ok = 1
 		};
 	protected:
 		cCritical _cs_send;
@@ -271,7 +277,7 @@ namespace ec {
 			int  i, n = (int)_socks.size();
 			for (i = 0; i < n; i++) {
 				if (FD_ISSET(_socks[i].s, &fde))//do error
-					_socks[i].status = -1;
+					_socks[i].status = st_err;
 			}
 			n = (int)_socks.size();
 			for (i = 0; i < n; i++)
@@ -286,18 +292,18 @@ namespace ec {
 						if (nr < 0)
 						{
 							if (WSAEWOULDBLOCK != WSAGetLastError())//read end
-								_socks[i].status = -1;
+								_socks[i].status = st_err;
 						}
 #else
 						nr = recv(_socks[i].s, _rbuf, sizeof(_rbuf), MSG_DONTWAIT);
 						if (nr < 0)
 						{
 							if(errno != EAGAIN && errno != EWOULDBLOCK)//read end
-								_socks[i].status = -1;
+								_socks[i].status = st_err;
 						}
 #endif
 						else if (0 == nr) // peer closed
-							_socks[i].status = -1;
+							_socks[i].status = st_err;
 						else {
 							if (!onreadbytes(&_socks[i], (uint8_t*)_rbuf, nr))
 								_socks[i].status = -1;
@@ -310,14 +316,14 @@ namespace ec {
 			n = (int)_socks.size();
 			for (i = 0; i < n; i++)
 			{
-				if (!_socks[i].status && ct - _socks[i].timecon > 30)
-					_socks[i].status = -1;
+				if (st_login_no == _socks[i].status && ct - _socks[i].timecon > 30)
+					_socks[i].status = st_err;
 			}
 			_cs_send.Lock();
 			n = (int)_socks.size();//delete error socket
 			for (i = 0; i < n; i++)
 			{
-				if (_socks[i].status == -1)
+				if (_socks[i].status == st_err)
 				{
 					closesocket(_socks[i].s);
 					_socks[i].s = INVALID_SOCKET;
@@ -362,7 +368,7 @@ namespace ec {
 			ec::cSafeLock lck(&_cs);
 			if (INVALID_SOCKET == _sclient)
 				return -1;
-			return tcp_send(_sclient, pd, size);
+			return tcp_send(_sclient, pd, (int)size);
 		}
 	private:
 		uint16_t _port;

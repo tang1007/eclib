@@ -30,6 +30,7 @@ limitations under the License.
 #if (0 != USE_ECLIB_C11)
 #include <cstdint>
 #include <algorithm>
+#include <functional>
 #endif
 namespace ec {
 	template<class _Ty>
