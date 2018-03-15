@@ -68,6 +68,16 @@ namespace ec
 				return EC_MINI_SEND_ERR;
 			return ns;
 		}
+		static bool mkhead(void* po,size_t datasize)//out to po 6bytes
+		{
+			if (datasize > MINI_MSG_MAXSIZE)
+				return false;			
+			ec::cStream ss(po, 6);
+			ss < (uint8_t)MINI_PKG_FLAG;
+			ss < (uint8_t)0x10;
+			ss < (uint32_t)(datasize);
+			return true;
+		}
 	protected:
 		ec::vector<uint8_t>	_rbuf;
 	public:
