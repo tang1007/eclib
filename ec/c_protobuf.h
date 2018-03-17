@@ -295,10 +295,18 @@ namespace ec
 			snprintf(sd, sized, "%s", src);
 			set_flag(id);
 		}
-		void set_cls(int id, ec::vector<uint8_t> *pcls, const uint8_t* src,size_t sizesrc)
+		void set_bin(int id, void *dst, size_t sizedst, const void* src, size_t sizesrc)
+		{
+			size_t sz = sizesrc;
+			if (sz > sizedst)
+				sz = sizedst;
+			memcpy(dst, src, sz);
+			set_flag(id);
+		}
+		void set_cls(int id, ec::vector<uint8_t> *pcls, const void* src,size_t sizesrc)
 		{
 			pcls->clear();
-			pcls->add(src, sizesrc);
+			pcls->add((uint8_t*)src, sizesrc);
 			set_flag(id);
 		}
 		bool p_str(int id, uint32_t wire_type, const uint8_t* &pd, size_t &len, char* pout, size_t outlen)
