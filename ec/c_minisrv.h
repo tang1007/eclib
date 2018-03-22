@@ -409,16 +409,11 @@ namespace ec {
 				while (!_bKilling)//read
 				{
 					nr = tcp_read(_sclient, buf, (int)sizeof(buf), 100);
-					if (SOCKET_ERROR == nr)
-					{
-						closeclient();
-						break;
-					}
+					if (SOCKET_ERROR == nr)					
+						break;					
 					else if (nr > 0) {
-						if (!onreadbytes(buf, nr)) {
-							closeclient();
-							break;
-						}
+						if (!onreadbytes(buf, nr)) 							
+							break;						
 					}
 				}
 				closeclient();

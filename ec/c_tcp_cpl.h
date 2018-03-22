@@ -73,11 +73,11 @@ namespace ec
 	class cConnectPool //connect pool
 	{
 	public:
-		cConnectPool() : _csucid(4000), _mapucid(16384) {			
+		cConnectPool() : _csucid(4000), _mapucid(16384) {
 			m_uNextID = 0;
-			m_uMaxConnect = 1024;			
+			m_uMaxConnect = 1024;
 		};
-		virtual ~cConnectPool() {			
+		virtual ~cConnectPool() {
 		};
 	public:
 		static unsigned int GetTicks()
@@ -229,7 +229,7 @@ namespace ec
 			_Locks[it.uID % CPL_SOCKET_GROUPS].Unlock();
 			return it.uID;
 		}
-		
+
 		bool DelAndCloseSocket(unsigned int uID)
 		{
 			bool bDel = false;
@@ -288,7 +288,7 @@ namespace ec
 			{
 				_Locks[i].Lock();
 				npos = 0;
-				nlist = 0;				
+				nlist = 0;
 				while (_maps[i].GetNext(npos, nlist, pi)) {
 					if (pa)
 						pa->Add(pi->uID);
@@ -309,7 +309,26 @@ namespace ec
 				return pa->GetNum();
 			return 0;
 		}
-
+        void	shutdown_all()
+		{
+			unsigned int i;
+			int npos = 0, nlist = 0;
+			T_CONITEM* pi;
+			for (i = 0; i < CPL_SOCKET_GROUPS; i++)
+			{
+				_Locks[i].Lock();
+				npos = 0;
+				nlist = 0;
+				while (_maps[i].GetNext(npos, nlist, pi)) {
+#ifdef _WIN32
+					shutdown(pi->Socket, SD_BOTH);
+#else
+					shutdown(pi->Socket, SHUT_WR);
+#endif
+				}
+				_Locks[i].Unlock();
+			}
+		}
 		int  GetSendNoDone(unsigned int uID)
 		{
 			cSafeLock	lock(&_Locks[uID % CPL_SOCKET_GROUPS]);

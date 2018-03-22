@@ -935,13 +935,12 @@ namespace ec
             for (i = 0; i < n; i++)
                 OnRemovedUCID(pids[i]);
 #else
-            _threadevent.Stop();//stop epoll event
-
-            StopAndDeleteThreads();//stop work threads
-
             shutdown(m_sListen, SHUT_WR);
             close(m_sListen);
             m_sListen = INVALID_SOCKET;
+
+            m_ConPool.shutdown_all(); //shutdown triger close event
+            sleep(1);
 
             if (_epollfdr != INVALID_SOCKET)
             {
@@ -949,13 +948,14 @@ namespace ec
                 _epollfdr = INVALID_SOCKET;
             }
 
-            //close all socket int con pool
+            _threadevent.Stop();//stop epoll event
+            StopAndDeleteThreads();//stop work threads
+
             tArray<unsigned int> ids(16384);
             m_ConPool.CloseAllSocket(&ids);
-
             int i, n = ids.GetNum();
             unsigned int *pids = ids.GetBuf();
-            for (i = 0; i < n; i++)
+           for (i = 0; i < n; i++)
                 OnRemovedUCID(pids[i]);
 #endif
         }
@@ -986,7 +986,7 @@ namespace ec
 			if (SOCKET_ERROR == m_ConPool.ucid_WSASend(ucid, &(pol->WSABuf), 1, &dwSend, 0, &(pol->Overlapped), NULL, bAddCount))
 			{
 				OnRemovedUCID(ucid);
-				m_ConPool.DelAndCloseSocket(ucid);			
+				m_ConPool.DelAndCloseSocket(ucid);
 				m_Mem.Push(pol);
 				return -1;
 			}
@@ -996,10 +996,10 @@ namespace ec
 			if (SOCKET_ERROR == nret)
 			{
 				OnRemovedUCID(ucid);
-				m_ConPool.DelAndCloseSocket(ucid);				
+				m_ConPool.DelAndCloseSocket(ucid);
 				return -1;
 			}
-			m_ConPool.OnSend(ucid, usize, bAddCount);			
+			m_ConPool.OnSend(ucid, usize, bAddCount);
 			return nret;
 #endif
 		};
