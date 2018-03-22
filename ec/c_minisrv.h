@@ -176,8 +176,15 @@ namespace ec {
 				_slisten = INVALID_SOCKET;
 			}
 			_socks.for_each([this](t_id& v) {
-				closesocket(v.s);
-				v.s = INVALID_SOCKET;
+				if (INVALID_SOCKET != v.s) {
+#ifdef _WIN32
+					shutdown(v.s, SD_BOTH);
+#else
+					shutdown(v.s, SHUT_WR);
+#endif
+					closesocket(v.s);
+					v.s = INVALID_SOCKET;
+				}
 				onclose(&v);
 			});
 			_socks.clear();
