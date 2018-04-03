@@ -1,7 +1,7 @@
 /*!
 \file c_tls12.h
 \author	kipway@outlook.com
-\update 2018.2.7
+\update 2018.4.3 fix RSA_private_decrypt multithread safety
 
 eclib TLS1.2(rfc5246) server and client class
 support:
@@ -1056,7 +1056,7 @@ namespace ec
     {
     public:
         cTlsSession_srv(unsigned int ucid, const void* pcer, size_t cerlen,
-            const void* pcerroot, size_t cerrootlen, RSA* pRsaPub, RSA* pRsaPrivate
+            const void* pcerroot, size_t cerrootlen, cCritical* pRsaLck, RSA* pRsaPrivate
         ) : cTlsSession(true, ucid),
             _pkgm(1024 * 20)
         {
@@ -1065,7 +1065,7 @@ namespace ec
             _cerlen = cerlen;
             _pcerroot = pcerroot;
             _cerrootlen = cerrootlen;
-            _pRsaPub = pRsaPub;
+			_pRsaLck = pRsaLck;
             _pRsaPrivate = pRsaPrivate;
             memset(_sip, 0, sizeof(_sip));
         }
@@ -1074,7 +1074,7 @@ namespace ec
         }
     protected:
         bool  _bhandshake_finished;
-        RSA* _pRsaPub;
+        cCritical* _pRsaLck;
         RSA* _pRsaPrivate;
 
         const void* _pcer;
@@ -1251,10 +1251,16 @@ namespace ec
             {
                 uint32 ulen = pmsg[4];//private key decode
                 ulen = (ulen << 8) | pmsg[5];
+				_pRsaLck->Lock();
                 nbytes = RSA_private_decrypt((int)ulen, pmsg + 6, premasterkey, _pRsaPrivate, RSA_PKCS1_PADDING);
+				_pRsaLck->Unlock();
             }
-            else
-                nbytes = RSA_private_decrypt((int)ulen, pmsg + 4, premasterkey, _pRsaPrivate, RSA_PKCS1_PADDING);
+			else
+			{
+				_pRsaLck->Lock();
+				nbytes = RSA_private_decrypt((int)ulen, pmsg + 4, premasterkey, _pRsaPrivate, RSA_PKCS1_PADDING);
+				_pRsaLck->Unlock();
+			}
 
             if (nbytes != 48)
             {
@@ -1849,6 +1855,7 @@ namespace ec
         ec::tArray<unsigned char> _prootcer;
 
         cTlsSession_srvMap _sss;
+		cCritical _csRsa;
     public:
         bool InitCert(const char* filecert, const char* filerootcert, const char* fileprivatekey)
         {
@@ -1914,7 +1921,7 @@ namespace ec
         virtual void    OnConnected(unsigned int ucid, const char* sip)
         {
             cTlsSession_srv* psession = new cTlsSession_srv(ucid, _pcer.GetBuf(), _pcer.GetSize(),
-                _prootcer.GetBuf(), _prootcer.GetSize(), _pRsaPub, _pRsaPrivate);
+                _prootcer.GetBuf(), _prootcer.GetSize(), &_csRsa, _pRsaPrivate);
             psession->SetIP(sip);
             _sss.Add(ucid, psession);
         }
