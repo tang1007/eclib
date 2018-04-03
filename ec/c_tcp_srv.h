@@ -530,7 +530,7 @@ namespace ec
 				return;			
 			if (_eplevt.events & EPOLLERR || _eplevt.events & EPOLLHUP || _eplevt.events & EPOLLRDHUP) // error
 			{
-				m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel);//delete epoll and  m_pConPool                
+				m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel);//delete from  epoll and  m_pConPool                
 				OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
 				OnOptError(ucid, TCPIO_OPT_READ);
 				return;
@@ -552,25 +552,23 @@ namespace ec
 								return;
 							}
 						}
-						m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel);//dellte delete epoll and  m_pConPool                            
+						m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel);//delete from  epoll and  m_pConPool 
 						OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
 						OnOptError(ucid, TCPIO_OPT_READ);
                         return;
                     }
                     else if (nbytes == 0) // close
                     {
-						m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel);//delete dellet epoll and  m_pConPool                        
+						m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel);//delete from  epoll and  m_pConPool 
                         OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
                         OnOptError(ucid, TCPIO_OPT_READ);
                         return;
                     }                    
 					if (!OnReadBytes(ucid, _buf, nbytes))
 					{
-						if (-1 != m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel))//delete dellet epoll and  m_pConPool                            
-						{
-							OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
-							OnOptError(ucid, TCPIO_OPT_READ);
-						}
+						m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel);//delete from  epoll and  m_pConPool 						
+						OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
+						OnOptError(ucid, TCPIO_OPT_READ);						
 						return;
 					}
 					m_pConPool->OnRead(ucid, nbytes);                    
