@@ -1,13 +1,33 @@
 /*!
-\file c_tcpsrv.h
-\brief tcp server windows use CPIO,Linux use Epoll
+\file c_tcp_srv.h
+\author	kipway@outlook.com
+\update 2018.4.3 modify Linux Epoll to EPOLLET (edge-trigger)
 
-class ec::cTcpSvrWorkThread;
-class ec::cTcpServer;
+class ec::cTcpServer
+class ec::cTcpSvrWorkThread
 
-ec library is free C++ library.
+support:
+CipherSuite TLS_RSA_WITH_AES_128_CBC_SHA256 = { 0x00,0x3C };
+CipherSuite TLS_RSA_WITH_AES_256_CBC_SHA256 = { 0x00,0x3D };
 
-\author	 kipway@outlook.com
+will add MAC secrets = 20byte
+CipherSuite TLS_RSA_WITH_AES_128_CBC_SHA = {0x00,0x2F};
+CipherSuite TLS_RSA_WITH_AES_256_CBC_SHA = {0x00,0x35};
+
+eclib Copyright (c) 2017-2018, kipway
+source repository : https://github.com/kipway/eclib
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 #ifndef C_TCPSRV_H
@@ -202,8 +222,6 @@ namespace ec
                 badd = _buf.Add(epollevt, false, 0);
                 _cs.Unlock();
                 _evt.SetEvent();
-                if (!badd)
-                    _evt.Wait(1);
             }
         }
 
@@ -214,7 +232,7 @@ namespace ec
             bret = _buf.Get(epollevt);
             _cs.Unlock();
             if (bret)
-                _evt.SetEvent();
+               _evt.SetEvent();
             return bret;
         }
     };
@@ -372,10 +390,9 @@ namespace ec
             }
             return (int)usize;
 #else
-            int nret = m_pConPool->ucid_Send(ucid, pbuf, usize);
+            int nret = m_pConPool->ucid_Send(_nfdr,ucid, pbuf, usize);//if failed close and remove from m_ConPool
             if (SOCKET_ERROR == nret)
-            {
-                m_pConPool->DelAndCloseSocket(ucid);
+            {				
                 OnClientDisconnect(ucid, uSendOpt, errno);
                 OnOptError(ucid, uSendOpt);
                 return -1;
@@ -499,7 +516,7 @@ namespace ec
 #else
         virtual	void dojob()
         {
-            int nfd, nerr;
+			int nerr;
             unsigned int ucid;
             if (!_pEpollEvents->Get(_eplevt))
                 return;
@@ -508,61 +525,57 @@ namespace ec
                 DoSelfMsg(_eplevt.events);
                 return;
             }
-            nfd = (int)(_eplevt.data.u64 & 0xFFFFFFFF);
             ucid = (unsigned int)(_eplevt.data.u64 >> 32);
+			if (!ucid) 
+				return;			
+			if (_eplevt.events & EPOLLERR || _eplevt.events & EPOLLHUP || _eplevt.events & EPOLLRDHUP) // error
+			{
+				m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel);//delete epoll and  m_pConPool                
+				OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
+				OnOptError(ucid, TCPIO_OPT_READ);
+				return;
+			}
             if (_eplevt.events & EPOLLIN) // read
             {
                 while (1)
                 {
-                    int nbytes = recv(nfd, _buf, sizeof(_buf), MSG_DONTWAIT);
+					int nbytes = m_pConPool->ucid_recv(ucid, _buf, sizeof(_buf), MSG_DONTWAIT);
                     if (nbytes < 0) // end or error
                     {
-                        nerr = errno;
-                        if (nerr == EAGAIN || nerr == EWOULDBLOCK)//read end
-                        {
-                            OnOptComplete(ucid, TCPIO_OPT_READ);
-                            _eplevt.events = EPOLLIN | EPOLLONESHOT;
-                            epoll_ctl(_nfdr, EPOLL_CTL_MOD, nfd, &_eplevt); // reset
-                        }
-                        else
-                        {
-                            epoll_ctl(_nfdr, EPOLL_CTL_DEL, nfd, &_evtdel);
-                            m_pConPool->DelAndCloseSocket(ucid);
-                            OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
-                            OnOptError(ucid, TCPIO_OPT_READ);
-                            return;
-                        }
+						if (nbytes == -1) {
+							nerr = errno;
+							if (nerr == EAGAIN || nerr == EWOULDBLOCK)//read end
+							{
+								OnOptComplete(ucid, TCPIO_OPT_READ);
+								_eplevt.events = EPOLLIN | EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
+								m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_MOD, ucid, &_eplevt); // reset
+								return;
+							}
+						}
+						m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel);//dellte delete epoll and  m_pConPool                            
+						OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
+						OnOptError(ucid, TCPIO_OPT_READ);
                         return;
                     }
                     else if (nbytes == 0) // close
                     {
-                        epoll_ctl(_nfdr, EPOLL_CTL_DEL, nfd, &_evtdel);
-                        m_pConPool->DelAndCloseSocket(ucid);
+						m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel);//delete dellet epoll and  m_pConPool                        
                         OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
                         OnOptError(ucid, TCPIO_OPT_READ);
                         return;
-                    }
-                    else
-                    {
-                        if (!OnReadBytes(ucid, _buf, nbytes))
-                        {
-                            epoll_ctl(_nfdr, EPOLL_CTL_DEL, nfd, &_evtdel);
-                            m_pConPool->DelAndCloseSocket(ucid);
-                            OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
-                            OnOptError(ucid, TCPIO_OPT_READ);
-                            return;
-                        }
-                        m_pConPool->OnRead(ucid, nbytes);
-                    }
+                    }                    
+					if (!OnReadBytes(ucid, _buf, nbytes))
+					{
+						if (-1 != m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel))//delete dellet epoll and  m_pConPool                            
+						{
+							OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
+							OnOptError(ucid, TCPIO_OPT_READ);
+						}
+						return;
+					}
+					m_pConPool->OnRead(ucid, nbytes);                    
                 };
-            }
-            else if (_eplevt.events & EPOLLERR || _eplevt.events & EPOLLHUP) // error
-            {
-                epoll_ctl(_nfdr, EPOLL_CTL_DEL, nfd, &_evtdel);
-                m_pConPool->DelAndCloseSocket(ucid);
-                OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
-                OnOptError(ucid, TCPIO_OPT_READ);
-            }
+            }            
         }
 #endif
     }; //cTcpSvrWorkThread
@@ -728,9 +741,9 @@ namespace ec
             struct epoll_event event;
 
             event.data.u64 = ucid;
-            event.data.u64 = (event.data.u64 << 32) + nfd;
-            event.events = EPOLLIN | EPOLLONESHOT;
-            if (-1 == epoll_ctl(_epollfdr, EPOLL_CTL_ADD, nfd, &event))
+			event.data.u64 = (event.data.u64 << 32);
+			event.events = EPOLLIN | EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
+			if (-1 == m_ConPool.ucid_epoll_ctl(_epollfdr, EPOLL_CTL_ADD, ucid, &event))
             {
                 OnRemovedUCID(ucid);
                 m_ConPool.DelAndCloseSocket(ucid);
@@ -992,11 +1005,10 @@ namespace ec
 			}
 			return (int)usize;
 #else
-			int nret = m_ConPool.ucid_Send(ucid, pbuf, usize);
+			int nret = m_ConPool.ucid_Send(_epollfdr,ucid, pbuf, usize);//if failed close and remove from m_ConPool
 			if (SOCKET_ERROR == nret)
 			{
 				OnRemovedUCID(ucid);
-				m_ConPool.DelAndCloseSocket(ucid);
 				return -1;
 			}
 			m_ConPool.OnSend(ucid, usize, bAddCount);
