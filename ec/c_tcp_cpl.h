@@ -7,14 +7,6 @@ add ucid_recv and ucid_epoll_ctl in linux
 class ec::cConnectPool
 class ec::cTcpConnectPoll
 
-support:
-CipherSuite TLS_RSA_WITH_AES_128_CBC_SHA256 = { 0x00,0x3C };
-CipherSuite TLS_RSA_WITH_AES_256_CBC_SHA256 = { 0x00,0x3D };
-
-will add MAC secrets = 20byte
-CipherSuite TLS_RSA_WITH_AES_128_CBC_SHA = {0x00,0x2F};
-CipherSuite TLS_RSA_WITH_AES_256_CBC_SHA = {0x00,0x35};
-
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib
 
