@@ -12,10 +12,10 @@
 #ifndef C_READINI_H
 #define C_READINI_H
 
-#define MAX_INI_LINE_W		1024
+#define MAX_INI_LINE_W		1280
 #define MAX_INI_BLOCK_W		80
 #define MAX_INI_KEYNAME_W	80
-#define MAX_INI_KEYVAL_W	256
+#define MAX_INI_KEYVAL_W	1024
 
 #ifdef _WIN32
 #pragma warning (disable : 4996)
