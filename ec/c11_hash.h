@@ -1,7 +1,7 @@
 ﻿/*!
 \file c11_hash.h
 \author	kipway@outlook.com
-\update 2018.1.3
+\update 2018.4.6
 
 eclib class hash with c++11. Separated from c11_map.h
 
@@ -30,7 +30,7 @@ namespace ec
 		size_t operator()(_Kty key)
 		{
 			if (sizeof(size_t) == 8)
-				return (((size_t)key) * 11400714819323198485ULL);
+				return static_cast<size_t>(static_cast<size_t>(key) * 11400714819323198485ULL);
 			return (((size_t)key) * 2654435769U);
 		}
 	};
