@@ -67,7 +67,7 @@ namespace ec
         *sd = 0;
         if (!ss || !(*ss) || !nsize)
             return sd;
-        while (++n < nsize && *ss)
+        while (++n <= nsize && *ss)
             *sd++ = *ss++;
         *sd = 0;
         return sret;
@@ -82,7 +82,7 @@ namespace ec
         *sd = 0;
         if (!ss || !(*ss) || !nsize)
             return 0;
-        while (++n < nsize && *ss)
+        while (++n <= nsize && *ss)
             *sd++ = *ss++;
         *sd = 0;
         return --n;
