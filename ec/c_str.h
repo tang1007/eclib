@@ -76,8 +76,7 @@ namespace ec
     inline size_t str_lcpy(char* sd, const char* ss, size_t nsize)// like strlcpy for linux,add null to the end of sd
     {
         size_t n = 0;
-        char* sret = sd;
-        if (!sret)
+        if (!sd)
             return 0;
         *sd = 0;
         if (!ss || !(*ss) || !nsize)
