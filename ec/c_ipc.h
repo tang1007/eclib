@@ -218,7 +218,7 @@ namespace ec
 				return true;
 			_psw[0] = 0;
 			if (psw)
-				ec::str_ncpy(_psw, psw, sizeof(_psw));
+				ec::str_ncpy(_psw, psw, sizeof(_psw)-1);
 			_busenagle = false;
 			m_wport = wport;
 			struct sockaddr_in	InternetAddr;
@@ -352,7 +352,7 @@ namespace ec
 				return true;
 			_port = port;
 			if(psw)
-				ec::str_ncpy(_psw,psw,sizeof(_psw));
+				ec::str_ncpy(_psw,psw,sizeof(_psw)-1);
 			else
 				strcpy(_psw, "ipcpsw");
 			StartThread(nullptr);

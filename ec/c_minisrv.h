@@ -359,7 +359,7 @@ namespace ec {
 				return true;
 			_port = port;
 			if (ip && *ip)
-				ec::str_ncpy(_ip, ip, sizeof(_ip));
+				ec::str_ncpy(_ip, ip, sizeof(_ip)-1);
 			else
 				strcpy(_ip, "127.0.0.1");
 			StartThread(nullptr);

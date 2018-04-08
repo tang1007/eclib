@@ -608,7 +608,7 @@ namespace ec
                 unsigned int ucid;
                 char        sip[32] = { 0 };
 
-                ec::str_ncpy(sip, inet_ntoa(ipinaddr), sizeof(sip));
+                ec::str_ncpy(sip, inet_ntoa(ipinaddr), sizeof(sip)-1);
                 sip[sizeof(sip) - 1] = 0;
 
                 ec::SetSocketKeepAlive(sAccept, _bkeepalivefast);

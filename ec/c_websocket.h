@@ -423,12 +423,12 @@ namespace ec
 				if (!stricmp("rootpath", lpszKeyName))
 				{
 					if (lpszKeyVal && *lpszKeyVal)
-						ec::str_ncpy(_sroot, lpszKeyVal, sizeof(_sroot));
+						ec::str_ncpy(_sroot, lpszKeyVal, sizeof(_sroot)-1);
 				}
 				else if (!stricmp("logpath", lpszKeyName))
 				{
 					if (lpszKeyVal && *lpszKeyVal)
-						ec::str_ncpy(_slogpath, lpszKeyVal, sizeof(_slogpath));
+						ec::str_ncpy(_slogpath, lpszKeyVal, sizeof(_slogpath)-1);
 				}
 				else if (!stricmp("port", lpszKeyName))
 				{
@@ -446,12 +446,12 @@ namespace ec
 				if (!stricmp("rootpath", lpszKeyName))
 				{
 					if (lpszKeyVal && *lpszKeyVal)
-						ec::str_ncpy(_sroot_wss, lpszKeyVal, sizeof(_sroot_wss));
+						ec::str_ncpy(_sroot_wss, lpszKeyVal, sizeof(_sroot_wss)-1);
 				}
 				else if (!stricmp("logpath", lpszKeyName))
 				{
 					if (lpszKeyVal && *lpszKeyVal)
-						ec::str_ncpy(_slogpath_wss, lpszKeyVal, sizeof(_slogpath_wss));
+						ec::str_ncpy(_slogpath_wss, lpszKeyVal, sizeof(_slogpath_wss)-1);
 				}
 				else if (!stricmp("port", lpszKeyName))
 				{
@@ -466,17 +466,17 @@ namespace ec
 				else if (!stricmp("ca_root", lpszKeyName))
 				{
 					if (lpszKeyVal && *lpszKeyVal)
-						ec::str_ncpy(_ca_root, lpszKeyVal, sizeof(_ca_root));
+						ec::str_ncpy(_ca_root, lpszKeyVal, sizeof(_ca_root)-1);
 				}
 				else if (!stricmp("ca_server", lpszKeyName))
 				{
 					if (lpszKeyVal && *lpszKeyVal)
-						ec::str_ncpy(_ca_server, lpszKeyVal, sizeof(_ca_server));
+						ec::str_ncpy(_ca_server, lpszKeyVal, sizeof(_ca_server)-1);
 				}
 				else if (!stricmp("private_key", lpszKeyName))
 				{
 					if (lpszKeyVal && *lpszKeyVal)
-						ec::str_ncpy(_private_key, lpszKeyVal, sizeof(_private_key));
+						ec::str_ncpy(_private_key, lpszKeyVal, sizeof(_private_key)-1);
 				}
 			}
 			else  if (!stricmp("mime", lpszBlkName))

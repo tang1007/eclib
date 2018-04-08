@@ -168,7 +168,7 @@ namespace ec
                 return false;
 
             memset(&_head, 0, sizeof(_head));
-            ec::str_ncpy(_head.sappid, sappid, sizeof(_head.sappid));
+            ec::str_ncpy(_head.sappid, sappid, sizeof(_head.sappid)-1);
             _head.version = VERSION_MINS;
             _head.size_page = 0x01 << sizepage;
             _head.size_dir = 0x01 << sizedir;
@@ -553,7 +553,7 @@ namespace ec
             }
             memset(pdir, 0, _head.size_dir);
             pdir->flag = 1;
-            ec::str_ncpy(pdir->name, sname, sizeof(pdir->name));
+            ec::str_ncpy(pdir->name, sname, sizeof(pdir->name)-1);
             LeSwap(pdir);// to disk
             if (WriteTo(_head.size_page + npos * _head.size_dir, pdir, _head.size_dir) < 0)
             {

@@ -46,8 +46,8 @@ namespace ec
 			t_i() :key{ 0 }, val{ 0 } {
 			}
 			t_i(const char* k, const char* v) {
-				ec::str_ncpy(key, k, sizeof(key));
-				ec::str_ncpy(val, v, sizeof(val));
+				ec::str_ncpy(key, k, sizeof(key)-1);
+				ec::str_ncpy(val, v, sizeof(val)-1);
 			}
 			char key[16];
 			char val[80];
