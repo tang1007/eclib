@@ -421,8 +421,8 @@ namespace ec
             if (!spsw || !(*spsw))
                 strcpy(pcli->_psw, "123456");//
             else
-                str_ncpy(pcli->_psw, spsw, sizeof(pcli->_psw));
-            str_ncpy(pcli->_susr, susr, sizeof(pcli->_susr));
+                str_ncpy(pcli->_psw, spsw, sizeof(pcli->_psw)-1);
+            str_ncpy(pcli->_susr, susr, sizeof(pcli->_susr)-1);
             pcli->_psw[sizeof(pcli->_psw) - 1] = 0;
             pcli->_nstatus = rpcusr_connect;
             encode_sha1(pcli->_psw, (unsigned int)strlen(pcli->_psw), pcli->_pswsha1);//计算密码的sha1摘要
@@ -1731,11 +1731,11 @@ namespace ec
         void Start(const char* sip, unsigned short wport, const char* usr, const char* password, rpc_clientevt pfce, void* pParamFce, rpc_clientMsg pfmsg, void* pParamFmsg)
         {
             _bdisconnect = 0;
-            str_ncpy(_sip, sip, sizeof(_sip));
+            str_ncpy(_sip, sip, sizeof(_sip)-1);
             _wport = wport;
 
-            str_ncpy(_usr, usr, sizeof(_usr));
-            str_ncpy(_psw, password, sizeof(_psw));
+            str_ncpy(_usr, usr, sizeof(_usr)-1);
+            str_ncpy(_psw, password, sizeof(_psw)-1);
             if (!_psw[0])
                 strcpy(_psw, "123456");//默认密码
 
@@ -2147,8 +2147,8 @@ namespace ec
                 if (uip1 == uip2 && wport == _wport && !strcmp(usr, _usr) && !strcmp(password, _psw))
                     return true;
             }
-            str_ncpy(_usr, usr, sizeof(_usr));
-            str_ncpy(_psw, password, sizeof(_psw));
+            str_ncpy(_usr, usr, sizeof(_usr)-1);
+            str_ncpy(_psw, password, sizeof(_psw)-1);
             if (!_psw[0])
                 strcpy(_psw, "123456");//默认密码
             encode_sha1(_psw, (unsigned int)strlen(_psw), _pswsha1);

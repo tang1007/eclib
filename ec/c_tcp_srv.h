@@ -653,7 +653,7 @@ namespace ec
             unsigned int ucid;
             char        sip[32] = { 0 };
 
-            str_ncpy(sip, inet_ntoa(ipinaddr), sizeof(sip));
+            str_ncpy(sip, inet_ntoa(ipinaddr), sizeof(sip)-1);
             sip[sizeof(sip) - 1] = 0;
 
             ucid = m_ConPool.AddItem(sAccept);

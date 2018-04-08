@@ -427,7 +427,7 @@ namespace ec
         int i = MultiByteToWideChar(CP_ACP, 0, in, (int)sizein, NULL, 0);
 		if (!i)
 		{
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 			return false;
 		}
         wchar_t* sUnicode = new wchar_t[i + 1];
@@ -438,7 +438,7 @@ namespace ec
         if (sizeout > 0)
 			out[sizeout] = 0;
         else        
-			str_ncpy(out, in,sizeout);        
+			str_ncpy(out, in,sizeout-1);        
 		delete []sUnicode;
         return nout > 0;
 #else
@@ -449,7 +449,7 @@ namespace ec
         cd = iconv_open("UTF-8//IGNORE", "GBK");
         if (cd == (iconv_t)-1)
         {
-            str_ncpy(out, in, sizeout);
+            str_ncpy(out, in, sizeout-1);
 			sizeout = strlen(out);
             return false;
         }
@@ -458,7 +458,7 @@ namespace ec
         if (iconv(cd, pin, &inlen, pout, &outlen) == (size_t)(-1))
         {
             iconv_close(cd);            
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 			sizeout = strlen(out);
             return false;
         }
@@ -489,7 +489,7 @@ namespace ec
 		int i = MultiByteToWideChar(CP_UTF8, 0, in, (int)sizein, NULL, 0);
 		if (!i)
 		{
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 			sizeout = strlen(out);
 			return false;
 		}
@@ -502,7 +502,7 @@ namespace ec
 			out[sizeout] = 0;
 		else
 		{
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 			sizeout = strlen(out);
 		}
 		delete[]sUnicode;
@@ -515,7 +515,7 @@ namespace ec
 		cd = iconv_open("GBK//IGNORE","UTF-8");
 		if (cd == (iconv_t)-1)
 		{
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 			sizeout = strlen(out);
 			return false;
 		}
@@ -524,7 +524,7 @@ namespace ec
 		if (iconv(cd, pin, &inlen, pout, &outlen) == (size_t)(-1))
 		{
 			iconv_close(cd);			
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 			sizeout = strlen(out);
 			return false;
 	}
@@ -556,20 +556,20 @@ namespace ec
 		int i = MultiByteToWideChar(CP_ACP, 0, in, (int)sizein, tmp, (int)sizeof(tmp));
 		if (!i)
 		{
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 			return false;
 		}		
 		i = WideCharToMultiByte(CP_UTF8, 0, tmp, i, out, (int)sizeout - 1, NULL, NULL); //to utf-8
 		if (!i)
 		{
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 			return false;
 		}
 
 		if (i > 0)
 			out[i] = 0;
 		else
-			str_ncpy(out, in, sizeout);		
+			str_ncpy(out, in, sizeout-1);		
 		return i > 0;
 #else
 		iconv_t cd;
@@ -579,7 +579,7 @@ namespace ec
 		cd = iconv_open("UTF-8//IGNORE", "GBK");
 		if (cd == (iconv_t)-1)
 		{
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 			sizeout = strlen(out);
 			return false;
 		}
@@ -588,7 +588,7 @@ namespace ec
 		if (iconv(cd, pin, &inlen, pout, &outlen) == (size_t)(-1))
 		{
 			iconv_close(cd);
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 			return false;
 		}
 		iconv_close(cd);		
@@ -610,20 +610,20 @@ namespace ec
 		int i = MultiByteToWideChar(CP_UTF8, 0, in, (int)sizein, tmp, (int)sizeof(tmp));
 		if (!i)
 		{
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 			return false; 
 		}
 		i = WideCharToMultiByte(CP_ACP, 0, tmp, i, out, (int)sizeout - 1, NULL, NULL); //to utf-8
 		if (!i)
 		{
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 			return false;
 		}
 
 		if (i > 0)
 			out[i] = 0;
 		else
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 		return i > 0;
 #else
 		iconv_t cd;
@@ -633,7 +633,7 @@ namespace ec
 		cd = iconv_open( "GBK","UTF-8//IGNORE");
 		if (cd == (iconv_t)-1)
 		{
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 			sizeout = strlen(out);
 			return false;
 		}
@@ -642,7 +642,7 @@ namespace ec
 		if (iconv(cd, pin, &inlen, pout, &outlen) == (size_t)(-1))
 		{
 			iconv_close(cd);
-			str_ncpy(out, in, sizeout);
+			str_ncpy(out, in, sizeout-1);
 			return false;
 		}
 		iconv_close(cd);

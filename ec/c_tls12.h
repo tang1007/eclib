@@ -1082,12 +1082,12 @@ namespace ec
         const void* _pcerroot;
         size_t _cerrootlen;
         ec::tArray<unsigned char> _pkgm;
-        char _sip[20];
+        char _sip[32];
     public:
         void SetIP(const char* sip)
         {
             if (sip && *sip)
-                str_ncpy(_sip, sip, sizeof(_sip));
+                str_ncpy(_sip, sip, sizeof(_sip)-1);
         }
         virtual bool MakeAppRecord(ec::tArray<unsigned char>*po, const void* pd, size_t size)
         {
