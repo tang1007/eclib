@@ -1,7 +1,7 @@
 /*!
 \file c_minisrv.h
 \author	kipway@outlook.com
-\update 2018.3.13
+\update 2018.4.8
 
 eclib class mini tcp server and auto reconnect client
 class cMiniSrv
@@ -58,8 +58,7 @@ namespace ec {
 	public:
 		cMiniSrv() :_port(0), _slisten(INVALID_SOCKET), _nextid(100) {
 		}
-		virtual ~cMiniSrv() {
-			stop_srv();
+		virtual ~cMiniSrv() {			
 		}
 		struct t_id {
 			SOCKET s;
