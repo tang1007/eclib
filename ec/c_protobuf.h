@@ -148,7 +148,7 @@ namespace ec
 			uint32_t ul = 0;
 			if (!get_varint(pd, len, ul))
 				return false;
-			if (len < ul || outlen < ul)
+			if (len < ul)
 				return false;
 			*pout = pd;
 			pd += ul;
