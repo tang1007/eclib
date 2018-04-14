@@ -309,6 +309,13 @@ namespace ec
 			pcls->add((uint8_t*)src, sizesrc);
 			set_flag(id);
 		}
+		bool p_bytes(int id, uint32_t wire_type, const uint8_t* &pd, size_t &len, void* pout, size_t outlen)
+		{
+			if (wire_type != pb_length_delimited || !get_length_delimited(pd, len, pout, outlen))
+				return false;
+			set_flag(id);
+			return true;
+		}
 		bool p_str(int id, uint32_t wire_type, const uint8_t* &pd, size_t &len, char* pout, size_t outlen)
 		{
 			if (wire_type != pb_length_delimited || !get_string(pd, len, pout, outlen))
