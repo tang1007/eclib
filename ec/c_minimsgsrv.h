@@ -26,7 +26,7 @@ limitations under the License.
 */
 #pragma once
 #include "c_minisrv.h"
-
+#include "c_tcp_tl.h"
 #ifndef MINI_PKG_FLAG
 #	define MINI_PKG_FLAG 0xF5
 #endif
@@ -176,6 +176,8 @@ namespace ec
 			pid->pcls = new minipkg;
 			if (!pid->pcls)
 				return false;
+			SetTcpNoDelay(pid->s);
+			SetSocketKeepAlive(pid->s);
 			return true;
 		}
 	};
@@ -196,6 +198,8 @@ namespace ec
 		ec::vector<uint8_t> _msgr;
 	protected:
 		virtual void onconnect() {
+			SetTcpNoDelay(_sclient);
+			SetSocketKeepAlive(_sclient);			
 			_pkg.clear();
 		};
 		virtual void onclose() {
