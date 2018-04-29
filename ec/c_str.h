@@ -812,6 +812,25 @@ namespace ec
 #endif
     }
 
+	/*!
+	little endian fast XOR,8x faster than byte-by-byte XOR
+	*/
+	inline void fast_xor_le(unsigned char* pd, int size, unsigned int umask)//little endian fast XOR
+	{
+		int i, nl = 4 - ((size_t)pd % 4), nu = (size - nl) / 4;
+		for (i = 0; i < nl && i < size; i++)
+			pd[i] ^= (umask >> ((i % 4) * 8)) & 0xFF;
+
+		unsigned int *puint = (unsigned int*)(pd + i), um;
+		um = umask >> nl * 8;
+		um |= umask << (4 - nl) * 8;
+		for (i = 0; i < nu; i++)
+			puint[i] ^= um;
+
+		for (i = nl + nu * 4; i < size; i++)
+			pd[i] ^= (umask >> ((i % 4) * 8)) & 0xFF;
+	}
+
 };//namespace ec
 #endif //C_STR_H
 
