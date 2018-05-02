@@ -1,7 +1,7 @@
 ﻿/*!
 \file w_websocket.h
 \author	kipway@outlook.com
-\update 2018.4.8 
+\update 2018.5.2
 
 eclib websocket protocol
 http protocol only support get and head. websocket protocol support Sec-WebSocket-Version:13
@@ -953,9 +953,13 @@ namespace ec
 			}
 			if (usize < datapos + datalen)
 				return 0;
-			if (bmask) {
-				for (i = 0; i < (int)datalen; i++)
-					pu[i + datapos] = pu[i + datapos] ^ pu[datapos - 4 + i % 4];
+			if (bmask) 
+			{
+				unsigned int umask = pu[datapos - 1];	umask <<= 8;
+				umask |= pu[datapos - 2]; umask <<= 8;
+				umask |= pu[datapos - 3]; umask <<= 8;
+				umask |= pu[datapos - 4];
+				fast_xor_le(pu + datapos, (int)datalen, umask);				
 			}
 			sizedo = datapos + datalen;
 			if (!comp)
