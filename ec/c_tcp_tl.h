@@ -3,7 +3,7 @@
 tcp functions for windows & linux
 
 \author	kipway@outlook.com
-\update 2018.4.5
+\update 2018.5.3
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib
@@ -157,16 +157,17 @@ namespace ec
 		fd_set fdw;
 		FD_ZERO(&fdw);
 		FD_SET(s, &fdw);
+		int ne;
 #ifdef _WIN32
-		if (1 != ::select(0, NULL, &fdw, NULL, &tv01))
+		ne = ::select(0, NULL, &fdw, NULL, &tv01);		
 #else
-		if (1 != ::select(s + 1, NULL, &fdw, NULL, &tv01))
+		ne = ::select(s + 1, NULL, &fdw, NULL, &tv01);
 #endif
+		if(ne <= 0 || !FD_ISSET(s, &fdw))
 		{
 			closesocket(s);
 			return  INVALID_SOCKET;
 		}
-
 		ul = 0;
 #ifdef _WIN32
 		if (SOCKET_ERROR == ioctlsocket(s, FIONBIO, (unsigned long*)&ul)) {
@@ -174,6 +175,14 @@ namespace ec
 			return INVALID_SOCKET;
 		}
 #else
+		int serr = 0;
+		socklen_t serrlen = sizeof(serr);
+		getsockopt(s, SOL_SOCKET, SO_ERROR, (void *)&serr, &serrlen);
+		if (serr)
+		{
+			::closesocket(s);
+			return INVALID_SOCKET;
+		}
 		if (ioctl(s, FIONBIO, &ul) == -1) {
 			closesocket(s);
 			return INVALID_SOCKET;
