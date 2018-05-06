@@ -1,7 +1,7 @@
 ﻿/*!
 \file w_websocket.h
 \author	kipway@outlook.com
-\update 2018.5.2
+\update 2018.5.6
 
 eclib websocket protocol
 http protocol only support get and head. websocket protocol support Sec-WebSocket-Version:13
@@ -882,6 +882,7 @@ namespace ec
 				strncpy(_sip, sip, sizeof(_sip) - 1);
 			_wscompress = 0;
 			_comp = 0;
+			_opcode = WS_OP_TXT;
 		};
 		~cHttpClient() {};
 	public:
@@ -893,6 +894,7 @@ namespace ec
 		tArray<char>   _wsmsg;  //!< 处理完的消息
 		tArray<char>   _debuf;  //解压用
 		int _comp;//	
+		int _opcode;
 	private:
 		void reset_msg()
 		{
@@ -901,6 +903,7 @@ namespace ec
 			_debuf.clear();
 			_debuf.shrink(1024 * 16);
 			_comp = 0;
+			_opcode = WS_OP_TXT;
 		}
 		int  parseonframe(const char* stxt, size_t usize, int &fin)//分离原始帧,返回大于0表示处理的字节数
 		{
@@ -915,9 +918,11 @@ namespace ec
 
 			fin = pu[0] & 0x80;
 			comp = (pu[0] & 0x40) ? 1 : 0;
-
 			int bmask = pu[1] & 0x80;
 			int payloadlen = pu[1] & 0x7F;
+
+			if (!_wsmsg.size())
+				_opcode = pu[0] & 0x0f;
 
 			if (bmask)//client can not use mask
 				datapos += 4;
@@ -962,6 +967,7 @@ namespace ec
 				fast_xor_le(pu + datapos, (int)datalen, umask);				
 			}
 			sizedo = datapos + datalen;
+			
 			if (!comp)
 				_wsmsg.Add(stxt + datapos, datalen);
 			else
@@ -1012,14 +1018,13 @@ namespace ec
 						if (_wsmsg.GetSize() > 1024 * 32)
 							pout->_body.set_grow(2 * _wsmsg.GetSize());
 						if (Z_OK != ec::wsdecode_zlib(_wsmsg.GetBuf(), _wsmsg.GetSize(), &pout->_body))
-							return he_failed;
-						pout->_fin = 128;
-						return he_ok;
+							return he_failed;						
 					}
 					else
-						pout->_body.add(_wsmsg.GetBuf(), _wsmsg.GetSize());
-					reset_msg();
+						pout->_body.add(_wsmsg.GetBuf(), _wsmsg.GetSize());					
 					pout->_fin = 128;
+					pout->_opcode = _opcode;
+					reset_msg();
 					return he_ok;
 				}
 			}
