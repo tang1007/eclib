@@ -151,5 +151,9 @@ namespace ec {
 			}
 			return nullptr;
 		}		
+		inline value_type& at(size_type pos)
+		{
+			return _data[pos];
+		}
 	};
 }
