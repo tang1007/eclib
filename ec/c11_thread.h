@@ -27,6 +27,7 @@ limitations under the License.
 #include "c11_event.h"
 namespace ec
 {
+#ifndef _ARM_LINUX
 	class cThread
 	{
 	public:
@@ -103,5 +104,92 @@ namespace ec
 		virtual	void dojob() { std::this_thread::sleep_for(std::chrono::milliseconds(100)); };
 		virtual void On100msTimer() { };
 	};
+#else
+#include <pthread.h>
+#include <unistd.h>
+#	ifndef ARM_STACK_SIZE
+#		define ARM_STACK_SIZE 0x100000 // 1MB
+#	endif
+	class cThread
+	{
+	public:
+		cThread() :_bRuning(0), _bKilling(0) {
+		};
+		virtual ~cThread() {
+			StopThread();
+		}
+	protected:
+		std::atomic_int	_bRuning;
+		std::atomic_int	_bKilling;
+
+		pthread_t   m_tid = 0;
+		cEvent*		_pevt = nullptr;
+
+		void *_pdoarg = nullptr;
+		bool(*_pdojob)(void *) = nullptr; // Non-derived use, return false will stop thread		
+	public:
+		void	StartThread(cEvent* pevt, bool(*dojob)(void *) = NULL, void*  pargs = NULL)
+		{
+			if (_bRuning)
+				return;
+			_pevt = pevt;
+			_pdojob = dojob;
+			_pdoarg = pargs;
+
+			pthread_attr_t attr;
+			pthread_attr_init(&attr);
+			pthread_attr_setstacksize(&attr, ARM_STACK_SIZE);
+			pthread_create(&m_tid, &attr, ThreadProcess, this);
+			pthread_attr_destroy(&attr);
+		}
+		void StopThread()
+		{
+			if (m_tid) {
+				_bKilling = 1;
+				while (_bRuning)
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				pthread_join(m_tid, NULL);
+				m_tid = 0;
+			}
+		}
+		inline bool IsRun() { return 0 != _bRuning; };
+		inline bool Killing() { return 0 != _bKilling; };
+		inline void setkill(int n) { _bKilling = n; };
+	private:
+		static void* ThreadProcess(void* pargs)
+		{
+			cThread* pt = (cThread*)pargs;
+			pt->mainloop();
+			return nullptr;
+		}
+	public:
+		void	mainloop()
+		{
+			OnStart();
+			_bKilling = 0;
+			_bRuning = 1;
+			while (!_bKilling) {
+				if (!_pevt || _pevt->Wait(200)) {
+					if (!_pdojob)
+						dojob();
+					else {
+						if (!_pdojob(_pdoarg))
+							break;
+					}
+				}
+				if (_pevt)
+					On100msTimer();
+			}
+			OnStop();
+			_bRuning = 0;
+			_bKilling = 0;
+		}
+	protected:
+		virtual bool OnStart() { return true; };
+		virtual void OnStop() { };
+		virtual	void dojob() { std::this_thread::sleep_for(std::chrono::milliseconds(100)); };
+		virtual void On100msTimer() { };
+	};
+#endif
 }
 

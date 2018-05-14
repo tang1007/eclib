@@ -1,26 +1,31 @@
 /*!
- \file c_log.h
- \brief cLog
+\file c_log.h
+\author kipway@outlook.com
+\update 2018.3.12
 
-    Max File size 8MB
-    20140414-0001.txt
-    20140414-0002.txt
-    20140414-0003.txt
-    ... ...
-    20140414-9999.txt
+eclib class cLog
 
-    Userage:
-    Start
-    // ...
-    AddLog
-    // ..
-    Stop
+Max File size 8MB
+20140414-0001.txt
+20140414-0002.txt
+20140414-0003.txt
+... ...
+20140414-9999.txt
 
-    thread safe
+eclib Copyright (c) 2017-2018, kipway
+source repository : https://github.com/kipway/eclib
 
-  ec library is free C++ library.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-  \author	 kipway@outlook.com
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 #ifndef C_LOG_H
@@ -45,11 +50,25 @@
 #ifndef LOG_SVAE_SEC        
 #define LOG_SVAE_SEC    10
 #endif
-
-#define RUNLOG_BUFSIZE		(1024 * 512)   // 512Kbytes
+#ifndef RUNLOG_BUFSIZE
+#ifdef _ARM_LINUX
+#define RUNLOG_BUFSIZE		(1024 * 128)
+#else
+#define RUNLOG_BUFSIZE		(1024 * 512)
+#endif
+#endif
+#ifndef MAX_LOG_SIZE
+#ifdef _ARM_LINUX
 #define MAX_LOG_SIZE		(1024 * 32)
-
+#else
+#define MAX_LOG_SIZE		(1024 * 16)
+#endif
+#endif
+#ifdef _ARM_LINUX
+#define MAX_LOGFILE_SIZE	(1024 * 1024 * 1)
+#else
 #define MAX_LOGFILE_SIZE	(1024 * 1024 * 8)
+#endif
 namespace ec
 {
     class cLog : public cThread
@@ -257,7 +276,7 @@ namespace ec
             va_start(arg_ptr, format);
             int nbytes = vsnprintf(&_slog[npos], MAX_LOG_SIZE, format, arg_ptr);
             va_end(arg_ptr);
-            if (nbytes <= 0)
+            if (nbytes <= 0 || nbytes >= MAX_LOG_SIZE)
                 return;
             nbytes += npos;
             if(_blinestylewin)
@@ -298,7 +317,7 @@ namespace ec
             va_start(arg_ptr, format);
             int nbytes = vsnprintf(&_slog[9], MAX_LOG_SIZE, format, arg_ptr);
             va_end(arg_ptr);
-            if (nbytes <= 0)
+            if (nbytes <= 0 || nbytes >= MAX_LOG_SIZE)
                 return;
             nbytes += 9;
             _slog[nbytes++] = 0x0D;
@@ -328,7 +347,7 @@ namespace ec
 
             va_end(arg_ptr);
 
-            if (nbytes <= 0)
+            if (nbytes <= 0 || nbytes >= MAX_LOG_SIZE)
                 return;
             _slog[nbytes] = 0;
 

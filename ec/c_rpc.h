@@ -421,8 +421,8 @@ namespace ec
             if (!spsw || !(*spsw))
                 strcpy(pcli->_psw, "123456");//
             else
-                str_ncpy(pcli->_psw, spsw, sizeof(pcli->_psw));
-            str_ncpy(pcli->_susr, susr, sizeof(pcli->_susr));
+                str_ncpy(pcli->_psw, spsw, sizeof(pcli->_psw)-1);
+            str_ncpy(pcli->_susr, susr, sizeof(pcli->_susr)-1);
             pcli->_psw[sizeof(pcli->_psw) - 1] = 0;
             pcli->_nstatus = rpcusr_connect;
             encode_sha1(pcli->_psw, (unsigned int)strlen(pcli->_psw), pcli->_pswsha1);//计算密码的sha1摘要
@@ -1731,11 +1731,11 @@ namespace ec
         void Start(const char* sip, unsigned short wport, const char* usr, const char* password, rpc_clientevt pfce, void* pParamFce, rpc_clientMsg pfmsg, void* pParamFmsg)
         {
             _bdisconnect = 0;
-            str_ncpy(_sip, sip, sizeof(_sip));
+            str_ncpy(_sip, sip, sizeof(_sip)-1);
             _wport = wport;
 
-            str_ncpy(_usr, usr, sizeof(_usr));
-            str_ncpy(_psw, password, sizeof(_psw));
+            str_ncpy(_usr, usr, sizeof(_usr)-1);
+            str_ncpy(_psw, password, sizeof(_psw)-1);
             if (!_psw[0])
                 strcpy(_psw, "123456");//默认密码
 
@@ -1790,14 +1790,22 @@ namespace ec
             return _nstatus == 1;
         }
     };
-
+#ifdef _ARM_LINUX
+#define SIZE_RPC_CLI_BUF_GROWN (64* 1024)
+#define SIZE_RPC_CLI_BUF_UP (80 * 1024)
+#else
+#define SIZE_RPC_CLI_BUF_GROWN (256* 1024)
+#define SIZE_RPC_CLI_BUF_UP (1024 * 1024)
+#endif
     /*!
     \breif RPC auto reconnect client
     */
     class cRpcAutoClient : public cTcpCli
     {
     public:
-        cRpcAutoClient() : _rbuf(256 * 1024), _msgs(256 * 1024), _msgr(256 * 1024), _msgput(256 * 1024) {
+        cRpcAutoClient() : _rbuf(SIZE_RPC_CLI_BUF_GROWN), _msgs(SIZE_RPC_CLI_BUF_GROWN), _msgr(SIZE_RPC_CLI_BUF_GROWN), _msgput(SIZE_RPC_CLI_BUF_GROWN),
+			_cpbufc(SIZE_RPC_CLI_BUF_UP), _cpbufu(SIZE_RPC_CLI_BUF_UP)
+		{
             _bEncryptData = true;
             _wport = 0;
             _sip[0] = 0;
@@ -1856,8 +1864,8 @@ namespace ec
                 nr = DoLeftData(&_msgr);
             };
             _cpbufu.Free();
-            _msgs.ClearAndFree(1024 * 1024 * 2);
-            _msgr.ClearAndFree(1024 * 1024 * 2);
+            _msgs.shrink(SIZE_RPC_CLI_BUF_UP);
+            _msgr.shrink(SIZE_RPC_CLI_BUF_UP);
         }
     protected:
         char _usr[32];
@@ -2139,8 +2147,8 @@ namespace ec
                 if (uip1 == uip2 && wport == _wport && !strcmp(usr, _usr) && !strcmp(password, _psw))
                     return true;
             }
-            str_ncpy(_usr, usr, sizeof(_usr));
-            str_ncpy(_psw, password, sizeof(_psw));
+            str_ncpy(_usr, usr, sizeof(_usr)-1);
+            str_ncpy(_psw, password, sizeof(_psw)-1);
             if (!_psw[0])
                 strcpy(_psw, "123456");//默认密码
             encode_sha1(_psw, (unsigned int)strlen(_psw), _pswsha1);

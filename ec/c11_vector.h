@@ -1,7 +1,7 @@
 ﻿/*!
 \file c11_vector.h
 \author	kipway@outlook.com
-\update 2018.1.4
+\update 2018.2.4 add expand() and set_size()
 
 eclib class vector with c++11. fast noexcept simple vector. members of a vector can only be simple types, pointers and structures
 
@@ -23,6 +23,7 @@ limitations under the License.
 #pragma once
 #include <cstdint>
 #include <algorithm>
+#include <functional>
 namespace ec
 {
 	template<typename _Tp>
@@ -71,6 +72,13 @@ namespace ec
 			if (_ugrown > max_size())
 				_ugrown = max_size();
 		};
+		bool set_size(size_t size)
+		{
+			if (_ubufsize < size)
+				return false;
+			_usize = size;
+			return true;
+		}
 		inline size_type size() const noexcept
 		{
 			return _usize;
@@ -109,7 +117,9 @@ namespace ec
 		}
 		bool add(const value_type *pbuf, size_type usize = 1) noexcept
 		{
-			if (!usize || !_grown(usize))
+			if (!usize || !pbuf)
+				return true;
+			if (!_grown(usize))
 				return false;
 			memcpy(_pbuf + _usize, pbuf, usize * sizeof(value_type));
 			_usize += usize;
@@ -140,26 +150,16 @@ namespace ec
 		{
 			return !(_pbuf && _usize);
 		}
-		void for_each(void(*fun)(value_type& val)) noexcept
+		void for_each(std::function<void(value_type& val)> fun) noexcept
 		{
 			for (size_type i = 0; i < _usize; i++)
 				fun(_pbuf[i]);
 		}
-		void for_each(iterator first, iterator last, void(*fun)(value_type& val)) noexcept
+		void for_each(iterator first, iterator last, std::function<void(value_type& val)> fun) noexcept
 		{
 			while (first != last)
 				fun(*first++);
-		}
-		void for_each(void*param, void(*fun)(value_type& val, void* param)) noexcept
-		{
-			for (size_type i = 0; i < _usize; i++)
-				fun(_pbuf[i], param);
-		}
-		void for_each(void*param, iterator first, iterator last, void(*fun)(value_type& val, void* param)) noexcept
-		{
-			while (first != last)
-				fun(*first++, param);
-		}
+		}		
 		inline value_type* data() noexcept
 		{
 			return _pbuf;
@@ -248,6 +248,23 @@ namespace ec
 			free(_pbuf);
 			_pbuf = pnew;
 			_ubufsize = size;
+		}
+		bool expand(size_type size) noexcept
+		{
+			if (_ubufsize >= size)
+				return true;
+			value_type* pnew = (value_type*)malloc(size * sizeof(value_type));
+			if (!pnew)
+				return false;
+			if (_pbuf)
+			{
+				if(_usize)
+					memcpy(pnew, _pbuf, _usize * sizeof(value_type));
+				free(_pbuf);
+			}
+			_pbuf = pnew;
+			_ubufsize = size;
+			return true;
 		}
 	protected:
 		bool _grown(size_type usize = 1) noexcept

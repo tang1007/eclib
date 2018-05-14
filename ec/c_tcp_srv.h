@@ -1,13 +1,25 @@
 /*!
-\file c_tcpsrv.h
-\brief tcp server windows use CPIO,Linux use Epoll
+\file c_tcp_srv.h
+\author	kipway@outlook.com
+\update 2018.4.3 modify Linux Epoll to EPOLLET (edge-trigger)
 
-class ec::cTcpSvrWorkThread;
-class ec::cTcpServer;
+class ec::cTcpServer
+class ec::cTcpSvrWorkThread
 
-ec library is free C++ library.
+eclib Copyright (c) 2017-2018, kipway
+source repository : https://github.com/kipway/eclib
 
-\author	 kipway@outlook.com
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 #ifndef C_TCPSRV_H
@@ -202,8 +214,6 @@ namespace ec
                 badd = _buf.Add(epollevt, false, 0);
                 _cs.Unlock();
                 _evt.SetEvent();
-                if (!badd)
-                    _evt.Wait(1);
             }
         }
 
@@ -214,7 +224,7 @@ namespace ec
             bret = _buf.Get(epollevt);
             _cs.Unlock();
             if (bret)
-                _evt.SetEvent();
+               _evt.SetEvent();
             return bret;
         }
     };
@@ -372,10 +382,9 @@ namespace ec
             }
             return (int)usize;
 #else
-            int nret = m_pConPool->ucid_Send(ucid, pbuf, usize);
+            int nret = m_pConPool->ucid_Send(_nfdr,ucid, pbuf, usize);//if failed close and remove from m_ConPool
             if (SOCKET_ERROR == nret)
-            {
-                m_pConPool->DelAndCloseSocket(ucid);
+            {				
                 OnClientDisconnect(ucid, uSendOpt, errno);
                 OnOptError(ucid, uSendOpt);
                 return -1;
@@ -499,7 +508,7 @@ namespace ec
 #else
         virtual	void dojob()
         {
-            int nfd, nerr;
+			int nerr;
             unsigned int ucid;
             if (!_pEpollEvents->Get(_eplevt))
                 return;
@@ -508,61 +517,55 @@ namespace ec
                 DoSelfMsg(_eplevt.events);
                 return;
             }
-            nfd = (int)(_eplevt.data.u64 & 0xFFFFFFFF);
             ucid = (unsigned int)(_eplevt.data.u64 >> 32);
+			if (!ucid) 
+				return;			
+			if (_eplevt.events & EPOLLERR || _eplevt.events & EPOLLHUP || _eplevt.events & EPOLLRDHUP) // error
+			{
+				m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel);//delete from  epoll and  m_pConPool                
+				OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
+				OnOptError(ucid, TCPIO_OPT_READ);
+				return;
+			}
             if (_eplevt.events & EPOLLIN) // read
             {
                 while (1)
                 {
-                    int nbytes = recv(nfd, _buf, sizeof(_buf), MSG_DONTWAIT);
+					int nbytes = m_pConPool->ucid_recv(ucid, _buf, sizeof(_buf), MSG_DONTWAIT);
                     if (nbytes < 0) // end or error
                     {
-                        nerr = errno;
-                        if (nerr == EAGAIN || nerr == EWOULDBLOCK)//read end
-                        {
-                            OnOptComplete(ucid, TCPIO_OPT_READ);
-                            _eplevt.events = EPOLLIN | EPOLLONESHOT;
-                            epoll_ctl(_nfdr, EPOLL_CTL_MOD, nfd, &_eplevt); // reset
-                        }
-                        else
-                        {
-                            epoll_ctl(_nfdr, EPOLL_CTL_DEL, nfd, &_evtdel);
-                            m_pConPool->DelAndCloseSocket(ucid);
-                            OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
-                            OnOptError(ucid, TCPIO_OPT_READ);
-                            return;
-                        }
+						if (nbytes == -1) {
+							nerr = errno;
+							if (nerr == EAGAIN || nerr == EWOULDBLOCK)//read end
+							{
+								OnOptComplete(ucid, TCPIO_OPT_READ);
+								_eplevt.events = EPOLLIN | EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
+								m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_MOD, ucid, &_eplevt); // reset
+								return;
+							}
+						}
+						m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel);//delete from  epoll and  m_pConPool 
+						OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
+						OnOptError(ucid, TCPIO_OPT_READ);
                         return;
                     }
                     else if (nbytes == 0) // close
                     {
-                        epoll_ctl(_nfdr, EPOLL_CTL_DEL, nfd, &_evtdel);
-                        m_pConPool->DelAndCloseSocket(ucid);
+						m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel);//delete from  epoll and  m_pConPool 
                         OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
                         OnOptError(ucid, TCPIO_OPT_READ);
                         return;
-                    }
-                    else
-                    {
-                        if (!OnReadBytes(ucid, _buf, nbytes))
-                        {
-                            epoll_ctl(_nfdr, EPOLL_CTL_DEL, nfd, &_evtdel);
-                            m_pConPool->DelAndCloseSocket(ucid);
-                            OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
-                            OnOptError(ucid, TCPIO_OPT_READ);
-                            return;
-                        }
-                        m_pConPool->OnRead(ucid, nbytes);
-                    }
+                    }                    
+					if (!OnReadBytes(ucid, _buf, nbytes))
+					{
+						m_pConPool->ucid_epoll_ctl(_nfdr, EPOLL_CTL_DEL, ucid, &_evtdel);//delete from  epoll and  m_pConPool 						
+						OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
+						OnOptError(ucid, TCPIO_OPT_READ);						
+						return;
+					}
+					m_pConPool->OnRead(ucid, nbytes);                    
                 };
-            }
-            else if (_eplevt.events & EPOLLERR || _eplevt.events & EPOLLHUP) // error
-            {
-                epoll_ctl(_nfdr, EPOLL_CTL_DEL, nfd, &_evtdel);
-                m_pConPool->DelAndCloseSocket(ucid);
-                OnClientDisconnect(ucid, TCPIO_OPT_READ, errno);
-                OnOptError(ucid, TCPIO_OPT_READ);
-            }
+            }            
         }
 #endif
     }; //cTcpSvrWorkThread
@@ -637,6 +640,11 @@ namespace ec
             if (SetNoBlock(sAccept) < 0)
                 return;
 #endif
+			if (m_ConPool.IsFull())
+			{
+				closesocket(sAccept);
+				return;
+			}
             DoConnected(sAccept, addrClient.sin_addr);
         };
     protected:
@@ -645,7 +653,7 @@ namespace ec
             unsigned int ucid;
             char        sip[32] = { 0 };
 
-            str_ncpy(sip, inet_ntoa(ipinaddr), sizeof(sip));
+            str_ncpy(sip, inet_ntoa(ipinaddr), sizeof(sip)-1);
             sip[sizeof(sip) - 1] = 0;
 
             ucid = m_ConPool.AddItem(sAccept);
@@ -723,9 +731,9 @@ namespace ec
             struct epoll_event event;
 
             event.data.u64 = ucid;
-            event.data.u64 = (event.data.u64 << 32) + nfd;
-            event.events = EPOLLIN | EPOLLONESHOT;
-            if (-1 == epoll_ctl(_epollfdr, EPOLL_CTL_ADD, nfd, &event))
+			event.data.u64 = (event.data.u64 << 32);
+			event.events = EPOLLIN | EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
+			if (-1 == m_ConPool.ucid_epoll_ctl(_epollfdr, EPOLL_CTL_ADD, ucid, &event))
             {
                 OnRemovedUCID(ucid);
                 m_ConPool.DelAndCloseSocket(ucid);
@@ -930,13 +938,12 @@ namespace ec
             for (i = 0; i < n; i++)
                 OnRemovedUCID(pids[i]);
 #else
-            _threadevent.Stop();//stop epoll event
-
-            StopAndDeleteThreads();//stop work threads
-
             shutdown(m_sListen, SHUT_WR);
             close(m_sListen);
             m_sListen = INVALID_SOCKET;
+
+            m_ConPool.shutdown_all(); //shutdown triger close event
+            sleep(1);
 
             if (_epollfdr != INVALID_SOCKET)
             {
@@ -944,13 +951,14 @@ namespace ec
                 _epollfdr = INVALID_SOCKET;
             }
 
-            //close all socket int con pool
+            _threadevent.Stop();//stop epoll event
+            StopAndDeleteThreads();//stop work threads
+
             tArray<unsigned int> ids(16384);
             m_ConPool.CloseAllSocket(&ids);
-
             int i, n = ids.GetNum();
             unsigned int *pids = ids.GetBuf();
-            for (i = 0; i < n; i++)
+           for (i = 0; i < n; i++)
                 OnRemovedUCID(pids[i]);
 #endif
         }
@@ -981,20 +989,19 @@ namespace ec
 			if (SOCKET_ERROR == m_ConPool.ucid_WSASend(ucid, &(pol->WSABuf), 1, &dwSend, 0, &(pol->Overlapped), NULL, bAddCount))
 			{
 				OnRemovedUCID(ucid);
-				m_ConPool.DelAndCloseSocket(ucid);			
+				m_ConPool.DelAndCloseSocket(ucid);
 				m_Mem.Push(pol);
 				return -1;
 			}
 			return (int)usize;
 #else
-			int nret = m_ConPool.ucid_Send(ucid, pbuf, usize);
+			int nret = m_ConPool.ucid_Send(_epollfdr,ucid, pbuf, usize);//if failed close and remove from m_ConPool
 			if (SOCKET_ERROR == nret)
 			{
 				OnRemovedUCID(ucid);
-				m_ConPool.DelAndCloseSocket(ucid);				
 				return -1;
 			}
-			m_ConPool.OnSend(ucid, usize, bAddCount);			
+			m_ConPool.OnSend(ucid, usize, bAddCount);
 			return nret;
 #endif
 		};

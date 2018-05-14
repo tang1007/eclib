@@ -175,7 +175,7 @@ namespace ec
 			if(ret != SQL_SUCCESS)
 				return DBE_HDB;
 			
-			ec::str_ncpy(_sdsn,sdsn,DBDSNSTR_LEN);
+			ec::str_ncpy(_sdsn,sdsn,DBDSNSTR_LEN-1);
 			ret = ::SQLSetConnectAttr(_hdb,SQL_ATTR_CONNECTION_TIMEOUT,(SQLPOINTER)ntimeoutsec,SQL_IS_INTEGER); 
 			if(ret != SQL_SUCCESS)
 				return DBE_CONATTR_TIMEOUT;
@@ -203,7 +203,7 @@ namespace ec
 			if(ret != SQL_SUCCESS)
 				return DBE_HDB;
 			
-			ec::str_ncpy(_sdsn,sdsn,DBDSNSTR_LEN);
+			ec::str_ncpy(_sdsn,sdsn,DBDSNSTR_LEN-1);
 			ret = ::SQLSetConnectAttr(_hdb,SQL_ATTR_CONNECTION_TIMEOUT,(SQLPOINTER)ntimeoutsec,SQL_IS_INTEGER); 
 			if(ret != SQL_SUCCESS)
 				return DBE_CONATTR_TIMEOUT;
@@ -231,7 +231,7 @@ namespace ec
 			if(ret != SQL_SUCCESS)
 				return DBE_HDB;
 
-			ec::str_ncpy(_sdsn,sConnectStr,DBDSNSTR_LEN);
+			ec::str_ncpy(_sdsn,sConnectStr,DBDSNSTR_LEN-1);
 			ret = ::SQLSetConnectAttr(_hdb,SQL_ATTR_CONNECTION_TIMEOUT,(SQLPOINTER)ntimeoutsec,SQL_IS_INTEGER); 
 			if(ret != SQL_SUCCESS)
 				return DBE_CONATTR_TIMEOUT;

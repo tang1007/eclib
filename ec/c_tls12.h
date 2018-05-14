@@ -1,11 +1,9 @@
 /*!
 \file c_tls12.h
-\version 0.01
-TLS 1.2 (rfc5246) safe channel client
+\author	kipway@outlook.com
+\update 2018.4.3 fix RSA_private_decrypt multithread safety
 
-ec library is free C++ library.
-\author jiangyong
-
+eclib TLS1.2(rfc5246) server and client class
 support:
 CipherSuite TLS_RSA_WITH_AES_128_CBC_SHA256 = { 0x00,0x3C };
 CipherSuite TLS_RSA_WITH_AES_256_CBC_SHA256 = { 0x00,0x3D };
@@ -14,6 +12,20 @@ will add MAC secrets = 20byte
 CipherSuite TLS_RSA_WITH_AES_128_CBC_SHA = {0x00,0x2F};
 CipherSuite TLS_RSA_WITH_AES_256_CBC_SHA = {0x00,0x35};
 
+eclib Copyright (c) 2017-2018, kipway
+source repository : https://github.com/kipway/eclib
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 #pragma once
 
@@ -1044,7 +1056,7 @@ namespace ec
     {
     public:
         cTlsSession_srv(unsigned int ucid, const void* pcer, size_t cerlen,
-            const void* pcerroot, size_t cerrootlen, RSA* pRsaPub, RSA* pRsaPrivate
+            const void* pcerroot, size_t cerrootlen, cCritical* pRsaLck, RSA* pRsaPrivate
         ) : cTlsSession(true, ucid),
             _pkgm(1024 * 20)
         {
@@ -1053,7 +1065,7 @@ namespace ec
             _cerlen = cerlen;
             _pcerroot = pcerroot;
             _cerrootlen = cerrootlen;
-            _pRsaPub = pRsaPub;
+			_pRsaLck = pRsaLck;
             _pRsaPrivate = pRsaPrivate;
             memset(_sip, 0, sizeof(_sip));
         }
@@ -1062,7 +1074,7 @@ namespace ec
         }
     protected:
         bool  _bhandshake_finished;
-        RSA* _pRsaPub;
+        cCritical* _pRsaLck;
         RSA* _pRsaPrivate;
 
         const void* _pcer;
@@ -1070,15 +1082,17 @@ namespace ec
         const void* _pcerroot;
         size_t _cerrootlen;
         ec::tArray<unsigned char> _pkgm;
-        char _sip[20];
+        char _sip[32];
     public:
         void SetIP(const char* sip)
         {
             if (sip && *sip)
-                str_ncpy(_sip, sip, sizeof(_sip));
+                str_ncpy(_sip, sip, sizeof(_sip)-1);
         }
         virtual bool MakeAppRecord(ec::tArray<unsigned char>*po, const void* pd, size_t size)
         {
+			if (!pd || !size)
+				return false;
             po->ClearData();
             if (!_bhandshake_finished)
                 return false;
@@ -1237,10 +1251,16 @@ namespace ec
             {
                 uint32 ulen = pmsg[4];//private key decode
                 ulen = (ulen << 8) | pmsg[5];
+				_pRsaLck->Lock();
                 nbytes = RSA_private_decrypt((int)ulen, pmsg + 6, premasterkey, _pRsaPrivate, RSA_PKCS1_PADDING);
+				_pRsaLck->Unlock();
             }
-            else
-                nbytes = RSA_private_decrypt((int)ulen, pmsg + 4, premasterkey, _pRsaPrivate, RSA_PKCS1_PADDING);
+			else
+			{
+				_pRsaLck->Lock();
+				nbytes = RSA_private_decrypt((int)ulen, pmsg + 4, premasterkey, _pRsaPrivate, RSA_PKCS1_PADDING);
+				_pRsaLck->Unlock();
+			}
 
             if (nbytes != 48)
             {
@@ -1480,7 +1500,7 @@ namespace ec
 
             if (IsRun())
                 StopThread();
-            ec::str_ncpy(_sip, sip, sizeof(_sip));
+            ec::str_ncpy(_sip, sip, sizeof(_sip)-1);
             _wport = wport;
 
             _nreconnectsec = reconnectsec;
@@ -1715,7 +1735,7 @@ namespace ec
     class cTlsSrvThread : public cTcpSvrWorkThread
     {
     public:
-        cTlsSrvThread(cTlsSession_srvMap* psss) : _tlsdata(1024 * 128)
+        cTlsSrvThread(cTlsSession_srvMap* psss) : _tlsdata(1024 * 128), _tlsrectmp(1024 * 128)
         {
             _psss = psss;
         }
@@ -1724,8 +1744,9 @@ namespace ec
         }
 
         cTlsSession_srvMap* _psss;
-    protected:
+	private:
         ec::tArray<unsigned char> _tlsdata;
+		ec::tArray<unsigned char> _tlsrectmp;
     protected:
         virtual bool    OnAppData(unsigned int ucid, const void* pd, unsigned int usize) { return true; };
         virtual void    OnHandshakeSuccess(unsigned int ucid, const char* sip) {};
@@ -1780,13 +1801,19 @@ namespace ec
             }
             return 0;
         }
-    public:
+    protected:
         bool SendAppData(unsigned ucid, const void* pd, size_t len, bool bAddCount = false, unsigned int uSendOpt = TCPIO_OPT_SEND)
         {
-            ec::tArray<unsigned char> tmp(len + 264 - len%8 + (len/16384) * 256);
-            if (!_psss->mkr_appdata(ucid, &tmp, pd, len))
-                return false;
-            return SendToUcid(ucid, tmp.GetBuf(), (unsigned int)tmp.GetSize(), bAddCount, uSendOpt) > 0;
+			_tlsrectmp.set_grow(len + 264 - len % 8 + (len / 16384) * 256);            
+			if (!_psss->mkr_appdata(ucid, &_tlsrectmp, pd, len)) {
+				_tlsrectmp.clear();
+				_tlsrectmp.shrink(0xFFFFF);
+				return false;
+			}
+            bool bret =  SendToUcid(ucid, _tlsrectmp.GetBuf(), (unsigned int)_tlsrectmp.GetSize(), bAddCount, uSendOpt) > 0;
+			_tlsrectmp.clear();
+			_tlsrectmp.shrink(0xFFFFF);
+			return bret;
         }
     };
 
@@ -1828,6 +1855,7 @@ namespace ec
         ec::tArray<unsigned char> _prootcer;
 
         cTlsSession_srvMap _sss;
+		cCritical _csRsa;
     public:
         bool InitCert(const char* filecert, const char* filerootcert, const char* fileprivatekey)
         {
@@ -1893,7 +1921,7 @@ namespace ec
         virtual void    OnConnected(unsigned int ucid, const char* sip)
         {
             cTlsSession_srv* psession = new cTlsSession_srv(ucid, _pcer.GetBuf(), _pcer.GetSize(),
-                _prootcer.GetBuf(), _prootcer.GetSize(), _pRsaPub, _pRsaPrivate);
+                _prootcer.GetBuf(), _prootcer.GetSize(), &_csRsa, _pRsaPrivate);
             psession->SetIP(sip);
             _sss.Add(ucid, psession);
         }

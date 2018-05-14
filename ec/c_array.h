@@ -30,6 +30,7 @@ limitations under the License.
 #if (0 != USE_ECLIB_C11)
 #include <cstdint>
 #include <algorithm>
+#include <functional>
 #endif
 namespace ec {
 	template<class _Ty>
@@ -156,7 +157,9 @@ namespace ec {
 		}
 		bool add(const value_type *pbuf, size_type usize = 1)
 		{
-			if (!usize || !_grown(usize))
+			if (!usize || !pbuf)
+				return true;
+			if (!_grown(usize))
 				return false;
 			memcpy(_pbuf + _usize, pbuf, usize * sizeof(value_type));
 			_usize += usize;
@@ -183,6 +186,7 @@ namespace ec {
 		{
 			return !(_pbuf && _usize);
 		}
+#if (USE_ECLIB_C11 == 0)
 		void for_each(void(*fun)(value_type& val))
 		{
 			for (size_type i = 0; i < _usize; i++)
@@ -203,6 +207,7 @@ namespace ec {
 			while (first != last)
 				fun(*first++, param);
 		}
+#endif
 		bool insert(size_type pos, const value_type *pbuf, size_type usize)  // insert before
 		{
 			if (!pbuf || !usize)
@@ -259,10 +264,20 @@ namespace ec {
 			}
 		}		
 #if (0 != USE_ECLIB_C11)
-		inline void sort(bool(*cmp)(const value_type& v1, const value_type& v2))
+		inline void sort(bool(*cmp)(const value_type& v1, const value_type& v2)) noexcept
 		{
 			if (_usize > 1)
 				std::sort(begin(), end(), cmp);
+		}
+		void for_each(std::function<void(value_type& val)> fun) noexcept
+		{
+			for (size_type i = 0; i < _usize; i++)
+				fun(_pbuf[i]);
+		}
+		void for_each(iterator first, iterator last, std::function<void(value_type& val)> fun) noexcept
+		{
+			while (first != last)
+				fun(*first++);
 		}
 #endif
 	public: // Adapt for old version

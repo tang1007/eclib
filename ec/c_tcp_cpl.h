@@ -1,15 +1,26 @@
 /*!
 \file c_tcp_cpl.h
-\brief tcp connect pool
+\author	kipway@outlook.com
+\update 2018.4.3 
+add ucid_recv and ucid_epoll_ctl in linux 
 
-struct ec::T_CONFLOW
-struct ec::T_CONITEM
 class ec::cConnectPool
 class ec::cTcpConnectPoll
 
-ec library is free C++ library.
+eclib Copyright (c) 2017-2018, kipway
+source repository : https://github.com/kipway/eclib
 
-\author	 kipway@outlook.com
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 #ifndef C_TCP_CPL_H
 #define C_TCP_CPL_H
@@ -73,11 +84,11 @@ namespace ec
 	class cConnectPool //connect pool
 	{
 	public:
-		cConnectPool() : _csucid(4000), _mapucid(16384) {			
+		cConnectPool() : _csucid(4000), _mapucid(16384) {
 			m_uNextID = 0;
-			m_uMaxConnect = 1024;			
+			m_uMaxConnect = 1024;
 		};
-		virtual ~cConnectPool() {			
+		virtual ~cConnectPool() {
 		};
 	public:
 		static unsigned int GetTicks()
@@ -229,7 +240,7 @@ namespace ec
 			_Locks[it.uID % CPL_SOCKET_GROUPS].Unlock();
 			return it.uID;
 		}
-		
+
 		bool DelAndCloseSocket(unsigned int uID)
 		{
 			bool bDel = false;
@@ -288,7 +299,7 @@ namespace ec
 			{
 				_Locks[i].Lock();
 				npos = 0;
-				nlist = 0;				
+				nlist = 0;
 				while (_maps[i].GetNext(npos, nlist, pi)) {
 					if (pa)
 						pa->Add(pi->uID);
@@ -309,7 +320,26 @@ namespace ec
 				return pa->GetNum();
 			return 0;
 		}
-
+        void	shutdown_all()
+		{
+			unsigned int i;
+			int npos = 0, nlist = 0;
+			T_CONITEM* pi;
+			for (i = 0; i < CPL_SOCKET_GROUPS; i++)
+			{
+				_Locks[i].Lock();
+				npos = 0;
+				nlist = 0;
+				while (_maps[i].GetNext(npos, nlist, pi)) {
+#ifdef _WIN32
+					shutdown(pi->Socket, SD_BOTH);
+#else
+					shutdown(pi->Socket, SHUT_WR);
+#endif
+				}
+				_Locks[i].Unlock();
+			}
+		}
 		int  GetSendNoDone(unsigned int uID)
 		{
 			cSafeLock	lock(&_Locks[uID % CPL_SOCKET_GROUPS]);
@@ -432,7 +462,30 @@ namespace ec
 			return nret;
 		}
 #else
-
+		int ucid_recv(unsigned int uID, void *buf, size_t len, int flags)//recv by ucid
+		{
+			cSafeLock	lock(&_Locks[uID % CPL_SOCKET_GROUPS]);
+			T_CONITEM* pi = _maps[uID % CPL_SOCKET_GROUPS].Lookup(uID);
+			if (!pi)
+				return -2;
+			return recv(pi->Socket, buf, len, flags);
+		}
+		int ucid_epoll_ctl(int epfd, int op, unsigned int uID, struct epoll_event *pevent)// if delete , delete from connect pool
+		{
+			cSafeLock	lock(&_Locks[uID % CPL_SOCKET_GROUPS]);
+			T_CONITEM* pi = _maps[uID % CPL_SOCKET_GROUPS].Lookup(uID);
+			if (!pi)
+				return -1;
+			int nret = epoll_ctl(epfd, op, pi->Socket, pevent);
+			if (EPOLL_CTL_DEL == op)
+			{
+				shutdown(pi->Socket, SHUT_WR);
+				close(pi->Socket); // man 7 epoll ,closing a file descriptor cause it to be removed from all epoll sets automatically
+				_maps[uID % CPL_SOCKET_GROUPS].RemoveKey(uID);
+				FreeUcid(uID);
+			}
+			return nret;
+		}
 		//return send bytes size or -1 for error
 		int Socket_Send(SOCKET s, const void* pbuf, unsigned int nsize)
 		{
@@ -464,15 +517,22 @@ namespace ec
 		};
 
 		//send as block ,return send bytes size or -1 for error
-		int ucid_Send(unsigned int uID, const void* pbuf, unsigned int nsize)
+		int ucid_Send(int epfd, unsigned int uID, const void* pbuf, unsigned int nsize)// send failed will delete from connect pool
 		{
 			cSafeLock	lock(&_Locks[uID % CPL_SOCKET_GROUPS]);
 			T_CONITEM* pi = _maps[uID % CPL_SOCKET_GROUPS].Lookup(uID);
-			if (!pi)
-				return SOCKET_ERROR;
+			if (!pi) 
+				return SOCKET_ERROR;			
 			int nsend = Socket_Send(pi->Socket, pbuf, nsize);
-			if (SOCKET_ERROR == nsend)
+			if (SOCKET_ERROR == nsend) {				
+				struct epoll_event  evtdel;
+				epoll_ctl(epfd, EPOLL_CTL_DEL, pi->Socket, &evtdel);
+				shutdown(pi->Socket, SHUT_WR);
+				close(pi->Socket);
+				_maps[uID % CPL_SOCKET_GROUPS].RemoveKey(uID);
+				FreeUcid(uID);				
 				return SOCKET_ERROR;
+			}
 			pi->u64Send += nsend;
 			SetBps(pi, nsend, false);
 			return nsend;

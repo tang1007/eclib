@@ -63,7 +63,7 @@ namespace ec {
 
             if (IsRun())
                 StopThread();
-            ec::str_ncpy(_sip, sip, sizeof(_sip));
+            ec::str_ncpy(_sip, sip, sizeof(_sip)-1);
             _wport = wport;
             _nreconnectsec = reconnectsec;
             if (_nreconnectsec < 1)

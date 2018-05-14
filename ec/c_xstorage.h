@@ -837,7 +837,7 @@ namespace ec
             t_entry it; //分配入口页面
             memset(&it, 0, sizeof(it));
             it.type = entrytype;
-            ec::str_ncpy(it.name, sname, sizeof(it.name));
+            ec::str_ncpy(it.name, sname, sizeof(it.name)-1);
             if (entrytype == ECSTG_ENTRY_DIR)
                 it.pageno = AllocOneListPage(ECSTG_PAGE_DIR);
             else
@@ -875,7 +875,7 @@ namespace ec
             if (allocpages > 1024)
                 return false;
             memset(&_head, 0, sizeof(_head));
-            ec::str_ncpy(_head.sappid, sappid, sizeof(_head.sappid));
+            ec::str_ncpy(_head.sappid, sappid, sizeof(_head.sappid)-1);
             _head.version = ECSTG_VERSION;
             _head.allocpages = allocpages;
             try

@@ -1,7 +1,7 @@
 ﻿/*!
 \file c11_event.h
 \author kipway@outlook.com
-\update 2018.1.3
+\update 2018.3.11
 
 eclib class cEvent  with c++11. Adapt for c_event.h 
 
@@ -46,16 +46,15 @@ namespace ec {
 		bool Wait(int milliseconds)
 		{
 			std::unique_lock<std::mutex> lck(_mtx);
-			if (_cv.wait_for(lck, std::chrono::milliseconds(milliseconds)) != std::cv_status::timeout)
+			if (!_nready)
+				_cv.wait_for(lck, std::chrono::milliseconds(milliseconds));
+			if (_nready)
 			{
-				if (_nready)
-				{
-					if (!_bManualReset)
-						_nready = false;
-					return true;
-				}
+				if (!_bManualReset)
+					_nready = false;
+				return true;
 			}
-			return false;
+			return false;		
 		}
 	protected:
 		bool _nready;

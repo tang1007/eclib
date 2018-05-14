@@ -51,7 +51,7 @@ namespace ec
         {
             if (_pos + sizeof(T) > _size)
                 throw (int)1;
-            v = *((T*)(_ps + _pos));
+			memcpy(&v,_ps + _pos,sizeof(T));
             _pos += sizeof(T);
             return *this;
         };
@@ -60,7 +60,7 @@ namespace ec
         {
             if (_pos + sizeof(T) > _size)
                 throw (int)1;
-            *((T*)(_ps + _pos)) = v;
+			memcpy(_ps + _pos,&v,sizeof(T));
             _pos += sizeof(T);
             return *this;
         };

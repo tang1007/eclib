@@ -131,7 +131,18 @@ namespace ec {
             _pevt = pevt;
             _pdojob = dojob;
             _pdoarg = pargs;
+#ifdef _ARM_LINUX
+#	ifndef ARM_STACK_SIZE
+#		define ARM_STACK_SIZE 0x100000 // 1MB
+#	endif
+	    pthread_attr_t attr;
+	    pthread_attr_init(&attr);
+	    pthread_attr_setstacksize(&attr, ARM_STACK_SIZE);
+	    pthread_create(&m_tid, &attr, ThreadProcess, this);
+	    pthread_attr_destroy(&attr);
+#else
             pthread_create(&m_tid, NULL, ThreadProcess, this);
+#endif
         }
         void StopThread()
         {
