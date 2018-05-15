@@ -79,14 +79,14 @@ namespace ec
 					_plog->AddLog("ERR: send ucid %u make wsframe failed,size %u", ucid, (unsigned int)size);
 				return -1;
 			}
-			int n = SendAppData(ucid, _answer.GetBuf(), _answer.GetSize(), bAddCount, uSendOpt);
-			if (_plog && n <=0)				
+			bsend = SendAppData(ucid, _answer.GetBuf(), _answer.GetSize(), bAddCount, uSendOpt);
+			if (_plog && !bsend)
 					_plog->AddLog("ERR: send ucid %u failed size(%u/%u)", ucid, (unsigned int)size, (unsigned int)_answer.GetSize());
 			_answer.clear();
 			_answer.shrink(0xFFFFF);
 			_encodetmp.clear();
 			_encodetmp.shrink(0xFFFFF);
-			return n;
+			return (int)size;
 		}
 	private:
 		/*!
