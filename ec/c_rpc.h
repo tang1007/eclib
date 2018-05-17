@@ -6,6 +6,7 @@ ec library is free C++ library.
 
 \author	 jiangyong,
 \email   13212314895@126.com
+\update 2018.5.15
 
 \remark  安全可靠传输应用层的消息,消息大小1字节到1G(1024 * 1024 * 1024)字节,为了处理效率和降低内存耗用，建议消息不超过1M字节，推荐小于256K字节。
 
@@ -1301,7 +1302,8 @@ enum RPC_CLINET_EVT
     rpc_c_login_pswerr = -2, //!<登录密码错误,
     rpc_c_connect_tcperr = -3, //!<连接TCP错误
     roc_c_disconnected_tcp = -4, //!<TCP层连接断开
-    roc_c_disconnected_msgerr = -5  //!<消息错误而断开
+    roc_c_disconnected_msgerr = -5,  //!<消息错误而断开
+	roc_c_thread_exit = -6 //线程退出
 };
 
 typedef void(*rpc_clientevt)(void* pParam, RPC_CLINET_EVT nevt); //客户端事件回调
@@ -1811,9 +1813,7 @@ namespace ec
             _sip[0] = 0;
             _usr[0] = 0;
             _psw[0] = 0;
-
-            _sock = INVALID_SOCKET;
-            _nstatus = -1;
+            
             _seqno = 0;
         };
 
@@ -1843,11 +1843,10 @@ namespace ec
             SetSocketKeepAlive(_sock, false);
             sprintf(_msgsh, "connect,%s", _usr);
             MakePkg(_msgsh, strlen(_msgsh), rpcmsg_sh, rpccomp_none, _seqno++, 0, &_msgs);
-            Send(_msgs.GetBuf(), _msgs.GetNum());
-            _nstatus = 0;
+            Send(_msgs.GetBuf(), _msgs.GetNum());            
         }
         virtual void OnDisConnected(int where, int nerrcode) {
-            _nstatus = -1;
+            
             if (where > 0)
                 OnLoginEvent(roc_c_disconnected_tcp);
             else if (where < 0)
@@ -1867,12 +1866,17 @@ namespace ec
             _msgs.shrink(SIZE_RPC_CLI_BUF_UP);
             _msgr.shrink(SIZE_RPC_CLI_BUF_UP);
         }
+		virtual void OnStop()
+		{
+			cTcpCli::OnStop();
+			OnLoginEvent(roc_c_thread_exit);
+		}
     protected:
         char _usr[32];
         char _psw[40];
         unsigned char _pswsha1[20]; //密码的sha1摘要，用于解密
 
-        volatile  int   _nstatus;//!<状态,-1,未连接,0已连接,1已登录
+        
         tArray<unsigned char> _rbuf;//!<未处理字符数组
         tArray<unsigned char> _msgs;//!<发送缓冲区
         tArray<unsigned char> _msgr;//!<接收到的完整消息
@@ -1977,7 +1981,6 @@ namespace ec
             return true;
         }
     protected:
-
 
         int DoLeftData(tArray<unsigned char>* pout)//处理生效的报文
         {
@@ -2129,7 +2132,7 @@ namespace ec
                     OnLoginEvent(rpc_c_login_pswerr);
                     return rpc_c_login_pswerr;
                 }
-                _nstatus = 1;//已login成功
+				_nstatus_con = 1;//已login成功
                 OnLoginEvent(rpc_c_login_ok);
             }
             return 0;
@@ -2168,7 +2171,7 @@ namespace ec
         */
         int  SendMsg(const void* pd, size_t size, RPCMSGTYPE msgtype, RPCCOMPRESS compress, unsigned int seqno) //返回0表示成功，其他为错误码
         {
-            if (_nstatus != 1 || INVALID_SOCKET == _sock)
+            if (_nstatus_con != 1 || INVALID_SOCKET == _sock)
                 return rpc_c_login_usrerr; //未登录
             MakePkg(pd, size, msgtype, compress, seqno, _pswsha1, &_msgput);
             int nw = Send(_msgput.GetBuf(), _msgput.GetNum());
@@ -2182,11 +2185,11 @@ namespace ec
         */
         inline int GetStatus()
         {
-            return _nstatus;
+            return _nstatus_con;
         }
         inline bool IsConnect()
         {
-            return _nstatus == 1;
+            return _nstatus_con == 1 && INVALID_SOCKET != _sock;
         }
     };
 }//ec

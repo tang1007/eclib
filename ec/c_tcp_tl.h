@@ -3,7 +3,7 @@
 tcp functions for windows & linux
 
 \author	kipway@outlook.com
-\update 2018.5.3
+\update 2018.5.15
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib
@@ -125,7 +125,7 @@ namespace ec
     }
 #endif 
 
-	inline  SOCKET	tcp_connect(const char* sip, unsigned short suport, int nTimeOutSec)
+	inline  SOCKET	tcp_connect(const char* sip, unsigned short suport, int nTimeOutSec, bool bFIONBIO = false)
 	{
 		if (!sip || !*sip || !inet_addr(sip) || !suport)
 			return INVALID_SOCKET;
@@ -170,9 +170,11 @@ namespace ec
 		}
 		ul = 0;
 #ifdef _WIN32
-		if (SOCKET_ERROR == ioctlsocket(s, FIONBIO, (unsigned long*)&ul)) {
-			::closesocket(s);
-			return INVALID_SOCKET;
+		if (!bFIONBIO) {
+			if (SOCKET_ERROR == ioctlsocket(s, FIONBIO, (unsigned long*)&ul)) {
+				::closesocket(s);
+				return INVALID_SOCKET;
+			}
 		}
 #else
 		int serr = 0;
@@ -183,9 +185,11 @@ namespace ec
 			::closesocket(s);
 			return INVALID_SOCKET;
 		}
-		if (ioctl(s, FIONBIO, &ul) == -1) {
-			closesocket(s);
-			return INVALID_SOCKET;
+		if (!bFIONBIO) {
+			if (ioctl(s, FIONBIO, &ul) == -1) {
+				closesocket(s);
+				return INVALID_SOCKET;
+			}
 		}
 #endif
 		return s;
@@ -195,7 +199,7 @@ namespace ec
     inline int tcp_send(SOCKET s, const void* pbuf,  int nsize)
     {
         char *ps = (char*)pbuf;
-        int  nsend = 0;
+        int  nsend = 0,ns=0;
         int  nret;        
         while (nsend < nsize)
         {
@@ -207,11 +211,18 @@ namespace ec
                 if (WSAEWOULDBLOCK == nerr || WSAENOBUFS == nerr)  // nonblocking  mode
                 {
                     TIMEVAL tv01 = { 0,1000 * 100 };
-                    fd_set fdw;
+                    fd_set fdw, fde;
                     FD_ZERO(&fdw);
+					FD_ZERO(&fde);
                     FD_SET(s, &fdw);
-                    if (-1 == ::select(0, NULL, &fdw, NULL, &tv01))
+					FD_SET(s, &fde);
+                    if (-1 == ::select(0, NULL, &fdw, &fde, &tv01))
                         return SOCKET_ERROR;
+					if (FD_ISSET(s, &fde))
+						return SOCKET_ERROR;
+					ns++;
+					if (ns > 40) //4 secs
+						return SOCKET_ERROR;
                     continue;
                 }
                 else
@@ -226,16 +237,23 @@ namespace ec
                 if (errno == EAGAIN || errno == EWOULDBLOCK) // nonblocking  mode
                 {
                     TIMEVAL tv01 = { 0,1000 * 100 };
-                    fd_set fdw;
+                    fd_set fdw,fde;
                     FD_ZERO(&fdw);
+					FD_ZERO(&fde);
                     FD_SET(s, &fdw);
-                    if (-1 == ::select(s + 1, NULL, &fdw, NULL, &tv01))                    
+					FD_SET(s, &fde);
+                    if (-1 == ::select(s + 1, NULL, &fdw, &fde, &tv01))
                         return SOCKET_ERROR;
+					if(FD_ISSET(s, &fde))
+						return SOCKET_ERROR;
+					ns++;
+					if (ns > 40) //4 secs
+						return SOCKET_ERROR;
                     continue;
                 }
                 else
                     return SOCKET_ERROR;
-            }
+            }			
             else
                 nsend += nret;
 #endif

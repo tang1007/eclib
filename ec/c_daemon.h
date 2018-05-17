@@ -1,7 +1,7 @@
 ﻿/*!
 \file c_daemon.h
 \author kipway@outlook.com
-\update 2018.2.25
+\update 2018.5.15
 
 eclib class cDaemonFrame , for linux daemon server
 
@@ -335,7 +335,7 @@ namespace ec
             return 0;
         }
 
-        void stop()
+        void stop(int nsec = 300)
         {
             int i, nlock = cFLock::GetLockPID(_spidfile);
             bool bexit = true;
@@ -350,7 +350,7 @@ namespace ec
                 printf("stop %s... pid = %d\n", _sDaemon, nlock);
                 bexit = false;
                 kill(nlock, SIGTERM); // send term sig
-                for (i = 0; i < 300; i++)
+                for (i = 0; i < nsec; i++)
                 {
                     if (cFLock::GetLockPID(_spidfile) <= 0)
                     {
@@ -364,7 +364,7 @@ namespace ec
                 {
                     kill(nlock, SIGKILL); //force kill
                     sleep(1);
-                    printf("300 second Timeout,%s be killed!\n", _sDaemon);
+                    printf("%d second Timeout,%s be killed!\n", nsec, _sDaemon);
                 }
                 else
                     printf("%s stoped gracefully!\n", _sDaemon);
