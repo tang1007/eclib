@@ -21,6 +21,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 #pragma once
+#include <functional>
 namespace ec {
 	template<typename _Tp, size_t _Num>
 	class Array {
@@ -80,6 +81,19 @@ namespace ec {
 		{
 			if (_size > 0)
 				_size--;
+		}
+		inline bool push(const value_type& val) noexcept
+		{
+			return add(val);
+		}
+		inline bool pop(value_type& val) noexcept
+		{
+			if (_size > 0) {
+				_size--;
+				val = _data[_size];
+				return true;
+			}
+			return false;
 		}
 		inline value_type& operator [](size_type pos)
 		{
