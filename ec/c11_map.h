@@ -389,7 +389,7 @@ void tstecmap()
 	*it.pv = 11;
 	map1.set(it.name, it); // first del_node ,then replace
 
-	map.clear();
+	map1.clear();
 }
 
 int main(int argc, char*argv[])
