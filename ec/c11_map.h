@@ -1,7 +1,7 @@
 ﻿/*!
 \file c11_map.h
 \author	kipway@outlook.com
-\update 2018.2.7
+\update 2018.5.26  add fast memory allocator
 
 eclib class map with c++11. fast noexcept unordered hashmap with safety iterator
 
@@ -22,7 +22,7 @@ limitations under the License.
 */
 
 #pragma once
-#include <cstdint>
+#include "c11_memory.h"
 #include "c11_hash.h"
 namespace ec
 {	
@@ -64,8 +64,21 @@ namespace ec
 		t_node**	_ppv;
 		size_type   _uhashsize;
 		size_type	_usize;
+	private:
+		ec::memory* _pmem;
+		inline t_node* new_node() {
+			if (_pmem)
+				return (t_node*)_pmem->mem_malloc(sizeof(t_node));
+			return (t_node*)malloc(sizeof(t_node));
+		}
+		inline void free_node(t_node* p) {
+			if (_pmem)
+				_pmem->mem_free(p);
+			else
+				 free(p);
+		}
 	public:
-		map(unsigned int uhashsize = 1024) : _ppv(nullptr), _uhashsize(uhashsize), _usize(0)
+		map(unsigned int uhashsize = 1024, ec::memory* pmem  = nullptr) : _ppv(nullptr), _uhashsize(uhashsize), _usize(0), _pmem(pmem)
 		{
 			_ppv = new t_node*[_uhashsize];
 			if (nullptr == _ppv)
@@ -76,6 +89,9 @@ namespace ec
 		{
 			clear();
 		};
+		inline static size_t size_node(){
+			return sizeof(t_node);
+		}
 		inline size_type size() const noexcept
 		{
 			return _usize;
@@ -123,7 +139,7 @@ namespace ec
 					return true;
 				}
 			}
-			pnode = new t_node;
+			pnode = new_node();
 			if (pnode == nullptr)
 				return false;
 			pnode->value = Value;
@@ -167,7 +183,7 @@ namespace ec
 						ppre = pNode;
 						pNode = pNode->pNext;
 						_DelVal()(ppre->value);
-						delete ppre;
+						free_node(ppre);
 					}
 				}
 			}
@@ -189,7 +205,7 @@ namespace ec
 				{
 					*ppNodePrev = pNode->pNext;
 					_DelVal()(pNode->value);
-					delete pNode;
+					free_node(pNode);
 					_usize--;
 					return true;
 				}
@@ -324,7 +340,8 @@ namespace ec
 }
 void tstecmap()
 {
-	ec::map<const char*, t_item> map1;
+	ec::memory mem_allocator(ec::map<const char*, t_item>::size_node(), 1024);
+	ec::map<const char*, t_item> map1(1024,&mem_allocator);
 
 	t_item it;
 	strcpy(it.name, "1");
@@ -371,6 +388,8 @@ void tstecmap()
 	it.pv = new int;
 	*it.pv = 11;
 	map1.set(it.name, it); // first del_node ,then replace
+
+	map.clear();
 }
 
 int main(int argc, char*argv[])
