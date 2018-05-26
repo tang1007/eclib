@@ -129,10 +129,23 @@ namespace ec
 		{
 			return add(val);
 		}
-		inline void pop_back()
+		inline void pop_back() noexcept
 		{
 			if (_usize > 0)
 				_usize--;
+		}
+		inline bool push(const value_type& val) noexcept
+		{
+			return add(val);
+		}
+		inline bool pop(value_type& val) noexcept
+		{
+			if (_usize > 0) {
+				_usize--;
+				val = _pbuf[_usize];
+				return true;
+			}
+			return false;
 		}
 		inline value_type& operator [](size_type pos)
 		{
