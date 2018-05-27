@@ -1,7 +1,7 @@
 /*!
 \file c11_array.h
 \author	kipway@outlook.com
-\update 2018.3.13
+\update 2018.5.27
 
 eclib class stack array with c++11.
 
@@ -21,6 +21,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 #pragma once
+#include <algorithm> // std::sort
 #include <functional>
 namespace ec {
 	template<typename _Tp, size_t _Num>
@@ -168,6 +169,18 @@ namespace ec {
 		inline value_type& at(size_type pos)
 		{
 			return _data[pos];
+		}
+		inline bool at(size_type pos, value_type& v) noexcept
+		{
+			if (pos < _size) {
+				v = _data[pos];
+				return true;
+			}
+			return false;
+		}
+		inline void sort(bool(*cmp)(const value_type& v1, const value_type& v2))
+		{
+			std::sort(begin(), end(), cmp);
 		}
 	};
 }
