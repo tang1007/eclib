@@ -1,7 +1,7 @@
 ﻿/*!
 \file c11_memory.h
 \author	kipway@outlook.com
-\update 2018.5.26
+\update 2018.5.27
 
 eclib class fast memory allocator with c++11.
 
@@ -23,10 +23,11 @@ limitations under the License.
 #pragma once
 #include <cstdint>
 #include <memory.h>
+#include "c11_mutex.h"
 #include "c11_stack.h"
 #include "c11_array.h"
 #ifndef MEM_ML_BLKNUM 
-#define MEM_ML_BLKNUM 512 //medium/large memory blocks
+#define MEM_ML_BLKNUM 512 //max medium/large memory block number
 #endif
 namespace ec {
 	class memory
@@ -34,8 +35,9 @@ namespace ec {
 	public:
 		memory(size_t sblksize, size_t sblknum,
 			size_t mblksize = 0, size_t mblknum = 0,
-			size_t lblksize = 0, size_t lblknum = 0
-		) : _pm(nullptr), _pl(nullptr), _stks(sblknum)
+			size_t lblksize = 0, size_t lblknum = 0,
+			std::mutex* pmutex = nullptr
+		) : _pm(nullptr), _pl(nullptr), _pmutex(pmutex), _stks(sblknum)
 		{
 			size_t i;
 			_sz_s = sblksize;
@@ -43,8 +45,7 @@ namespace ec {
 				_sz_s += sblksize - sblksize % 8;
 			_blk_s = sblknum;
 			_ps = malloc(_sz_s * sblknum);
-			if (_ps)
-			{
+			if (_ps){
 				uint8_t *p = (uint8_t *)_ps;
 				for (i = 0; i < sblknum; i++)
 					_stks.add(p + i * _sz_s);
@@ -78,20 +79,23 @@ namespace ec {
 		}
 		void *mem_malloc(size_t size)
 		{
+			unique_lock lck(_pmutex);
 			void* pr = nullptr;
-			if (size <= _sz_s)
-				_stks.pop(pr);
-			else if (size <= _sz_m)
-			{
+			if (size <= _sz_s) {
+				if (_stks.pop(pr))
+					return pr;
+			}
+			if (size <= _sz_m)	{
 				if (!_pm)
 					malloc_block(_sz_m, _blk_m, _pm, _stkm);
-				_stkm.pop(pr);
+				if (_stkm.pop(pr))
+					return pr;
 			}
-			else if (size <= _sz_l)
-			{
+			if (size <= _sz_l)	{
 				if (!_pl)
 					malloc_block(_sz_l, _blk_l, _pl, _stkl);
-				_stkl.pop(pr);
+				if (_stkl.pop(pr))
+					return pr;
 			}
 			if (!pr)
 				pr = malloc(size);
@@ -99,6 +103,9 @@ namespace ec {
 		}
 		void mem_free(void *pmem)
 		{
+			if (!pmem)
+				return;
+			unique_lock lck(_pmutex);
 			size_t pa = (size_t)pmem;
 			if (_ps && pa >= (size_t)_ps  && pa < (size_t)_ps + _sz_s * _blk_s)
 				_stks.push(pmem);
@@ -109,8 +116,9 @@ namespace ec {
 			else
 				free(pmem);
 		}
-	private:
+	private:		
 		void *_ps, *_pm, *_pl;
+		std::mutex* _pmutex;
 		size_t _sz_s, _sz_m, _sz_l;  //blocks size
 		size_t _blk_s, _blk_m, _blk_l; // blocks number
 		ec::stack<void*> _stks;     // small memory blocks
@@ -123,8 +131,7 @@ namespace ec {
 				return false;
 			size_t i;
 			ph = malloc(blksize * blknum);
-			if (ph)
-			{
+			if (ph)	{
 				uint8_t *p = (uint8_t *)ph;
 				for (i = 0; i < blknum; i++)
 					stk.add(p + i * blksize);
