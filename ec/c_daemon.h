@@ -319,12 +319,11 @@ namespace ec
                 if (msg.snd("\nstart...\r") < 0)
                     printf("send message failed\n");
                 if (!g_daemon->start())
-                {
-                    g_daemon->stop();
-                    g_daemon = NULL;//not free memery,exit will release the memory
+                {                    
                     msg.snd("Start failed!\n");
                     msg.snd("finished");
                     _flck.Close();
+					exit(4);
                     return 4;
                 }
                 msg.snd("Start success!\n\n");
