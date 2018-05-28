@@ -85,21 +85,19 @@ namespace ec {
 				if (_stks.pop(pr))
 					return pr;
 			}
-			if (size <= _sz_m)	{
+			else if (size <= _sz_m)	{
 				if (!_pm)
 					malloc_block(_sz_m, _blk_m, _pm, _stkm);
 				if (_stkm.pop(pr))
 					return pr;
 			}
-			if (size <= _sz_l)	{
+			else if (size <= _sz_l)	{
 				if (!_pl)
 					malloc_block(_sz_l, _blk_l, _pl, _stkl);
 				if (_stkl.pop(pr))
 					return pr;
 			}
-			if (!pr)
-				pr = malloc(size);
-			return pr;
+			return malloc(size);
 		}
 		void mem_free(void *pmem)
 		{
