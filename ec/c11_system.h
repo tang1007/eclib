@@ -46,6 +46,27 @@ limitations under the License.
 #else
 #	include <termios.h>
 #	include <unistd.h>
+
+	#ifndef SOCKET
+	#	define SOCKET int
+	#endif 
+
+	#ifndef INVALID_SOCKET
+	#	define INVALID_SOCKET    (-1)
+	#endif
+
+	#ifndef SOCKET_ERROR
+	#	define SOCKET_ERROR      (-1)
+	#endif
+
+	#ifndef closesocket
+	#	define closesocket(a) close(a)
+	#endif 
+
+	#ifndef TIMEVAL
+	#	define TIMEVAL struct timeval
+	#endif 
+
 #endif
 
 #include <stdlib.h>

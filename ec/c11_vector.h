@@ -24,6 +24,7 @@ limitations under the License.
 #include <cstdint>
 #include <algorithm> // std::sort
 #include <functional>
+#include "c11_memory.h"
 namespace ec
 {
 	template<typename _Tp>

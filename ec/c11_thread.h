@@ -1,5 +1,5 @@
 ﻿/*!
-\file c11_critical.h
+\file c11_thread.h
 \author kipway@outlook.com
 \update 2018.1.3
 

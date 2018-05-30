@@ -22,8 +22,10 @@ limitations under the License.
 */
 
 #pragma once
+#include <functional>
 #include "c11_memory.h"
 #include "c11_hash.h"
+
 namespace ec
 {	
 	template<class _Kty, class _Ty> // is _Kty is equal to the key in class _Ty
@@ -257,7 +259,7 @@ namespace ec
 				rValue = *pv;
 			return bret;
 		};
-		void for_each(void(*fun)(value_type& val)) noexcept
+		void for_each(std::function<void(value_type& val)> fun) noexcept
 		{
 			iterator i = begin();
 			value_type* pv = next(i);
@@ -266,17 +268,7 @@ namespace ec
 				fun(*pv);
 				pv = next(i);
 			}
-		}
-		void for_each(void* param, void(*fun)(value_type& val, void* param)) noexcept
-		{
-			iterator i = begin();
-			value_type* pv = next(i);
-			while (pv)
-			{
-				fun(*pv, param);
-				pv = next(i);
-			}
-		}
+		}		
 	private:
 		iterator _nexti(unsigned int ih, unsigned int il) noexcept
 		{
