@@ -535,8 +535,10 @@ namespace ec
                 LeSwap(pdir);
                 if (!pdir->flag)
                 {
-                    if ((npos < 0) && (nidx == -1 || nidx == i))
-                        npos = i;
+					if ((npos < 0) && (nidx == -1 || nidx == i)) {
+						npos = i;
+						break;
+					}
                     continue;
                 }
                 if (!strncmp(sname, pdir->name, sizeof(pdir->name))) {
@@ -590,7 +592,9 @@ namespace ec
                 SetSystemLastError();
                 return 0;
             }
-            t_dir* pdir = (t_dir*)malloc(_head.size_dir);            
+            t_dir* pdir = (t_dir*)malloc(_head.size_dir);     
+			if (!pdir)
+				return 0;
             for (; i < n; i++)
             {
                 if (Read(pdir, _head.size_dir) != (int)_head.size_dir)
@@ -601,8 +605,9 @@ namespace ec
                 }
                 LeSwap(pdir);
                 if (pdir->flag && !strncmp(sname, pdir->name, sizeof(pdir->name)))
-                    return pdir;
+                    return pdir;				
             }
+			free(pdir);
             _lasterror = MINS_ERR_NOTEXIST;
             return 0;
         }
