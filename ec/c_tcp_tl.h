@@ -201,61 +201,65 @@ namespace ec
         char *ps = (char*)pbuf;
         int  nsend = 0,ns=0;
         int  nret;        
-        while (nsend < nsize)
-        {
+		while (nsend < nsize)
+		{
 #ifdef _WIN32            
-            nret = ::send(s, ps + nsend, nsize - nsend, 0);            
-            if (SOCKET_ERROR == nret)
-            {
-                int nerr = WSAGetLastError();
-                if (WSAEWOULDBLOCK == nerr || WSAENOBUFS == nerr)  // nonblocking  mode
-                {
-                    TIMEVAL tv01 = { 0,1000 * 100 };
-                    fd_set fdw, fde;
-                    FD_ZERO(&fdw);
+			nret = ::send(s, ps + nsend, nsize - nsend, 0);
+			if (SOCKET_ERROR == nret)
+			{
+				int nerr = WSAGetLastError();
+				if (WSAEWOULDBLOCK == nerr || WSAENOBUFS == nerr)  // nonblocking  mode
+				{
+					TIMEVAL tv01 = { 0,1000 * 100 };
+					fd_set fdw, fde;
+					FD_ZERO(&fdw);
 					FD_ZERO(&fde);
-                    FD_SET(s, &fdw);
+					FD_SET(s, &fdw);
 					FD_SET(s, &fde);
-                    if (-1 == ::select(0, NULL, &fdw, &fde, &tv01))
-                        return SOCKET_ERROR;
+					if (-1 == ::select(0, NULL, &fdw, &fde, &tv01))
+						return SOCKET_ERROR;
 					if (FD_ISSET(s, &fde))
 						return SOCKET_ERROR;
 					ns++;
 					if (ns > 40) //4 secs
 						return SOCKET_ERROR;
-                    continue;
-                }
-                else
-                    return SOCKET_ERROR;
-            }            
-            else
-                nsend += nret;            
+					continue;
+				}
+				else
+					return SOCKET_ERROR;
+			}
+			else if (nret > 0) {
+				ns = 0;
+				nsend += nret;
+			}
 #else
-            nret = ::send(s, ps + nsend, nsize - nsend, MSG_DONTWAIT | MSG_NOSIGNAL);
-            if (SOCKET_ERROR == nret)
-            {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) // nonblocking  mode
-                {
-                    TIMEVAL tv01 = { 0,1000 * 100 };
-                    fd_set fdw,fde;
-                    FD_ZERO(&fdw);
+			nret = ::send(s, ps + nsend, nsize - nsend, MSG_DONTWAIT | MSG_NOSIGNAL);
+			if (SOCKET_ERROR == nret)
+			{
+				if (errno == EAGAIN || errno == EWOULDBLOCK) // nonblocking  mode
+				{
+					TIMEVAL tv01 = { 0,1000 * 100 };
+					fd_set fdw, fde;
+					FD_ZERO(&fdw);
 					FD_ZERO(&fde);
-                    FD_SET(s, &fdw);
+					FD_SET(s, &fdw);
 					FD_SET(s, &fde);
-                    if (-1 == ::select(s + 1, NULL, &fdw, &fde, &tv01))
-                        return SOCKET_ERROR;
-					if(FD_ISSET(s, &fde))
+					if (-1 == ::select(s + 1, NULL, &fdw, &fde, &tv01))
+						return SOCKET_ERROR;
+					if (FD_ISSET(s, &fde))
 						return SOCKET_ERROR;
 					ns++;
 					if (ns > 40) //4 secs
 						return SOCKET_ERROR;
-                    continue;
-                }
-                else
-                    return SOCKET_ERROR;
-            }			
-            else
-                nsend += nret;
+					continue;
+				}
+				else
+					return SOCKET_ERROR;
+			}
+			else if (nret > 0) {
+				nsend += nret;
+				ns = 0;
+			}
 #endif
         }
         return nsend;

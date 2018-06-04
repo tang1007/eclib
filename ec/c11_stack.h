@@ -1,9 +1,9 @@
-/*!
-\file c11_array.h
+﻿/*!
+\file c11_stack.h
 \author	kipway@outlook.com
-\update 2018.5.27
+\update 2018.5.26
 
-eclib class stack array with c++11.
+eclib class stack with c++11.
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib
@@ -23,19 +23,29 @@ limitations under the License.
 #pragma once
 #include <algorithm> // std::sort
 #include <functional>
+#include <memory.h>
 namespace ec {
-	template<typename _Tp, size_t _Num>
-	class Array {
+	template<typename _Tp>
+	class stack {
 	public:
 		typedef _Tp		value_type;
 		typedef size_t	size_type;
 		typedef _Tp*	iterator;
-		Array() :_bufsize(_Num), _size(0) {
+		stack( size_t size) :_bufsize(size), _size(0) {
+			_data = (value_type *)malloc(size * sizeof(value_type));
+			if (!_data)
+				_bufsize = 0;
+			else
+				_bufsize = size;
+		}
+		~stack() {
+			if (_data)
+				free(_data);
 		}
 	protected:
 		size_type _bufsize;
 		size_type _size;
-		value_type _data[_Num];
+		value_type *_data;
 	public:
 		inline size_type size() const noexcept
 		{
@@ -115,8 +125,8 @@ namespace ec {
 		inline bool full() const noexcept
 		{
 			return _size >= _bufsize;
-		}		
-		void for_each(std::function<void (value_type& val)> fun) noexcept
+		}
+		void for_each(std::function<void(value_type& val)> fun) noexcept
 		{
 			for (size_type i = 0; i < _size; i++)
 				fun(_data[i]);
@@ -125,7 +135,7 @@ namespace ec {
 		{
 			while (first != last)
 				fun(*first++);
-		}		
+		}
 		inline value_type* data() noexcept
 		{
 			return &_data[0];
@@ -158,14 +168,14 @@ namespace ec {
 			}
 			_size--;
 			return true;
-		}					
+		}
 		value_type* find(std::function <bool(value_type& val)> fun) {
 			for (size_type i = 0; i < _size; i++) {
 				if (fun(_data[i]))
 					return &_data[i];
 			}
 			return nullptr;
-		}		
+		}
 		inline value_type& at(size_type pos)
 		{
 			return _data[pos];

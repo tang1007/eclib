@@ -28,6 +28,8 @@ limitations under the License.
 #include <memory.h>
 #include <stdint.h>
 #if (0 != USE_ECLIB_C11)
+#undef max
+#undef min
 #include <cstdint>
 #include <algorithm>
 #include <functional>
