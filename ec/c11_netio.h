@@ -72,7 +72,8 @@ limitations under the License.
 
 #include "c11_thread.h"
 #include "c11_xpoll.h"
-#include "c_log.h"
+#include "c11_keyval.h"
+#include "c11_log.h"
 
 namespace ec {
 	inline void netio_tcpnodelay(SOCKET s)
@@ -392,6 +393,9 @@ namespace ec {
 			_threadno = threadno;
 			_srvport = srvport;
 		}
+		inline void disconnect(uint32_t ucid) {
+			_ppoll->remove(ucid);
+		}
 	private:
 		xpoll * _ppoll;
 		ec::cLog* _plog;
@@ -399,16 +403,32 @@ namespace ec {
 		uint16_t _srvport;
 		friend class aiotcpsrv;
 	protected:
-		virtual void onrecv(uint32_t ucid, int nstatus, const void* pdata, size_t size) = 0; //read event
+		virtual void onconnect(uint32_t ucid, const char* sip) = 0;//connect event
+		virtual void ondisconnect(uint32_t ucid) = 0;//disconnect  event
+		virtual void onrecv(uint32_t ucid, const void* pdata, size_t size) = 0; //read event
 		virtual void onsend(uint32_t ucid, int nstatus, void* pdata, size_t size) = 0; //send complete event
-		virtual void onself(uint32_t ucid, int optcode, void* pdata, size_t size) = 0; //self event
+		virtual void onself(uint32_t ucid, int optcode, void* pdata, size_t size) = 0; //self event		
 	protected:
 		virtual	void dojob() {
 			t_xpoll_event evt;
 			if (!_ppoll->get_event(&evt))
 				return;
-			if (XPOLL_EVT_OPT_READ == evt.opt)
-				onrecv(evt.ucid, evt.status, evt.pdata, evt.ubytes);
+			if (XPOLL_EVT_OPT_READ == evt.opt) {
+				if (XPOLL_EVT_ST_CONNECT == evt.status) {
+					txtkeyval kv((const char*)evt.pdata, evt.ubytes);
+					char sip[32] = { 0 };
+					if (!kv.get("ip", sip, sizeof(sip)))
+						sip[0] = 0;					
+					onconnect(evt.ucid, sip);					
+				}
+				else if (XPOLL_EVT_ST_OK == evt.status) {
+					if (evt.pdata)
+						onrecv(evt.ucid, evt.pdata, evt.ubytes);
+				}
+				else if (XPOLL_EVT_ST_ERR == evt.status || XPOLL_EVT_ST_CLOSE == evt.status) {
+					ondisconnect(evt.ucid);					
+				}
+			}
 			else if (XPOLL_EVT_OPT_SEND == evt.opt)
 				onsend(evt.ucid, evt.status, evt.pdata, evt.ubytes);
 			else
@@ -506,7 +526,7 @@ namespace ec {
 #endif
 			{
 				if (_plog)
-					_plog->AddLog("ERR:TCP port %u socket error!", wport);
+					_plog->add(CLOG_DEFAULT_ERR,"TCP port %u socket error!", wport);
 				fprintf(stderr, "TCP port %u socket error!\n", wport);
 				return false;
 			}
@@ -521,7 +541,7 @@ namespace ec {
 			{
 				::closesocket(sl);
 				if (_plog)
-					_plog->AddLog("ERR:TCP port [%d] bind failed with error %d", wport, errno);
+					_plog->add(CLOG_DEFAULT_ERR,"TCP port [%d] bind failed with error %d", wport, errno);
 				fprintf(stderr, "ERR:TCP port [%d] bind failed with error %d\n", wport, errno);
 				return INVALID_SOCKET;
 			}
@@ -529,7 +549,7 @@ namespace ec {
 			{
 				::closesocket(sl);
 				if (_plog)
-					_plog->AddLog("ERR: TCP port %d  listen failed with error %d", wport, errno);
+					_plog->add(CLOG_DEFAULT_ERR,"TCP port %d  listen failed with error %d", wport, errno);
 				fprintf(stderr, "ERR: TCP port %d  listen failed with error %d\n", wport, errno);
 				return INVALID_SOCKET;
 			}
@@ -573,7 +593,7 @@ namespace ec {
 			}
 #endif
 			char        sip[32] = { 0 };
-			snprintf(sip, sizeof(sip), "ip=%s\t", inet_ntoa(addrClient.sin_addr));
+			snprintf(sip, sizeof(sip), "ip:%s\n", inet_ntoa(addrClient.sin_addr));
 			sip[sizeof(sip) - 1] = 0;
 
 			netio_setkeepalive(sAccept, _bkeepalivefast);

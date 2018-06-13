@@ -27,6 +27,7 @@ limitations under the License.
 #pragma once
 #include "c_minisrv.h"
 #include "c_tcp_tl.h"
+#include "c_log.h"
 #ifndef MINI_PKG_FLAG
 #	define MINI_PKG_FLAG 0xF5
 #endif
@@ -81,18 +82,18 @@ namespace ec
 	protected:
 		ec::vector<uint8_t>	_rbuf;
 	public:
-		int parse(const uint8_t* pdata, size_t usize, ec::vector<uint8_t> *pout)
+		int parse(const uint8_t* pdata, size_t usize, ec::vector<uint8_t> *pout,cLog* plog = 0)
 		{
 			if (pdata && usize)
 				_rbuf.add(pdata, usize);
-			return parsepkg(pout);
+			return parsepkg(pout,plog);
 		}
 		inline void clear()
 		{
 			_rbuf.clear();
 		}
 	protected:
-		int parsepkg(ec::vector<uint8_t> *pout)//return 0:wait; -1:err; 1:OK
+		int parsepkg(ec::vector<uint8_t> *pout,  cLog* plog = 0)//return 0:wait; -1:err; 1:OK
 		{
 			uint8_t* pu = _rbuf.data();
 			if (_rbuf.size() < 6)
@@ -102,8 +103,11 @@ namespace ec
 			ss > &h.sync;
 			ss > &h.flag;
 			ss > &h.msglen;
-			if (h.sync != MINI_PKG_FLAG || h.flag != 0x10 || h.msglen > MINI_MSG_MAXSIZE)
+			if (h.sync != MINI_PKG_FLAG || h.flag != 0x10 || h.msglen > MINI_MSG_MAXSIZE) {
+				if (plog)
+					plog->AddLog("ERR: parsepkg failed sync=%u,flag=%u,msglen=%u", h.sync, h.flag, h.msglen);
 				return -1;
+			}
 			if (h.msglen + 6 > _rbuf.size())
 			{
 				if (_rbuf.capacity() < h.msglen + 6)
@@ -121,9 +125,10 @@ namespace ec
 	class cMiniMsgSrv : public cMiniSrv
 	{
 	public:
-		cMiniMsgSrv() : _msgr(1024 * 16)
+		cMiniMsgSrv(cLog* plog = 0) : _plog(plog), _msgr(1024 * 16)
 		{
 		}
+		cLog* _plog;
 	public:
 		int send_msg(t_id *pid, const void* pd, size_t size)
 		{
@@ -147,10 +152,13 @@ namespace ec
 	protected:
 		virtual bool onreadbytes(t_id* pid, const uint8_t* pd, size_t size)
 		{			
-			if (!pid->pcls)
+			if (!pid->pcls) {
+				if (_plog)
+					_plog->AddLog("ERR: ucid %u onreadbytes pid->pcls==null", pid->uid);
 				return false;
+			}
 			minipkg* pi = (minipkg*)pid->pcls;
-			int nr = pi->parse(pd, size, &_msgr);
+			int nr = pi->parse(pd, size, &_msgr, _plog);
 			while (1 == nr)
 			{
 				if (!onmsg(pid, _msgr.data(), _msgr.size())) {
@@ -161,7 +169,7 @@ namespace ec
 				_msgr.clear();
 				_msgr.shrink(1024 * 32);
 				nr = pi->parse(nullptr, 0, &_msgr);
-			}
+			}			
 			return -1 != nr;
 		}
 		virtual void onclose(t_id* pid) // return false diconnect

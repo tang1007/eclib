@@ -48,7 +48,7 @@ namespace ec {
 			if (_ps){
 				uint8_t *p = (uint8_t *)_ps;
 				for (i = 0; i < sblknum; i++)
-					_stks.add(p + i * _sz_s);
+					_stks.add(p + (sblknum -1 -i) * _sz_s);
 			}
 
 			_sz_m = mblksize;
@@ -132,7 +132,7 @@ namespace ec {
 			if (ph)	{
 				uint8_t *p = (uint8_t *)ph;
 				for (i = 0; i < blknum; i++)
-					stk.add(p + i * blksize);
+					stk.add(p + (blknum - 1 - i) * blksize);
 			}
 			return ph != nullptr;
 		}

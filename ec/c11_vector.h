@@ -55,6 +55,9 @@ namespace ec
 				mem_free(_pbuf);
 			}
 		};
+		inline ec::memory* get_mem_allocator() {
+			return _pmem;
+		}
 	protected:
 		value_type*	_pbuf;
 		size_type	_usize;
@@ -311,6 +314,13 @@ namespace ec
 			_pbuf = pnew;
 			_ubufsize = size;
 			return true;
+		}
+		void* detach_buf() {
+			void* p = (void*)_pbuf;
+			_usize = 0;
+			_ubufsize = 0;
+			_pbuf = nullptr;
+			return p;
 		}
 	private:
 		bool _grown(size_type usize = 1) noexcept

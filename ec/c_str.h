@@ -716,28 +716,32 @@ namespace ec
     public:
         cStrSplit(const char* s, const char* sfilter = "\t\x20\f\r\n", size_t sizes = 0)
         {
-            if (s && *s)
-            {
-                _s = s;
-                if (sizes)
-                    _sizes = sizes;
-                else
-                    _sizes = strlen(s);
-            }
-            else
-            {
-                _s = 0;
-                _sizes = 0;
-            }
-            _pos = 0;
-            _sfiled[0] = 0;
-            _sfilter = sfilter;
+			reset(s, sfilter, sizes);            
         }
     private:
         const char* _s, *_sfilter;
         size_t _sizes, _pos;
         char _sfiled[4096]; //current filed
     public:
+		void reset(const char* s, const char* sfilter = "\t\x20\f\r\n", size_t sizes = 0)
+		{
+			if (s && *s)
+			{
+				_s = s;
+				if (sizes)
+					_sizes = sizes;
+				else
+					_sizes = strlen(s);
+			}
+			else
+			{
+				_s = 0;
+				_sizes = 0;
+			}
+			_pos = 0;
+			_sfiled[0] = 0;
+			_sfilter = sfilter;
+		}
         inline void Reset() {
             _pos = 0;
             _sfiled[0] = 0;

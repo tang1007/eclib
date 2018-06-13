@@ -241,6 +241,12 @@ namespace ec {
 			if (SetNoBlock(sAccept) < 0)
 				return;
 #endif
+			if (_socks.full())
+			{
+				closesocket(sAccept);
+				return;
+			}
+
 			t_id t;
 			t.pcls = nullptr;
 
@@ -255,7 +261,7 @@ namespace ec {
 			}
 			_cs_send.Lock();
 			_socks.add(t);
-			_cs_send.Unlock();
+			_cs_send.Unlock();			
 		}
 	protected:
 		virtual	void dojob()
@@ -297,7 +303,8 @@ namespace ec {
 						nr = ::recv(_socks[i].s, _rbuf, (int)sizeof(_rbuf), 0);
 						if (nr < 0)
 						{
-							if (WSAEWOULDBLOCK != WSAGetLastError())//read end
+							int nerr = WSAGetLastError();//WSAENOBUFS
+							if (WSAEWOULDBLOCK != nerr && WSAENOBUFS != nerr)//read end
 								_socks[i].status = st_err;
 						}
 #else
