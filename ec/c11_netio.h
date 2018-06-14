@@ -350,7 +350,7 @@ namespace ec {
 	class aiotcpsrvworker : public cThread // Asynchronous TCP server TCP workthread
 	{
 	public:
-		aiotcpsrvworker() :_ppoll(0), _plog(0), _threadno(0), _srvport(0) {
+		aiotcpsrvworker() :_pmem(nullptr), _ppoll(nullptr), _plog(nullptr), _threadno(0), _srvport(0) {
 		}
 		virtual ~aiotcpsrvworker() {
 		}
@@ -387,17 +387,19 @@ namespace ec {
 		}
 
 	protected:
-		void setparam(xpoll* ppoll, ec::cLog* plog, int threadno, uint16_t srvport) {
+		void setparam(xpoll* ppoll, ec::cLog* plog, memory* pmem, int threadno, uint16_t srvport) {
 			_ppoll = ppoll;
 			_plog = plog;
+			_pmem = pmem;
 			_threadno = threadno;
 			_srvport = srvport;
 		}
 		inline void disconnect(uint32_t ucid) {
 			_ppoll->remove(ucid);
 		}
-	private:
-		xpoll * _ppoll;
+	protected:
+		memory * _pmem;			
+		xpoll * _ppoll;		
 		ec::cLog* _plog;
 		int _threadno;
 		uint16_t _srvport;
@@ -418,15 +420,15 @@ namespace ec {
 					txtkeyval kv((const char*)evt.pdata, evt.ubytes);
 					char sip[32] = { 0 };
 					if (!kv.get("ip", sip, sizeof(sip)))
-						sip[0] = 0;					
-					onconnect(evt.ucid, sip);					
+						sip[0] = 0;
+					onconnect(evt.ucid, sip);
 				}
 				else if (XPOLL_EVT_ST_OK == evt.status) {
 					if (evt.pdata)
 						onrecv(evt.ucid, evt.pdata, evt.ubytes);
 				}
 				else if (XPOLL_EVT_ST_ERR == evt.status || XPOLL_EVT_ST_CLOSE == evt.status) {
-					ondisconnect(evt.ucid);					
+					ondisconnect(evt.ucid);
 				}
 			}
 			else if (XPOLL_EVT_OPT_SEND == evt.opt)
@@ -448,18 +450,21 @@ namespace ec {
 	class aiotcpsrv :public cThread // Asynchronous TCP server accpet thread
 	{
 	public:
-		aiotcpsrv(uint32_t maxconnum, ec::cLog* plog) : _plog(plog), _poll(maxconnum), _bkeepalivefast(false), _busebnagle(true) {
+		aiotcpsrv(uint32_t maxconnum, ec::cLog* plog, memory* pmem) : _pmem(pmem), _bkeepalivefast(false), _busebnagle(true), _wport(0),
+			_plog(plog), _poll(maxconnum) {
 		}
 		virtual ~aiotcpsrv() {};
 
 		inline int getsendnodone(uint32_t ucid) { // get send not done pkg number
 			return _poll.sendnodone(ucid);
 		}
+	protected:
+		memory * _pmem;
 	private:
 		bool	_bkeepalivefast;
 		bool	_busebnagle;
-
-		ec::cLog* _plog;
+		uint16_t _wport;
+		cLog* _plog;
 		xpoll	  _poll;
 		SOCKET    _fd_listen;
 		ec::Array<aiotcpsrvworker*, MAX_XPOLLTCPSRV_THREADS> _workers;
@@ -470,6 +475,7 @@ namespace ec {
 		{
 			if (IsRun())
 				return true;
+			_wport = port;
 			_fd_listen = listen_port(port, sip);
 			if (_fd_listen == INVALID_SOCKET)
 				return  false;
@@ -484,7 +490,7 @@ namespace ec {
 			ec::aiotcpsrvworker* p;
 			for (i = 0; i < n; i++) {
 				p = createworkthread();
-				p->setparam(&_poll, _plog, i, port);
+				p->setparam(&_poll, _plog, _pmem, i, port);
 				p->StartThread(nullptr);
 				_workers.add(p);
 			}
@@ -510,6 +516,9 @@ namespace ec {
 
 				_workers.for_each([](ec::aiotcpsrvworker* &pt) {pt->StopThread(); });//stop all workers
 				_fd_listen = INVALID_SOCKET;
+				if (_plog) {
+					_plog->add(CLOG_DEFAULT_MSG, "TCP server port %d  close success", _wport);
+				}
 			}
 		}
 	private:
@@ -526,7 +535,7 @@ namespace ec {
 #endif
 			{
 				if (_plog)
-					_plog->add(CLOG_DEFAULT_ERR,"TCP port %u socket error!", wport);
+					_plog->add(CLOG_DEFAULT_ERR, "TCP port %u socket error!", wport);
 				fprintf(stderr, "TCP port %u socket error!\n", wport);
 				return false;
 			}
@@ -541,7 +550,7 @@ namespace ec {
 			{
 				::closesocket(sl);
 				if (_plog)
-					_plog->add(CLOG_DEFAULT_ERR,"TCP port [%d] bind failed with error %d", wport, errno);
+					_plog->add(CLOG_DEFAULT_ERR, "TCP port [%d] bind failed with error %d", wport, errno);
 				fprintf(stderr, "ERR:TCP port [%d] bind failed with error %d\n", wport, errno);
 				return INVALID_SOCKET;
 			}
@@ -549,9 +558,12 @@ namespace ec {
 			{
 				::closesocket(sl);
 				if (_plog)
-					_plog->add(CLOG_DEFAULT_ERR,"TCP port %d  listen failed with error %d", wport, errno);
+					_plog->add(CLOG_DEFAULT_ERR, "TCP port %d  listen failed with error %d", wport, errno);
 				fprintf(stderr, "ERR: TCP port %d  listen failed with error %d\n", wport, errno);
 				return INVALID_SOCKET;
+			}
+			if (_plog) {
+				_plog->add(CLOG_DEFAULT_MSG, "TCP server port %d listen success", wport);
 			}
 			return sl;
 		}
@@ -930,7 +942,7 @@ namespace ec {
 	};
 }
 
-/*
+/* example
 #include "ec/c11_system.h"
 #include "ec/c11_xpoll.h"
 #include "ec/c11_netio.h"
@@ -943,69 +955,51 @@ ec::cUseWS_32 _wins32;
 class cTstSrvWorker : public ec::aiotcpsrvworker
 {
 public:
-	cTstSrvWorker(ec::memory* pmem_send) : _pmem_send(pmem_send) {
+	cTstSrvWorker() {
 	}
-private:
-	ec::memory* _pmem_send;// memory for send form cTstSrv
 protected:
-	virtual void onrecv(uint32_t ucid, int nstatus, const void* pdata, size_t size) { //read event
-		printf("srv dbg: onrecv ucid=%u,nstatus=%d,size=%zu\n", ucid, nstatus, size);
-		if (XPOLL_EVT_ST_CONNECT == nstatus) {
-			printf("srv dbg: ucid %u connect!\n", ucid);
-			if (pdata)
-				printf("\tinfo = %s\n", (const char*)pdata);
-		}
-		else if (XPOLL_EVT_ST_OK == nstatus) {
-			if (pdata) {
-				printf("srv onrecv data:%s\n", (const char*)pdata);
-				void* p = _pmem_send->mem_malloc(size);//echo
-				if (p) {
-					memcpy(p, pdata, size);
-					if (!postdata(ucid, p, size))
-						_pmem_send->mem_free(p);
-				}
+	virtual void onconnect(uint32_t ucid, const char* sip)//connect event
+	{
+		printf("ucid %u ip=%s connect!\n", ucid, sip);
+	}
+	virtual void ondisconnect(uint32_t ucid)//disconnect  event
+	{
+		printf("ucid %u ondisconnect!\n", ucid);
+	}
+	virtual void onrecv(uint32_t ucid, const void* pdata, size_t size) { //read event
+		printf("srv dbg: onrecv ucid=%u,size=%zu\n", ucid, size);
+		if (pdata) {
+			printf("srv onrecv data:%s\n", (const char*)pdata);
+			void* p = _pmem->mem_malloc(size);//echo
+			if (p) {
+				memcpy(p, pdata, size);
+				if (!postdata(ucid, p, size))
+					_pmem->mem_free(p);
 			}
-		}
-		else if (XPOLL_EVT_ST_ERR == nstatus || XPOLL_EVT_ST_CLOSE == nstatus) {
-			printf("srv dbg: ucid %u disconnect status = %d!\n", ucid, nstatus);
 		}
 	}
 	virtual void onsend(uint32_t ucid, int nstatus, void* pdata, size_t size) { //send complete event
 		printf("srv dbg: onsend ucid=%u,nstatus=%d,size=%zu\n", ucid, nstatus, size);
 		if (pdata) {
 			printf("srv onsend data:%s\n", (const char*)pdata);
-			_pmem_send->mem_free((void*)pdata);
+			_pmem->mem_free(pdata);
 		}
 	}
 	virtual void onself(uint32_t ucid, int optcode, void* pdata, size_t size) { //self event
 		if (pdata)
-			_pmem_send->mem_free((void*)pdata);
+			_pmem->mem_free((void*)pdata);
 	}
 };
 
 class cTstSrv : public ec::aiotcpsrv
 {
 public:
-	cTstSrv() : ec::aiotcpsrv(1024, &_log),
-		_mem_send(1024 * 8, 16, 1024 * 32, 16, 1024 * 1024, 4, &_mem_lock) {};
-	bool start() {
-#ifdef _WIN32
-		const char* logpath = "d:/logxpoll";
-#else
-		const char* logpath = "/home/logxpoll";
-#endif
-		if (!_log.Start(logpath))
-			return false;
-		return ec::aiotcpsrv::start(9019, 2);
-	}
-	void stop() {
-		ec::aiotcpsrv::stop();
-		_log.Stop();
+	cTstSrv() : _mem_send(1024 * 8, 16, 1024 * 32, 16, 1024 * 1024, 4, &_mem_lock),
+		ec::aiotcpsrv(1024, nullptr, &_mem_send) {
 	}
 protected:
-	ec::cLog _log;
 	virtual ec::aiotcpsrvworker* createworkthread() {
-		return new cTstSrvWorker(&_mem_send);
+		return new cTstSrvWorker();
 	}
 private:
 	std::mutex _mem_lock;// mutex for _mem_send
@@ -1016,9 +1010,6 @@ class cTstClient : public ec::aiotcpclient //client
 {
 public:
 	cTstClient() {
-	}
-	bool start() {
-		return ec::aiotcpclient::open("127.0.0.1", 9019);
 	}
 	void sendstr(const char* s) {
 		postdata(s, strlen(s) + 1);
@@ -1040,12 +1031,12 @@ protected:
 int main(int argc, char* argv[])
 {
 	cTstSrv srv;
-	if (!srv.start()) {
+	if (!srv.start(9019, 2)) {
 		printf("start srv failed!\n");
 		return -1;
 	}
 	cTstClient cli;
-	if (!cli.start()) {
+	if (!cli.open("127.0.0.1", 9019)) {
 		printf("start cli failed!\n");
 		return -2;
 	}
