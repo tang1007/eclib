@@ -370,6 +370,7 @@ namespace ec {
 			while (!nerr && i < nt) {
 				std::this_thread::sleep_for(std::chrono::milliseconds(10));
 				nerr = _ppoll->post_msg(ucid, pdata, bytesize);
+				i++;
 			}
 			return nerr > 0;
 		}
@@ -671,6 +672,7 @@ namespace ec {
 			while (!nerr && i < nt) {
 				std::this_thread::sleep_for(std::chrono::milliseconds(10));
 				nerr = post_msg(pdata, bytesize);
+				i++;
 			}
 			return nerr > 0;
 		}

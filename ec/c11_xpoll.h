@@ -1,6 +1,6 @@
 ﻿/*!
 \file c11_xpoll.h
-eclibe xpoll for windows & linux, send data with zero copy 
+eclibe xpoll for windows & linux, send data with zero copy
 
 class udpevt
 class xpoll
@@ -157,7 +157,7 @@ namespace ec {
 		uint32_t usendsize;//current send bytes
 		uint32_t utail; //add position, point empty
 		time_t	 lasterr; //last time send failed
-		char     sinfo[64];// '\t' seperate, now just has "ip=192.168.1.41"
+		char     sinfo[64];// '\n' seperate, now just has "ip:192.168.1.41\n"
 		struct t_pkg {
 			uint32_t size; //message bytes size
 			uint8_t  *pd;  //message
@@ -198,7 +198,7 @@ namespace ec {
 	};
 	class xpoll : public cThread
 	{
-	private:		
+	private:
 		std::mutex _cpevtlock;//lock for _cpevt
 		ec::cEvent _evtiocp, _evtcanadd; // for _cpevt
 		ec::fifo<t_xpoll_event> _cpevt;//completely event
@@ -284,7 +284,7 @@ namespace ec {
 			if (!pinfo)
 				return false;
 			str_ncpy((char*)pinfo, sinfo, XPOLL_READ_BLK_SIZE - 1);
-			add_event(ucid, XPOLL_EVT_OPT_READ, XPOLL_EVT_ST_CONNECT, pinfo, strlen((char*)pinfo)+1);//add one connect event
+			add_event(ucid, XPOLL_EVT_OPT_READ, XPOLL_EVT_ST_CONNECT, pinfo, strlen((char*)pinfo) + 1);//add one connect event
 
 			t_xpoll_item t; //add to map
 			memset(&t, 0, sizeof(t));
@@ -473,7 +473,7 @@ namespace ec {
 				ps->usendsize += nret; //add to send bytes
 			do_sendbyte(ps, nret);
 			return nret;
-			}
+		}
 
 		void do_delete(uint32_t ucid, uint8_t status)
 		{
@@ -567,7 +567,7 @@ namespace ec {
 			_maplock.unlock();
 			return nret;
 		}
-		void set_read_data_flag(uint32_t ucid,bool bhasdata)
+		void set_read_data_flag(uint32_t ucid, bool bhasdata)
 		{
 			ec::unique_lock lck(&_maplock);
 			t_xpoll_item* p = _map.get(ucid);
@@ -585,7 +585,7 @@ namespace ec {
 #else
 		void do_read(uint32_t ucid, int fd)
 #endif
-		{			
+		{
 			_maplock.lock();
 			t_xpoll_item* p = _map.get(ucid);
 			if (!p || (p->uflag & 0x01)) {
@@ -612,7 +612,7 @@ namespace ec {
 				_memread.mem_free(evt.pdata);
 				do_delete(ucid, XPOLL_EVT_ST_CLOSE);
 				return;
-		}
+			}
 			else if (nr < 0) {
 #ifdef _WIN32
 				if (WSAEWOULDBLOCK == WSAGetLastError())
@@ -624,9 +624,9 @@ namespace ec {
 				else {
 					_memread.mem_free(evt.pdata);
 					do_delete(ucid, XPOLL_EVT_ST_ERR);
-			}
+				}
 				return;
-	}
+			}
 			else //read event
 			{
 				evt.ubytes = nr;
@@ -639,7 +639,7 @@ namespace ec {
 					_memread.mem_free(evt.pdata);//free memory
 				}
 			}
-}
+		}
 		unsigned int alloc_ucid()
 		{
 			if (_map.size() >= _umaxconnects)
@@ -662,8 +662,8 @@ namespace ec {
 #else
 			n = poll(_pollfd.data(), _pollfd.size(), 200);
 #endif
-			if (n <= 0) 
-				return;		
+			if (n <= 0)
+				return;
 			pollfd* p = _pollfd.data();
 			uint32_t* puid = _pollkey.data();
 			for (i = 0; i < _pollfd.size(); i++) {
