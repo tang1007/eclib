@@ -49,7 +49,10 @@ limitations under the License.
 #	include <poll.h>
 #endif
 
-#define XPOLL_SEND_PKG_NUM   6  // max none send pkg per connect
+#ifndef XPOLL_SEND_PKG_NUM
+#	define XPOLL_SEND_PKG_NUM   6  // max none send pkg per connect
+#endif
+
 #define XPOLL_EVT_ST_OK		 0
 #define XPOLL_EVT_ST_ERR	 1
 #define XPOLL_EVT_ST_CONNECT 2

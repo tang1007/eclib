@@ -104,8 +104,10 @@ namespace ec
 			ss > &h.flag;
 			ss > &h.msglen;
 			if (h.sync != MINI_PKG_FLAG || h.flag != 0x10 || h.msglen > MINI_MSG_MAXSIZE) {
-				if (plog)
+				if (plog) {
 					plog->AddLog("ERR: parsepkg failed sync=%u,flag=%u,msglen=%u", h.sync, h.flag, h.msglen);
+					//plog->AddLogMem(pu, _rbuf.size());
+				}
 				return -1;
 			}
 			if (h.msglen + 6 > _rbuf.size())
@@ -153,8 +155,9 @@ namespace ec
 		virtual bool onreadbytes(t_id* pid, const uint8_t* pd, size_t size)
 		{			
 			if (!pid->pcls) {
-				if (_plog)
-					_plog->AddLog("ERR: ucid %u onreadbytes pid->pcls==null", pid->uid);
+				if (_plog) {
+					_plog->AddLog("ERR: ucid %u onreadbytes pid->pcls==null", pid->uid);					
+				}
 				return false;
 			}
 			minipkg* pi = (minipkg*)pid->pcls;

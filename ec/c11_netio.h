@@ -459,7 +459,7 @@ namespace ec {
 			return _poll.sendnodone(ucid);
 		}
 	protected:
-		memory * _pmem;
+		memory * _pmem; // memory used by threads
 	private:
 		bool	_bkeepalivefast;
 		bool	_busebnagle;
