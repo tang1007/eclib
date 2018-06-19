@@ -284,8 +284,10 @@ namespace ec
                     {
                         printf("%s", smsg);
                         fflush(stdout);
-                        if (!strcasecmp("finished", smsg))
-                            break;
+						if (!strcasecmp("finished", smsg)) {
+							printf("\n");
+							break;
+						}
                         nm++;
                     }
                     if (!nm && i > 5)
