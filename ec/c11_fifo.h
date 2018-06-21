@@ -3,7 +3,7 @@
 FIFO class for windows & linux
 
 \author	kipway@outlook.com
-\update 2018.5.28
+\update 2018.6.21
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib
@@ -25,12 +25,13 @@ limitations under the License.
 
 namespace ec
 {
-	template<class T>
+	template<class _Ty>
 	class fifo
 	{
 	public:
+		typedef _Ty	value_type;
 		fifo(size_t usize, std::mutex *pmutex = nullptr) :_pmutex(pmutex) {
-			_pbuf = new T[usize];
+			_pbuf = new value_type[usize];
 			if (_pbuf)
 				_usize = usize;
 			else
@@ -43,7 +44,7 @@ namespace ec
 				delete[]_pbuf;
 		};
 	private:
-		T * _pbuf;
+		value_type * _pbuf;
 		std::mutex* _pmutex;
 		size_t	_usize; //bufsize
 		size_t	_uhead;	//out
@@ -57,7 +58,7 @@ namespace ec
 			unique_lock lck(_pmutex);
 			return  (_utail + 1) % _usize == _uhead;
 		};
-		int add(T &item, bool *pbfull = nullptr) noexcept // -1:error;  0: full ;  1:success
+		int add(value_type &item, bool *pbfull = nullptr) noexcept // -1:error;  0: full ;  1:success
 		{
 			unique_lock lck(_pmutex);
 			if (!_pbuf)
@@ -73,7 +74,7 @@ namespace ec
 				*pbfull = ((_utail + 1) % _usize == _uhead);
 			return 1; //success
 		};
-		bool get(T& item) noexcept
+		bool get(value_type& item) noexcept
 		{
 			unique_lock lck(_pmutex);
 			if (!_pbuf || _uhead == _utail)
