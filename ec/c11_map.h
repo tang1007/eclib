@@ -1,7 +1,7 @@
 ﻿/*!
 \file c11_map.h
 \author	kipway@outlook.com
-\update 2018.5.26  add fast memory allocator
+\update 2018.6.21
 
 eclib class map with c++11. fast noexcept unordered hashmap with safety iterator
 
@@ -69,15 +69,22 @@ namespace ec
 	private:
 		ec::memory* _pmem;
 		inline t_node* new_node() {
-			if (_pmem)
-				return (t_node*)_pmem->mem_malloc(sizeof(t_node));
-			return (t_node*)malloc(sizeof(t_node));
+			t_node* pnode = nullptr;
+			if (_pmem) 				
+				pnode = (t_node*)_pmem->mem_malloc(sizeof(t_node));
+			else
+				pnode = (t_node*)malloc(sizeof(t_node));
+			if (pnode)
+				new(&pnode->value)value_type();			
+			return pnode;
 		}
 		inline void free_node(t_node* p) {
+			if (p)
+				p->value.~value_type();
 			if (_pmem)
 				_pmem->mem_free(p);
 			else
-				 free(p);
+				free(p);
 		}
 	public:
 		map(unsigned int uhashsize = 1024, ec::memory* pmem  = nullptr) : _ppv(nullptr), _uhashsize(uhashsize), _usize(0), _pmem(pmem)
@@ -295,24 +302,60 @@ namespace ec
 		}
 	};
 }
-/*
-//usage and test
 
-struct t_item
+
+/* // ec::map examples
+
+#include "ec/c11_system.h"
+#include "ec/c_command.h"
+
+class ctst
 {
-	char name[32];
-	int v;
-	int *pv;
+public:
+	ctst() {
+		_nid = 0;
+		printf("construct\n");
+	}
+	ctst(int n) {
+		_nid = n;
+	}
+	~ctst() {
+		printf("destruct %d\n", _nid);
+	}
+	int _nid;
 };
 
-namespace ec
-{
+namespace ec {
 	template<>
-	struct key_equal<const char*, t_item>
+	struct key_equal<int, ctst>
 	{
-		bool operator()(const char* key, const t_item& val)
+		bool operator()(int key, const ctst& val)
 		{
-			return !strcmp(key, val.name);
+			return key == val._nid;
+		}
+	};
+	template<>
+	struct del_node<ctst>
+	{
+		void operator()(ctst& val)
+		{
+			printf("del_node delete %d\n", val._nid);
+		}
+	};
+}
+
+
+struct t_item {
+	int nid;
+};
+
+namespace ec {
+	template<>
+	struct key_equal<int, t_item>
+	{
+		bool operator()(int key, const t_item& val)
+		{
+			return key == val.nid;
 		}
 	};
 
@@ -321,72 +364,146 @@ namespace ec
 	{
 		void operator()(t_item& val)
 		{
-			if (val.pv)
+			printf("del_node delete %d\n", val.nid);
+		}
+	};
+}
+
+void testclsmap()
+{
+	printf("test class map-----------------\n");
+	ec::map<int, ctst> map;
+	ctst cls1(1), cls2(2);
+
+	map.set(cls1._nid, cls1);
+	map.set(cls2._nid, cls2);
+
+	printf("for each\n");
+	map.for_each([](ctst& v) {
+		printf("nid=%d\n", v._nid);
+	});
+	printf("clear,remove all items\n");
+	map.clear();
+	printf("clear,complete\n");
+}
+
+void teststructmap()
+{
+	printf("test struct map-----------------\n");
+	ec::map<int, t_item> map;
+	t_item it;
+
+	it.nid = 1;
+	map.set(it.nid, it);
+
+	it.nid = 2;
+	map.set(it.nid, it);
+
+	it.nid = 3;
+	map.set(it.nid, it);
+
+	map.for_each([](t_item& v) {
+		printf("nid=%d\n", v.nid);
+	});
+}
+
+typedef int* intptr;
+namespace ec {
+	template<>
+	struct key_equal<int, intptr>
+	{
+		bool operator()(int key, const intptr &val)
+		{
+			return key == *val;
+		}
+	};
+	template<>
+	struct del_node<intptr>
+	{
+		void operator()(intptr& val)
+		{
+			if (val)
 			{
-				printf("delete %s.pv,*pv = %d\n", val.name, *(val.pv));
-				delete val.pv;
-				val.pv = nullptr;
+				printf("del_node delete %d\n", *val);
+				delete val;
+				val = nullptr;
 			}
 		}
 	};
 }
-void tstecmap()
+
+void testptrmap()
 {
-	ec::memory mem_allocator(ec::map<const char*, t_item>::size_node(), 1024);
-	ec::map<const char*, t_item> map1(1024,&mem_allocator);
+	printf("test pointer map-----------------\n");
+	int *p;
+	ec::map<int, int*> map;
 
-	t_item it;
-	strcpy(it.name, "1");
-	it.v = 1;
-	it.pv = new int;
-	*it.pv = 1;
-	map1.set(it.name, it);
+	p = new int(1);
+	map.set(*p, p);
 
-	strcpy(it.name, "2");
-	it.v = 2;
-	it.pv = new int;
-	*it.pv = 2;
-	map1.set(it.name, it);
+	p = new int(2);
+	map.set(*p, p);
 
-	map1.for_each([](t_item& v)
-	{
-		printf("key=%s:v=%d,*pv=%d\n", v.name, v.v, *v.pv);
+	p = new int(3);
+	map.set(*p, p);
+
+	map.for_each([](int*& v) {
+		printf("nid=%d\n", *v);
 	});
-
-	if (map1.get("1", it))
-		printf("key=%s:v=%d,*pv=%d\n", it.name, it.v, *it.pv);
-
-	if (map1.get("2", it))
-		printf("key=%s:v=%d,*pv=%d\n", it.name, it.v, *it.pv);
-
-	ec::map<const char*, t_item, ec::key_equal<const char*, t_item>>::iterator i;
-	i = map1.begin();
-	while (i != map1.end())
-	{
-		t_item* pit = 0;
-		if (map1.next(i, pit))
-			printf("key=%s:v=%d,*pv=%d\n", pit->name, pit->v, *(pit->pv));
-	}
-
-	i = map1.begin();
-	while (i != map1.end())
-	{
-		if (map1.next(i, it))
-			printf("key=%s:v=%d,*pv=%d\n", it.name, it.v, *(it.pv));
-	}
-
-	strcpy(it.name, "1");//replace old
-	it.v = 1;
-	it.pv = new int;
-	*it.pv = 11;
-	map1.set(it.name, it); // first del_node ,then replace
-
-	map1.clear();
 }
 
-int main(int argc, char*argv[])
+namespace ec {
+	template<>
+	struct key_equal<const char*, std::string>
+	{
+		bool operator()(const char* key, const std::string &val)
+		{
+			return !strcmp(key, val.c_str());
+		}
+	};
+	template<>
+	struct del_node<std::string>
+	{
+		void operator()(std::string& val)
+		{
+			printf("del_node delete %s\n", val.c_str());
+		}
+	};
+}
+#include <string>
+void tststdstrmap()
 {
-	tstecmap();
+	printf("test std::string map-----------------\n");
+	ec::map<const char*, std::string> map;
+
+	std::string str1("str1"), str2("str2"), str3("str3");
+	map.set("str1", str1);
+	map.set("str2", str2);
+	map.set("str3", str3);
+
+	map.for_each([](std::string & v) {
+		printf("%s\n", v.c_str());
+	});
+}
+#define CMDOD_LEN 1024
+int main(int argc, char* argv[])
+{
+	char sod[CMDOD_LEN];
+	memset(sod, 0, sizeof(sod));
+	testclsmap();
+	teststructmap();
+	testptrmap();
+	tststdstrmap();
+	printf("type 'exit' to exit\n");
+	while (1) {
+		if (fgets(sod, CMDOD_LEN - 1, stdin)) {
+			ec::cCommandLine cmd(sod);
+			if (!strcmp(cmd["command"], "exit"))
+				break;
+			else
+				printf("error cmd\n");
+		}
+	}
 	return 0;
 }
 */
