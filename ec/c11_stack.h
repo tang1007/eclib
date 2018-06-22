@@ -32,15 +32,17 @@ namespace ec {
 		typedef size_t	size_type;
 		typedef _Tp*	iterator;
 		stack( size_t size) :_bufsize(size), _size(0) {
-			_data = (value_type *)malloc(size * sizeof(value_type));
+			_data = new value_type[size];
 			if (!_data)
-				_bufsize = 0;
-			else
-				_bufsize = size;
+				_bufsize = 0;			
 		}
 		~stack() {
-			if (_data)
-				free(_data);
+			if (_data) {
+				delete[]_data;
+				_data = nullptr;
+				_bufsize = 0;
+				_size = 0;
+			}
 		}
 	protected:
 		size_type _bufsize;
@@ -80,8 +82,9 @@ namespace ec {
 				return true;
 			if (_size + usize > _bufsize)
 				return false;
-			memcpy(&_data[_size], pbuf, usize * sizeof(value_type));
-			_size += usize;
+			size_type i;
+			while (i < usize)
+				_data[_size++] = pbuf[i++];						
 			return true;
 		};
 		inline bool push_back(const value_type& val) noexcept
@@ -90,8 +93,10 @@ namespace ec {
 		}
 		inline void pop_back()
 		{
-			if (_size > 0)
+			if (_size > 0) {
 				_size--;
+				_data[_size].~value_type();
+			}
 		}
 		inline bool push(const value_type& val) noexcept
 		{
@@ -102,6 +107,7 @@ namespace ec {
 			if (_size > 0) {
 				_size--;
 				val = _data[_size];
+				_data[_size].~value_type();
 				return true;
 			}
 			return false;
@@ -150,6 +156,7 @@ namespace ec {
 				if (val == _data[i]) {
 					while (i + 1 < _size) {
 						_data[i] = _data[i + 1];
+						_data[i + 1].~value_type();
 						i++;
 					}
 					_size--;
@@ -164,6 +171,7 @@ namespace ec {
 				return false;
 			while (pos + 1 < _size) {
 				_data[pos] = _data[pos + 1];
+				_data[pos + 1].~value_type();
 				pos++;
 			}
 			_size--;

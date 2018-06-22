@@ -40,8 +40,10 @@ namespace ec
 			_utail = 0;
 		};
 		~fifo() {
-			if (_pbuf != NULL)
+			if (_pbuf) {
 				delete[]_pbuf;
+				_pbuf = nullptr;
+			}
 		};
 	private:
 		value_type * _pbuf;
@@ -80,12 +82,19 @@ namespace ec
 			if (!_pbuf || _uhead == _utail)
 				return false;
 			item = _pbuf[_uhead];
+			_pbuf[_uhead].~value_type();
 			_uhead = (_uhead + 1) % _usize;
 			return true;
 		}
 		void clear() noexcept
 		{
 			unique_lock lck(_pmutex);
+			if (!_pbuf || _uhead == _utail)
+				return;
+			while (_uhead != _utail) {
+				_pbuf[_uhead].~value_type();
+				_uhead = (_uhead + 1) % _usize;
+			}
 			_uhead = 0;
 			_utail = 0;
 		}
