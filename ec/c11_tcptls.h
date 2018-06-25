@@ -54,8 +54,8 @@ namespace ec {
 	class AioTlsSrv : public AioTcpSrv<_THREAD, AioTlsSrv<_THREAD, _CLS>>
 	{
 	public:
-		typedef public AioTcpSrv<_THREAD, AioTlsSrv<_THREAD, _CLS>> base_;
-		friend class base_;
+		typedef AioTcpSrv<_THREAD, AioTlsSrv<_THREAD, _CLS>> base_;
+		friend  base_;
 		AioTlsSrv(uint32_t maxconnum, cLog* plog, memory* pmem)
 			: _sss(maxconnum), base_(maxconnum, plog, pmem)
 		{
@@ -92,8 +92,8 @@ namespace ec {
 	class AioTlsSrvThread : public AioTcpSrvThread<AioTlsSrvThread<_CLS>>
 	{
 	public:
-		typedef  AioTcpSrvThread<AioTlsSrvThread<_CLS>> base_;
-		friend class base_;
+		typedef AioTcpSrvThread<AioTlsSrvThread<_CLS>> base_;
+		friend  base_;
 		AioTlsSrvThread(xpoll* ppoll, cLog* plog, memory* pmem, int threadno, uint16_t srvport) :
 			base_(ppoll, plog, pmem, threadno, srvport)
 		{
@@ -181,7 +181,7 @@ namespace ec {
 	{
 	public:
 		typedef AioTcpClient<AioTlsClient<_CLS>> base_;
-		friend class base_;
+		friend  base_;
 		AioTlsClient(cLog* plog, memory* _pmem) : base_(_pmem), _plog(plog), _tls(0, _pmem, plog) // _mem(1024 * 32, 8, 1024 * 256, 8, 1024 * 1024, 4, &_memlck), _tls(0, &_mem, plog)
 		{
 		}

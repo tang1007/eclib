@@ -38,7 +38,7 @@ namespace ec {
 	{
 	public:
 		typedef AioTlsSrv<_THREAD, AioHttpsSrv<_THREAD, _CLS>> base_;
-		friend class base_;
+		friend  base_;
 		AioHttpsSrv(uint32_t maxconnum, cLog* plog, memory* pmem) : base_(maxconnum, plog, pmem), _clients(maxconnum)
 		{
 		}
@@ -77,9 +77,9 @@ namespace ec {
 	{
 	public:
 		typedef AioTlsSrvThread<AioHttpsThread<_CLS>> base_;
-		friend class base_;
+		friend  base_;
 		typedef cWebsocket<AioHttpsThread<_CLS>> basews_;
-		friend class basews_;
+		friend  basews_;
 		AioHttpsThread(xpoll* ppoll, ec::cLog* plog, memory* pmem, int threadno, uint16_t srvport)
 			: base_(ppoll, plog, pmem, threadno, srvport),
 			basews_(nullptr, nullptr, plog, pmem, true)
