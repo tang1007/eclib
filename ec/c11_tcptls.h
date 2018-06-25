@@ -127,7 +127,6 @@ namespace ec {
 		//void onself(uint32_t ucid, int optcode, void* pdata, size_t size)
 		//void ondisconnect(uint32_t ucid);//disconnect  event				
 	protected:
-
 		void onconnect(uint32_t ucid, const char* sip)//connect event
 		{
 			void *p = _psss->getclsmem()->mem_malloc(sizeof(tls_session_srv));
@@ -182,7 +181,7 @@ namespace ec {
 	public:
 		typedef AioTcpClient<AioTlsClient<_CLS>> base_;
 		friend  base_;
-		AioTlsClient(cLog* plog, memory* _pmem) : base_(_pmem), _plog(plog), _tls(0, _pmem, plog) // _mem(1024 * 32, 8, 1024 * 256, 8, 1024 * 1024, 4, &_memlck), _tls(0, &_mem, plog)
+		AioTlsClient(cLog* plog, memory* _pmem) : base_(_pmem), _plog(plog), _tls(0, _pmem, plog)
 		{
 		}
 		bool start(const char* ip, uint16_t port, const char* srvcafile)
