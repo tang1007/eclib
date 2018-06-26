@@ -1,12 +1,12 @@
 ﻿/*!
 \file c11_keyval.h
-\author	kipway@outlook.com
-\update 2018.5.26  add fast memory allocator
+\author	jiangyong
+\email  kipway@outlook.com
+\update 2018.5.26
 
 eclib class text key-value
 
 class txtkeyval;
-
 
 key1:value1\n
 key2:value2\n

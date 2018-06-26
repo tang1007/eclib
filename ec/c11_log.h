@@ -1,5 +1,9 @@
 ﻿/*!
 \file c11_log.h
+\author	jiangyong
+\email  kipway@outlook.com
+\update 2018.6.11
+
 eclibe log for windows & linux
 
 class clog;
@@ -10,9 +14,6 @@ Max File size 8MB
 20140414-0003.txt
 ... ...
 20140414-9999.txt
-
-\author	kipway@outlook.com
-\update 2018.6.11
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib

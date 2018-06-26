@@ -1,6 +1,7 @@
 ﻿/*!
 \file c11_system.h
-\author	kipway@outlook.com
+\author	jiangyong
+\email  kipway@outlook.com
 \update 2018.5.27
 
 eclib class with c++11.
@@ -72,6 +73,7 @@ limitations under the License.
 #include <stdlib.h>
 #include <stdio.h>
 #include <cstdint>
+#include <memory.h>
 
 #include "c11_array.h"
 #include "c11_stack.h"

@@ -1,6 +1,7 @@
 /*!
 \file c11_array.h
-\author	kipway@outlook.com
+\author	jiangyong
+\email  kipway@outlook.com
 \update 2018.5.27
 
 eclib class stack array with c++11.

@@ -1,11 +1,12 @@
 ﻿/*!
 \file c11_config.h
+\author	jiangyong
+\email  kipway@outlook.com
+\update 2018.6.11
+
 eclibe config for windows & linux
 
 class config;
-
-\author	kipway@outlook.com
-\update 2018.6.11
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib

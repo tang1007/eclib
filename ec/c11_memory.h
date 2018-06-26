@@ -1,6 +1,7 @@
 ﻿/*!
 \file c11_memory.h
-\author	kipway@outlook.com
+\author	jiangyong
+\email  kipway@outlook.com
 \update 2018.5.27
 
 eclib class fast memory allocator with c++11.

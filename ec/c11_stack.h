@@ -1,6 +1,7 @@
 ﻿/*!
 \file c11_stack.h
-\author	kipway@outlook.com
+\author	jiangyong
+\email  kipway@outlook.com
 \update 2018.5.26
 
 eclib class stack with c++11.

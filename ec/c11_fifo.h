@@ -1,9 +1,10 @@
 ﻿/*!
 \file c11_fifo.h
-FIFO class for windows & linux
-
-\author	kipway@outlook.com
+\author	jiangyong
+\email  kipway@outlook.com
 \update 2018.6.21
+
+FIFO class for windows & linux
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib

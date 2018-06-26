@@ -1,12 +1,13 @@
 ﻿/*!
 \file c11_xpoll.h
+\author	jiangyong
+\email  kipway@outlook.com
+\update 2018.5.28
+
 eclibe xpoll for windows & linux, send data with zero copy
 
 class udpevt
 class xpoll
-
-\author	kipway@outlook.com
-\update 2018.5.28
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib

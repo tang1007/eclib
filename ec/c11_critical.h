@@ -1,6 +1,7 @@
 ﻿/*!
 \file c11_critical.h
-\author kipway@outlook.com
+\author	jiangyong
+\email  kipway@outlook.com
 \update 2018.1.3
 
 eclib class cCritical with c++11. Adapt for c_critical.h

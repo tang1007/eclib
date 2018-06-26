@@ -1,6 +1,7 @@
 ﻿/*!
 \file c11_event.h
-\author kipway@outlook.com
+\author	jiangyong
+\email  kipway@outlook.com
 \update 2018.3.11
 
 eclib class cEvent  with c++11. Adapt for c_event.h 

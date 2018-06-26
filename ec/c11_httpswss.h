@@ -9,7 +9,6 @@ eclibe Asynchronous HTTPS and secret websocket server template class for windows
 class AioHttpsSrv
 class AioHttpsThread
 
-
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib
 
@@ -32,7 +31,6 @@ limitations under the License.
 #include "c11_websocket.h"
 
 namespace ec {
-
 	template<class _THREAD, class _CLS>
 	class AioHttpsSrv : public AioTlsSrv<_THREAD, AioHttpsSrv<_THREAD, _CLS>>
 	{

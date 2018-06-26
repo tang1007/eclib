@@ -1,6 +1,7 @@
 ﻿/*!
 \file c11_thread.h
-\author kipway@outlook.com
+\author	jiangyong
+\email  kipway@outlook.com
 \update 2018.1.3
 
 eclib class cThread with c++11 . Adapt for c_thread.h

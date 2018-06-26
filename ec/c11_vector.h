@@ -1,7 +1,8 @@
 ﻿/*!
 \file c11_vector.h
-\author	kipway@outlook.com
-\update 2018.5.27 add fast memory allocator
+\author	jiangyong
+\email  kipway@outlook.com
+\update 2018.5.27
 
 eclib class vector with c++11. fast noexcept simple vector. members of a vector can only be simple types, pointers and structures
 

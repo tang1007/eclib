@@ -1,6 +1,7 @@
 ﻿/*!
 \file c11_hash.h
-\author	kipway@outlook.com
+\author	jiangyong
+\email  kipway@outlook.com
 \update 2018.4.6
 
 eclib class hash with c++11. Separated from c11_map.h

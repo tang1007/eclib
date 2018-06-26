@@ -1,6 +1,7 @@
 ﻿/*!
 \file c11_mutex.h
-\author	kipway@outlook.com
+\author	jiangyong
+\email  kipway@outlook.com
 \update 2018.5.27
 
 eclib class mutex with c++11.
