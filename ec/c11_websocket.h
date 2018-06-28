@@ -154,7 +154,7 @@ namespace ec
 		return err;
 	}
 
-	inline bool ws_make_permsg(const void* pdata, size_t sizes, unsigned char wsopt, vector<char>* pout, int ncompress) //multi-frame,permessage_deflate
+	inline bool ws_make_permsg(const void* pdata, size_t sizes, unsigned char wsopt, vector<uint8_t>* pout, int ncompress) //multi-frame,permessage_deflate
 	{
 		const char* pds = (const char*)pdata;
 		size_t slen = sizes;
@@ -184,36 +184,36 @@ namespace ec
 				uc |= 0x80;
 				us = slen - ss;
 			}
-			pout->add((char)uc);
+			pout->add(uc);
 			if (us < 126)
 			{
 				uc = (unsigned char)us;
-				pout->add((char)uc);
+				pout->add(uc);
 			}
 			else if (uc < 65536)
 			{
 				uc = 126;
-				pout->add((char)uc);
-				pout->add((char)((us & 0xFF00) >> 8)); //high byte
-				pout->add((char)(us & 0xFF)); //low byte
+				pout->add(uc);
+				pout->add((uint8_t)((us & 0xFF00) >> 8)); //high byte
+				pout->add((uint8_t)(us & 0xFF)); //low byte
 			}
 			else // < 4G
 			{
 				uc = 127;
-				pout->add((char)uc);
-				pout->add((char)0); pout->add((char)0); pout->add((char)0); pout->add((char)0);//high 4 bytes 0
-				pout->add((char)((us & 0xFF000000) >> 24));
-				pout->add((char)((us & 0x00FF0000) >> 16));
-				pout->add((char)((us & 0x0000FF00) >> 8));
-				pout->add((char)(us & 0xFF));
+				pout->add((uint8_t)uc);
+				pout->add((uint8_t)0); pout->add((uint8_t)0); pout->add((uint8_t)0); pout->add((uint8_t)0);//high 4 bytes 0
+				pout->add((uint8_t)((us & 0xFF000000) >> 24));
+				pout->add((uint8_t)((us & 0x00FF0000) >> 16));
+				pout->add((uint8_t)((us & 0x0000FF00) >> 8));
+				pout->add((uint8_t)(us & 0xFF));
 			}
-			pout->add((const char*)(pds + ss), us);
+			pout->add((const uint8_t*)(pds + ss), us);
 			ss += us;
 		}
 		return true;
 	}
 
-	inline bool ws_make_perfrm(const void* pdata, size_t sizes, unsigned char wsopt, vector< char>* pout)//multi-frame,deflate-frame, for ios safari
+	inline bool ws_make_perfrm(const void* pdata, size_t sizes, unsigned char wsopt, vector< uint8_t>* pout)//multi-frame,deflate-frame, for ios safari
 	{
 		const char* pds = (const char*)pdata;
 		char* pf;
@@ -236,7 +236,7 @@ namespace ec
 				uc |= 0x80;
 				us = slen - ss;
 			}
-			pout->add((char)uc);
+			pout->add(uc);
 			if (uc & 0x40)
 			{
 				tmp.clear();
@@ -254,26 +254,26 @@ namespace ec
 			if (fl < 126)
 			{
 				uc = (unsigned char)fl;
-				pout->add((char)uc);
+				pout->add(uc);
 			}
 			else if (uc < 65536)
 			{
 				uc = 126;
-				pout->add((char)uc);
-				pout->add((char)((fl & 0xFF00) >> 8)); //high byte
-				pout->add((char)(fl & 0xFF)); //low byte
+				pout->add(uc);
+				pout->add((uint8_t)((fl & 0xFF00) >> 8)); //high byte
+				pout->add((uint8_t)(fl & 0xFF)); //low byte
 			}
 			else // < 4G
 			{
 				uc = 127;
-				pout->add((char)uc);
-				pout->add((char)0); pout->add((char)0); pout->add((char)0); pout->add((char)0);//high 4 bytes 0
-				pout->add((char)((fl & 0xFF000000) >> 24));
-				pout->add((char)((fl & 0x00FF0000) >> 16));
-				pout->add((char)((fl & 0x0000FF00) >> 8));
-				pout->add((char)(fl & 0xFF));
+				pout->add(uc);
+				pout->add((uint8_t)0); pout->add((uint8_t)0); pout->add((uint8_t)0); pout->add((uint8_t)0);//high 4 bytes 0
+				pout->add((uint8_t)((fl & 0xFF000000) >> 24));
+				pout->add((uint8_t)((fl & 0x00FF0000) >> 16));
+				pout->add((uint8_t)((fl & 0x0000FF00) >> 8));
+				pout->add((uint8_t)(fl & 0xFF));
 			}
-			pout->add((const char*)pf, fl);
+			pout->add((const uint8_t*)pf, fl);
 			ss += us;
 		}
 		return true;
@@ -963,7 +963,7 @@ namespace ec
 		/*
 		void onwsread(uint32_t ucid, int bFinal, int wsopcode, const void* pdata, size_t size) = 0;
 		void dodisconnect(uint32_t ucid) = 0;
-		int  dosend(uint32_t ucid, vector<char> &vd, int timeovermsec = 0) = 0;
+		int  dosend(uint32_t ucid, vector<uint8_t> *pvd, int timeovermsec = 0) = 0;
 		bool onhttprequest(uint32_t ucid, cHttpPacket* pPkg);
 		*/
 		bool DoUpgradeWebSocket(int ucid, const char *skey)
@@ -988,11 +988,11 @@ namespace ec
 				httpreterr(ucid, http_sret400);
 				return _httppkg.HasKeepAlive();
 			}
-			vector<char> vret(1024 * 4, _pmem);
+			vector<uint8_t> vret(1024 * 4, _pmem);
 			sc = "HTTP/1.1 101 Switching Protocols\x0d\x0a"
 				"Upgrade: websocket\x0d\x0a"
 				"Connection: Upgrade\x0d\x0a";
-			vret.add(sc, strlen(sc));
+			vret.add((const uint8_t*)sc, strlen(sc));
 
 			char ss[256];
 			strcpy(ss, skey);
@@ -1003,22 +1003,22 @@ namespace ec
 			encode_base64(base64out, sha1out, 20);    //BASE64
 
 			sc = "Sec-WebSocket-Accept: ";
-			vret.add(sc, strlen(sc));
-			vret.add(base64out, strlen(base64out));
-			vret.add("\x0d\x0a", 2);
+			vret.add((const uint8_t*)sc, strlen(sc));
+			vret.add((const uint8_t*)base64out, strlen(base64out));
+			vret.add((const uint8_t*)"\x0d\x0a", 2);
 
 			if (sProtocol[0]) {
 				sc = "Sec-WebSocket-Protocol: ";
-				vret.add(sc, strlen(sc));
-				vret.add(sProtocol, strlen(sProtocol));
-				vret.add("\x0d\x0a", 2);
+				vret.add((const uint8_t*)sc, strlen(sc));
+				vret.add((const uint8_t*)sProtocol, strlen(sProtocol));
+				vret.add((const uint8_t*)"\x0d\x0a", 2);
 			}
 
 			if (_httppkg.GetHeadFiled("Host", tmp, sizeof(tmp))) {
 				sc = "Host: ";
-				vret.add(sc, strlen(sc));
-				vret.add(tmp, strlen(tmp));
-				vret.add("\x0d\x0a", 2);
+				vret.add((const uint8_t*)sc, strlen(sc));
+				vret.add((const uint8_t*)tmp, strlen(tmp));
+				vret.add((const uint8_t*)"\x0d\x0a", 2);
 			}
 
 			int ncompress = 0;
@@ -1028,29 +1028,29 @@ namespace ec
 				while (ec::str_getnext(";,", tmp, len, pos, st, sizeof(st))) {
 					if (!ec::str_icmp("permessage-deflate", st)) {
 						sc = "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover";
-						vret.add(sc, strlen(sc));
-						vret.add("\x0d\x0a", 2);
+						vret.add((const uint8_t*)sc, strlen(sc));
+						vret.add((const uint8_t*)"\x0d\x0a", 2);
 						ncompress = ws_permessage_deflate;
 						break;
 					}
 					else if (!ec::str_icmp("x-webkit-deflate-frame", st)) {
 						sc = "Sec-WebSocket-Extensions: x-webkit-deflate-frame; no_context_takeover";
-						vret.add(sc, strlen(sc));
-						vret.add("\x0d\x0a", 2);
+						vret.add((const uint8_t*)sc, strlen(sc));
+						vret.add((const uint8_t*)"\x0d\x0a", 2);
 						ncompress = ws_x_webkit_deflate_frame;
 						break;
 					}
 				}
 			}
-			vret.add("\x0d\x0a", 2);
+			vret.add((const uint8_t*)"\x0d\x0a", 2);
 			_pclis->UpgradeWebSocket(ucid, ncompress);
 
 			int ns = 0;
 			if (_plog) {
 				vector<char> vlog(1024 * 4, _pmem);
-				vlog.add(vret.data(), vret.size());
+				vlog.add((const char*)vret.data(), vret.size());
 				vlog.add(char(0));
-				ns = http_send(ucid, vret);
+				ns = http_send(ucid, &vret);
 				if (ns < 0) {
 					_plog->add(CLOG_DEFAULT_MSG, "ucid %d upggrade WS failed", ucid);
 					_plog->append(CLOG_DEFAULT_DBG, "%s", vlog.data());
@@ -1060,7 +1060,7 @@ namespace ec
 				_plog->append(CLOG_DEFAULT_DBG, "%s", vlog.data());
 			}
 			else
-				ns = http_send(ucid, vret);
+				ns = http_send(ucid, &vret);
 			return ns > 0;
 		}
 
@@ -1125,26 +1125,26 @@ namespace ec
 				return pPkg->HasKeepAlive();
 			}
 
-			vector<char>	answer(1024 * 64, _pmem);
+			vector<uint8_t>	answer(1024 * 64, _pmem);
 			sc = "HTTP/1.1 200 ok\r\n";
-			answer.add(sc, strlen(sc));
+			answer.add((const uint8_t*)sc, strlen(sc));
 
 			sc = "Server: rdb5 websocket server\r\n";
-			answer.add(sc, strlen(sc));
+			answer.add((const uint8_t*)sc, strlen(sc));
 
 			if (pPkg->HasKeepAlive()) {
 				sc = "Connection: keep-alive\r\n";
-				answer.add(sc, strlen(sc));
+				answer.add((const uint8_t*)sc, strlen(sc));
 			}
 			const char* sext = GetFileExtName(sfile);
 			if (sext && *sext && _pcfg->getmime(sext, tmp, sizeof(tmp))) {
-				answer.add("Content-type: ", 13);
-				answer.add(tmp, strlen(tmp));
-				answer.add("\r\n", 2);
+				answer.add((const uint8_t*)"Content-type: ", 13);
+				answer.add((const uint8_t*)tmp, strlen(tmp));
+				answer.add((const uint8_t*)"\r\n", 2);
 			}
 			else {
 				sc = "Content-type: application/octet-stream\r\n";
-				answer.add(sc, strlen(sc));
+				answer.add((const uint8_t*)sc, strlen(sc));
 			}
 
 			int necnode = 0;
@@ -1154,7 +1154,7 @@ namespace ec
 				while (ec::str_getnext(";,", tmp, strlen(tmp), pos, sencode, sizeof(sencode))) {
 					if (!ec::str_icmp("deflate", sencode)) {
 						sc = "Content-Encoding: deflate\r\n";
-						answer.add(sc, strlen(sc));
+						answer.add((const uint8_t*)sc, strlen(sc));
 						necnode = HTTPENCODE_DEFLATE;
 						break;
 					}
@@ -1169,29 +1169,29 @@ namespace ec
 			}
 			else
 				sprintf(tmp, "Content-Length: %d\r\n\r\n", (int)filetmp.size());
-			answer.add(tmp, strlen(tmp));
+			answer.add((const uint8_t*)tmp, strlen(tmp));
 
 			if (_plog) {
 				Array<char, 4096> atmp;
-				atmp.add(answer.data(), answer.size());
+				atmp.add((const char*)answer.data(), answer.size());
 				atmp.add((char)0);
 				_plog->add(CLOG_DEFAULT_DBG, "write ucid %u:", ucid);
 				_plog->append(CLOG_DEFAULT_DBG, "%s", atmp.data());
 			}
 			if (bGet) { //get			
 				if (HTTPENCODE_DEFLATE == necnode)
-					answer.add(encodetmp.data(), encodetmp.size());
+					answer.add((const uint8_t*)encodetmp.data(), encodetmp.size());
 				else
-					answer.add(filetmp.data(), filetmp.size());
+					answer.add((const uint8_t*)filetmp.data(), filetmp.size());
 			}
-			return http_send(ucid, answer) > 0;
+			return http_send(ucid, &answer) > 0;
 		}
 
 		void httpreterr(unsigned int ucid, const char* sret)
 		{
-			vector<char> vret(1024 * 2, _pmem);
-			vret.add(sret, strlen(sret));
-			http_send(ucid, vret);
+			vector<uint8_t> vret(1024 * 2, _pmem);
+			vret.add((const uint8_t*)sret, strlen(sret));
+			http_send(ucid, &vret);
 			if (_plog)
 				_plog->add(CLOG_DEFAULT_DBG, "write ucid %u:\n%s", ucid, sret);
 		}
@@ -1233,7 +1233,7 @@ namespace ec
 		{
 			bool bsend;
 			int ncomp = _pclis->GetCompress(ucid);
-			vector<char> vret(1024 * 64, cWebsocket::_pmem);
+			vector<uint8_t> vret(1024 * 64, cWebsocket::_pmem);
 			if (ncomp == ws_x_webkit_deflate_frame) //deflate-frame压缩
 				bsend = ws_make_perfrm(pdata, size, wsopt, &vret);
 			else
@@ -1243,11 +1243,11 @@ namespace ec
 					cWebsocket::_plog->add(CLOG_DEFAULT_ERR, "send ucid %u make wsframe failed,size %u", ucid, (unsigned int)size);
 				return -1;
 			}
-			return static_cast<_CLS*>(this)->dosend(ucid, vret, waitmsec);
+			return static_cast<_CLS*>(this)->dosend(ucid, &vret, waitmsec);
 		}
-		inline int http_send(unsigned int ucid, vector<char> &vd, int waitmsec = 0)
+		inline int http_send(unsigned int ucid, vector<uint8_t> *pvd, int waitmsec = 0)
 		{
-			return  static_cast<_CLS*>(this)->dosend(ucid, vd, waitmsec);
+			return  static_cast<_CLS*>(this)->dosend(ucid, pvd, waitmsec);
 		}
 	};
 

@@ -28,6 +28,8 @@ limitations under the License.
 */
 
 #pragma once
+
+#include "c11_keyval.h"
 #include "c11_log.h"
 #include "c11_netio.h"
 #include "c11_xpoll.h"
@@ -63,7 +65,6 @@ namespace ec
 			_disconnect(XPOLL_EVT_ST_CLOSE);
 			_udpevt.close();
 		}
-
 		bool tcp_post(const void* pdata, size_t bytesize, int timeovermsec = 0) // post send data
 		{
 			int nerr = post_msg(pdata, bytesize);
@@ -79,13 +80,61 @@ namespace ec
 			}
 			return nerr > 0;
 		}
+		bool tcp_post(ec::vector<uint8_t> *pd, int timeovermsec = 0) // post send data
+		{
+			int nerr = post_msg(pd);
+			if (nerr < 0)
+				return false;
+			int nt = timeovermsec / 10, i = 0;;
+			if (nt % 10)
+				nt++;
+			while (!nerr && i < nt) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				nerr = post_msg(pd);
+				i++;
+			}
+			return nerr > 0;
+		}
 	protected:
-		/*
-		void onrecv(const void* pdata, size_t bytesize) {};
-		void onconnect() {};
-		void ondisconnect() {};
-		*/
-		memory* _pmem;
+		memory * _pmem; //memory for send
+		bool post_onread(const void *pd, size_t size) //called in onrecv.
+		{
+			int nr = post_msg(pd, size);
+			if (nr < 0)
+				return false;
+			else if (nr > 0)
+				return true;
+			t_xpoll_send ts;
+			while (get_send(&ts)) { //send first					
+				if (sendts(&ts) < 0) // error
+					return false;
+				nr = post_msg(pd, size);
+				if (nr < 0)
+					return false;
+				else if (nr > 0)
+					break;
+			}
+			return true;
+		}
+		bool post_onread(ec::vector<uint8_t> *pvd) //called in onrecv.
+		{
+			int nr = post_msg(pvd);
+			if (nr < 0)
+				return false;
+			else if (nr > 0)
+				return true;
+			t_xpoll_send ts;
+			while (get_send(&ts)) { //send first					
+				if (sendts(&ts) < 0) // error
+					return false;
+				nr = post_msg(pvd);
+				if (nr < 0)
+					return false;
+				else if (nr > 0)
+					break;
+			}
+			return true;
+		}
 	private:
 		udpevt _udpevt;
 		std::mutex _cpevtlock;//lock for _cpevt
@@ -111,7 +160,7 @@ namespace ec
 			pi->pkg[pi->utail].size = (uint32_t)size;
 			pi->pkg[pi->utail].pd = (uint8_t *)_pmem->mem_malloc(size); //(uint8_t*)pd;
 			if (!pi->pkg[pi->utail].pd)
-				return 0;
+				return -1;
 			memcpy(pi->pkg[pi->utail].pd, pd, size);
 			pi->utail = (pi->utail + 1) % XPOLL_SEND_PKG_NUM;
 			_udpevt.set_event();
@@ -128,13 +177,10 @@ namespace ec
 			int nret = (int)pd->size();
 			pi->pkg[pi->utail].size = (uint32_t)pd->size();
 			pi->pkg[pi->utail].pd = (uint8_t*)pd->detach_buf();
-			if (!pi->pkg[pi->utail].pd)
-				return 0;
 			pi->utail = (pi->utail + 1) % XPOLL_SEND_PKG_NUM;
 			_udpevt.set_event();
 			return (int)nret;
 		}
-
 		void _disconnect(int status) {
 			_bconnect = false;
 			t_xpoll_item t;
@@ -376,10 +422,10 @@ namespace ec
 		AioTcpSrvThread(xpoll* ppoll, ec::cLog* plog, memory* pmem, int threadno, uint16_t srvport) :
 			_pmem(pmem), _ppoll(ppoll), _plog(plog), _threadno(threadno), _srvport(srvport) {
 		}
-		inline int getsendnodone(uint32_t ucid) { // get send not done pkg number , < XPOLL_SEND_PKG_NUM
+		inline int get_unsends(uint32_t ucid) { // Get the number of unfinished packages , < XPOLL_SEND_PKG_NUM,used for server put message
 			return _ppoll->sendnodone(ucid);
 		}
-		bool tcp_post(uint32_t ucid, void* pdata, size_t bytesize, int timeovermsec = 0) // post send data
+		bool tcp_post(uint32_t ucid, void* pdata, size_t bytesize, int timeovermsec = 0) // post data, warning: zero copy, direct put pdata pointer to send buffer
 		{
 			int nerr = _ppoll->post_msg(ucid, pdata, bytesize);
 			if (nerr < 0)
@@ -394,23 +440,33 @@ namespace ec
 			}
 			return nerr > 0;
 		}
-		bool postselfevent(uint32_t ucid, uint8_t optcode, void *pdata, size_t datasize) // post self event, optcode >= XPOLL_EVT_OPT_APP
+		bool tcp_post(uint32_t ucid, vector<uint8_t> *pvd, int timeovermsec = 0) // post data, warning: zero copy, direct put pdata pointer to send buffer
+		{
+			int nerr = _ppoll->post_msg(ucid, pvd);
+			if (nerr < 0)
+				return false;
+			int nt = timeovermsec / 10, i = 0;;
+			if (nt % 10)
+				nt++;
+			while (!nerr && i < nt) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				nerr = _ppoll->post_msg(ucid, pvd);
+				i++;
+			}
+			return nerr > 0;
+		}
+
+		bool post_self_event(uint32_t ucid, uint8_t optcode, void *pdata, size_t datasize) // post self event, optcode >= XPOLL_EVT_OPT_APP
 		{
 			if (optcode < XPOLL_EVT_OPT_APP)
 				return false;
 			_ppoll->add_event(ucid, optcode, 0, pdata, datasize);
 			return true;
 		}
-		/*void InitArgs(void* pargs) {
-		}*/
-	protected:
-		/*
-		void onconnect(uint32_t ucid, const char* sip) {};//connect event
-		void ondisconnect(uint32_t ucid) {};//disconnect  event
-		void onrecv(uint32_t ucid, const void* pdata, size_t size) {};
-		void onsend(uint32_t ucid, int nstatus, void* pdata, size_t size) {};//send complete event
-		void onself(uint32_t ucid, int optcode, void* pdata, size_t size) {};
-		*/
+		inline void close_ucid(uint32_t ucid) // close ucid graceful,send all unsend messages
+		{
+			tcp_post(ucid, nullptr, 0, 100);
+		}
 		inline void disconnect(uint32_t ucid) {
 			_ppoll->remove(ucid);
 		}

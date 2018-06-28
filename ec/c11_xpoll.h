@@ -224,8 +224,8 @@ namespace ec {
 			_memread(XPOLL_READ_BLK_SIZE, 16 + maxconnum / 8, 0, 0, 0, 0, &_memread_lock),
 			_memmap(ec::map<uint32_t, t_xpoll_item>::size_node(), maxconnum),
 			_map(11 + (uint32_t)(maxconnum / 3), &_memmap),
-			_pollfd(1024 * 4),
-			_pollkey(1024 * 4), _unextid(100), _umaxconnects(maxconnum)
+			_pollfd(maxconnum),
+			_pollkey(maxconnum), _unextid(100), _umaxconnects(maxconnum)
 		{
 			_posnext = 0;
 			_fdchanged = false;
@@ -315,11 +315,23 @@ namespace ec {
 				return -1;
 			if ((pi->utail + 1) % XPOLL_SEND_PKG_NUM == pi->uhead) //full
 				return 0;
-
 			pi->pkg[pi->utail].size = (uint32_t)size;
 			pi->pkg[pi->utail].pd = (uint8_t*)pd;
 			pi->utail = (pi->utail + 1) % XPOLL_SEND_PKG_NUM;
-
+			_udpevt.set_event();
+			return 1;
+		}
+		int post_msg(uint32_t ucid, vector<uint8_t> *pvd)//post message,return -1:error  0:full ; 1:one message post
+		{
+			ec::unique_lock lck(&_maplock);
+			t_xpoll_item* pi = _map.get(ucid);
+			if (!pi)
+				return -1;
+			if ((pi->utail + 1) % XPOLL_SEND_PKG_NUM == pi->uhead) //full
+				return 0;
+			pi->pkg[pi->utail].size = (uint32_t)pvd->size();
+			pi->pkg[pi->utail].pd = (uint8_t*)pvd->detach_buf();
+			pi->utail = (pi->utail + 1) % XPOLL_SEND_PKG_NUM;
 			_udpevt.set_event();
 			return 1;
 		}
@@ -679,11 +691,15 @@ namespace ec {
 					do_delete(puid[i], XPOLL_EVT_ST_ERR);
 					continue;
 				}
-				if (get_send(puid[i], &ts)) { //send first					
-					if (sendts(&ts) > 0) // not send complete 
-						p[i].events = POLLIN | POLLOUT;
-					else // send complete 
-						p[i].events = POLLIN;
+				if (get_send(puid[i], &ts)) { //send first		
+					if (!ts.usize)
+						do_delete(puid[i], XPOLL_EVT_ST_CLOSE);// zero size msg will disconenct
+					else {
+						if (sendts(&ts) > 0) // not send complete 
+							p[i].events = POLLIN | POLLOUT;
+						else // send complete 
+							p[i].events = POLLIN;
+					}
 				}
 				if (p[i].revents & POLLIN)  //read
 					do_read(puid[i], p[i].fd);

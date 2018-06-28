@@ -95,13 +95,12 @@ namespace ec {
 		inline void dodisconnect(uint32_t ucid) {
 			base_::disconnect(ucid);
 		};
-		int  dosend(uint32_t ucid, vector<char> &vd, int timeovermsec = 0)
+		int  dosend(uint32_t ucid, vector<uint8_t> *pvd, int timeovermsec = 0)
 		{
-			size_t size = vd.size();
-			void* pbuf = vd.detach_buf();
-			if (!base_::tcp_post(ucid, pbuf, size, timeovermsec))
+			int size = (int)pvd->size();
+			if (!base_::tcp_post(ucid, pvd, timeovermsec))
 				return -1;
-			return int(size);
+			return size;
 		}
 		bool onhttprequest(uint32_t ucid, cHttpPacket* pPkg)
 		{

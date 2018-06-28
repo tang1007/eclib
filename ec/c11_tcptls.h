@@ -112,20 +112,10 @@ namespace ec {
 			vector<uint8_t> pkg(88 * (size / TLS_CBCBLKSIZE) + size + 88 - size % 88, base_::_pmem);
 			if (!_psss->mkr_appdata(ucid, &pkg, pdata, size))
 				return false;
-			if (pkg.size()) {
-				size_t dsize = pkg.size();
-				void* pd = pkg.detach_buf();
-				return base_::tcp_post(ucid, pd, dsize, waitmsec);
-			}
+			if (pkg.size())
+				return base_::tcp_post(ucid, &pkg, waitmsec);			
 			return false;
-		}
-	protected:
-		//void onconnect(uint32_t ucid, const char* sip);//connect event
-		//void onhandshake(uint32_t ucid); {};
-		//void onrecv(uint32_t ucid, const void* pdata, size_t size); //read event
-		//void onsendcomplete(uint32_t ucid, int nstatus); //send complete event		
-		//void onself(uint32_t ucid, int optcode, void* pdata, size_t size)
-		//void ondisconnect(uint32_t ucid);//disconnect  event				
+		}	
 	protected:
 		void onconnect(uint32_t ucid, const char* sip)//connect event
 		{
@@ -148,16 +138,17 @@ namespace ec {
 		{
 			if (!pdata || !size)
 				return;
-			vector<uint8_t> pkg(32 * 1024, base_::_pmem);
-			size_t dsize;
+			vector<uint8_t> pkg(32 * 1024, base_::_pmem);			
 			int nst = _psss->OnTcpRead(ucid, pdata, size, &pkg);
 			if (TLS_SESSION_ERR == nst || TLS_SESSION_OK == nst || TLS_SESSION_NONE == nst) {
-				if (dsize = pkg.size())
-					base_::tcp_post(ucid, pkg.detach_buf(), dsize);
+				if (pkg.size())
+					base_::tcp_post(ucid, &pkg);
+				if (TLS_SESSION_ERR == nst)
+					base_::close_ucid(ucid);// close graceful
 			}
 			else if (TLS_SESSION_HKOK == nst) {
-				if (dsize = pkg.size())
-					base_::tcp_post(ucid, pkg.detach_buf(), dsize);
+				if (pkg.size())
+					base_::tcp_post(ucid, &pkg);
 				static_cast<_CLS*>(this)->onhandshake(ucid);
 			}
 			else if (TLS_SESSION_APPDATA == nst) {
@@ -199,12 +190,8 @@ namespace ec {
 			vector<uint8_t> pkg(88 * (size / TLS_CBCBLKSIZE) + size + 88 - size % 88, base_::_pmem);
 			if (!_tls.MakeAppRecord(&pkg, pd, size))
 				return false;
-			return base_::tcp_post(pkg.data(), pkg.size());
-		}
-	protected:
-		//void onhandshake();
-		//void onrecv(const void* pdata, size_t bytesize);
-		//void ondisconnect();
+			return base_::tcp_post(&pkg);// zero copy
+		}	
 	protected:
 		void  onrecv(const void* pdata, size_t bytesize) {
 			vector<uint8_t> pkg(1024 * 32, base_::_pmem);
