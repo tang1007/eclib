@@ -28,7 +28,7 @@ limitations under the License.
 #include "c11_hash.h"
 
 namespace ec
-{	
+{
 	template<class _Kty, class _Ty> // is _Kty is equal to the key in class _Ty
 	struct key_equal
 	{
@@ -64,19 +64,19 @@ namespace ec
 		};
 
 	protected:
-		t_node**	_ppv;
+		t_node * *	_ppv;
 		size_type   _uhashsize;
 		size_type	_usize;
 	private:
 		ec::memory* _pmem;
 		inline t_node* new_node() {
 			t_node* pnode = nullptr;
-			if (_pmem) 				
+			if (_pmem)
 				pnode = (t_node*)_pmem->mem_malloc(sizeof(t_node));
 			else
 				pnode = (t_node*)malloc(sizeof(t_node));
 			if (pnode)
-				new(&pnode->value)value_type();			
+				new(&pnode->value)value_type();
 			return pnode;
 		}
 		inline void free_node(t_node* p) {
@@ -88,7 +88,7 @@ namespace ec
 				free(p);
 		}
 	public:
-		map(unsigned int uhashsize = 1024, ec::memory* pmem  = nullptr) : _ppv(nullptr), _uhashsize(uhashsize), _usize(0), _pmem(pmem)
+		map(unsigned int uhashsize = 1024, ec::memory* pmem = nullptr) : _ppv(nullptr), _uhashsize(uhashsize), _usize(0), _pmem(pmem)
 		{
 			_ppv = new t_node*[_uhashsize];
 			if (nullptr == _ppv)
@@ -99,7 +99,7 @@ namespace ec
 		{
 			clear();
 		};
-		inline static size_t size_node(){
+		inline static size_t size_node() {
 			return sizeof(t_node);
 		}
 		inline size_type size() const noexcept
@@ -137,7 +137,36 @@ namespace ec
 				if (nullptr == _ppv)
 					return false;
 				memset(_ppv, 0, sizeof(t_node*) * _uhashsize);
-			}			
+			}
+			size_type upos = _Hasher()(key) % _uhashsize;
+			t_node* pnode;
+			for (pnode = _ppv[upos]; pnode != nullptr; pnode = pnode->pNext)
+			{
+				if (_Keyeq()(key, pnode->value))
+				{
+					_DelVal()(pnode->value);
+					pnode->value = Value;
+					return true;
+				}
+			}
+			pnode = new_node();
+			if (pnode == nullptr)
+				return false;
+			pnode->value = Value;
+			pnode->pNext = _ppv[upos];
+			_ppv[upos] = pnode;
+			_usize++;
+			return true;
+		};
+		bool set(key_type key, value_type&& Value) noexcept
+		{
+			if (nullptr == _ppv)
+			{
+				_ppv = new t_node*[_uhashsize];
+				if (nullptr == _ppv)
+					return false;
+				memset(_ppv, 0, sizeof(t_node*) * _uhashsize);
+			}
 			size_type upos = _Hasher()(key) % _uhashsize;
 			t_node* pnode;
 			for (pnode = _ppv[upos]; pnode != nullptr; pnode = pnode->pNext)
@@ -276,7 +305,7 @@ namespace ec
 				fun(*pv);
 				pv = next(i);
 			}
-		}		
+		}
 	private:
 		iterator _nexti(unsigned int ih, unsigned int il) noexcept
 		{
