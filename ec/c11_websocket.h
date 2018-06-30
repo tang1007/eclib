@@ -907,9 +907,9 @@ namespace ec
 		{
 			unique_lock lck(&_cs);
 			void *p = _memcls.mem_malloc(sizeof(cHttpClient));
+			if (!p)
+				return;
 			cHttpClient* pcli = new (p) cHttpClient(ucid, sip, &_mem);
-
-
 			if (pcli) {
 				t_httpclient item;
 				item.pcli = pcli;
