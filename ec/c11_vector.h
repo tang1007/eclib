@@ -2,7 +2,7 @@
 \file c11_vector.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.5.27
+\update 2018.6.30
 
 eclib class vector with c++11. fast noexcept simple vector. members of a vector can only be simple types, pointers and structures
 
@@ -58,6 +58,7 @@ namespace ec
 			_pmem = v._pmem;
 			v._pbuf = nullptr;
 			v._usize = 0;
+			v._ubufsize = 0;
 		}
 		~vector()
 		{
@@ -79,6 +80,7 @@ namespace ec
 			_pmem = v._pmem;
 			v._pbuf = nullptr;
 			v._usize = 0;
+			v._ubufsize = 0;
 			return *this;
 		}
 		inline ec::memory* get_mem_allocator() {
