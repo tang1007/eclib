@@ -49,18 +49,43 @@ namespace ec
 			set_grow(ugrownsize);
 			add(pval, size);
 		};
+		vector(vector &&v)
+		{
+			_pbuf = v._pbuf;
+			_usize = v._usize;
+			_ubufsize = v._ubufsize;
+			_ugrown = v._ugrown;
+			_pmem = v._pmem;
+			v._pbuf = nullptr;
+			v._usize = 0;
+		}
 		~vector()
 		{
-			if (_pbuf != nullptr)
-			{
+			if (_pbuf != nullptr) {
 				mem_free(_pbuf);
+				_pbuf = nullptr;
+				_usize = 0;
+				_ubufsize = 0;
+				_pmem = nullptr;
 			}
 		};
+		vector& operator = (vector&& v)
+		{
+			this->~vector();
+			_pbuf = v._pbuf;
+			_usize = v._usize;
+			_ubufsize = v._ubufsize;
+			_ugrown = v._ugrown;
+			_pmem = v._pmem;
+			v._pbuf = nullptr;
+			v._usize = 0;
+			return *this;
+		}
 		inline ec::memory* get_mem_allocator() {
 			return _pmem;
 		}
 	protected:
-		value_type*	_pbuf;
+		value_type * _pbuf;
 		size_type	_usize;
 		size_type	_ubufsize;
 		size_type	_ugrown;
@@ -84,12 +109,12 @@ namespace ec
 					return nullptr;
 				if (_pbuf) {
 					if (_usize)
-						memcpy(pnew, _pbuf, ((_usize < size)? _usize : size) * sizeof(value_type));
+						memcpy(pnew, _pbuf, ((_usize < size) ? _usize : size) * sizeof(value_type));
 					_pmem->mem_free(_pbuf);
 				}
-				return pnew;				
+				return pnew;
 			}
-			return realloc(_pbuf,size);
+			return realloc(_pbuf, size);
 		}
 	public:
 		inline size_type max_size() const noexcept
@@ -209,7 +234,7 @@ namespace ec
 		{
 			while (first != last)
 				fun(*first++);
-		}		
+		}
 		inline value_type* data() noexcept
 		{
 			return _pbuf;
@@ -308,7 +333,7 @@ namespace ec
 				return false;
 			if (_pbuf)
 			{
-				if(_usize)
+				if (_usize)
 					memcpy(pnew, _pbuf, _usize * sizeof(value_type));
 				mem_free(_pbuf);
 			}
@@ -325,9 +350,9 @@ namespace ec
 		}
 	private:
 		bool _grown(size_type usize = 1) noexcept
-		{			
+		{
 			if (_usize + usize <= _ubufsize || !usize)
-				return true;						
+				return true;
 			size_type usizet = _usize + usize;
 			if (usizet > max_size())
 				return false;
@@ -336,7 +361,7 @@ namespace ec
 			if (!pt)
 				return false;
 			_pbuf = pt;
-			_ubufsize = usizet;			
+			_ubufsize = usizet;
 			return true;
 		}
 	};
