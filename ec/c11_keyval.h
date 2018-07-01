@@ -2,7 +2,7 @@
 \file c11_keyval.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.5.26
+\update 2018.7.1
 
 eclib class text key-value
 
@@ -45,7 +45,7 @@ limitations under the License.
 #endif
 namespace ec {
 	inline bool strieq(const char* s1, const char* s2)
-	{		
+	{
 		while (*s1 && *s2)
 		{
 			if (*s1 != *s2 && tolower(*s1) != tolower(*s2))
@@ -53,25 +53,27 @@ namespace ec {
 			s1++;
 			s2++;
 		}
-		return *s1 == 0 && *s2 == 0;
+		return *s1 == '\0' && *s2 == '\0';
 	}
 
-	inline void strtrim(char *s,const char* sfliter = "\x20\t\n\r")
+	inline void strtrim(char *s, const char* flt = "\x20\t\n\r")
 	{
 		if (!*s)
 			return;
 		char *sp = s, *s1 = s;
-		while (strchr(sfliter,*sp)) // trimleft
+		while (strchr(flt, *sp))
 			sp++;
 		if (sp != s) {
 			while (*sp)
 				*s1++ = *sp++;
 			*s1 = '\0';
 		}
-		while (s1 > s) //trimright
+		else
+			while (*s1++);
+		while (s1 > s)
 		{
 			s1--;
-			if (strchr(sfliter, *s1))
+			if (strchr(flt, *s1))
 				*s1 = '\0';
 			else
 				break;
@@ -81,7 +83,7 @@ namespace ec {
 	class txtkeyval
 	{
 	public:
-		txtkeyval():_r(nullptr), _size(0){
+		txtkeyval() :_r(nullptr), _size(0) {
 
 		}
 		txtkeyval(const char* s, size_t len) {
@@ -151,7 +153,7 @@ namespace ec {
 			return false;
 		}
 
-		bool get(const char* sname, char *val, size_t valbuflen,const char* strim = "\x20\t\n\r")
+		bool get(const char* sname, char *val, size_t valbuflen, const char* strim = "\x20\t\n\r")
 		{
 			if (!_r)
 				return false;
@@ -185,7 +187,7 @@ namespace ec {
 								return false;
 							if (pos > poss)
 								memcpy(val, _r + poss, pos - poss);
-							if(strim)
+							if (strim)
 								strtrim(skey, strim);
 							val[pos - poss] = 0;
 							return true;
