@@ -46,8 +46,7 @@ limitations under the License.
 namespace ec {
 	inline bool strieq(const char* s1, const char* s2)
 	{
-		while (*s1 && *s2)
-		{
+		while (*s1 && *s2) {
 			if (*s1 != *s2 && tolower(*s1) != tolower(*s2))
 				return false;
 			s1++;
@@ -70,8 +69,7 @@ namespace ec {
 		}
 		else
 			while (*s1++);
-		while (s1 > s)
-		{
+		while (s1 > s) {
 			s1--;
 			if (strchr(flt, *s1))
 				*s1 = '\0';
@@ -100,10 +98,8 @@ namespace ec {
 			if (!_r || !size)
 				return 0;
 			size_t upre = 0, u = 0;
-			while (u < _size)
-			{
-				if (_r[u] == '\n')
-				{
+			while (u < _size) {
+				if (_r[u] == '\n') {
 					_idx.add((unsigned int)upre);
 					if (_r[u + 1] == '\r')
 						u++;
@@ -118,7 +114,7 @@ namespace ec {
 		inline int countrecs() {
 			return  (int)_idx.size();
 		}
-		bool get(size_t nr, char* field, size_t fieldbuflen, char *val, size_t valbuflen)
+		bool get(size_t nr, char* field, size_t fieldbuflen, char *val, size_t valbuflen, const char* strim = "\x20\t\n\r")
 		{
 			if (nr >= _idx.size() || !_r)
 				return false;
@@ -130,18 +126,21 @@ namespace ec {
 						return false;
 					memcpy(field, _r + _idx[nr], pos - _idx[nr]);
 					field[pos - _idx[nr]] = 0;
+					if (strim)
+						strtrim(field, strim);
 					poss = pos + 1;
 				}
 				else if (_r[pos] == '\n')
 				{
-					if (poss)
-					{
+					if (poss) {
 					lpend:
 						if (valbuflen <= pos - poss)
 							return false;
 						if (pos > poss)
 							memcpy(val, _r + poss, pos - poss);
 						val[pos - poss] = 0;
+						if (strim)
+							strtrim(val, strim);
 						return true;
 					}
 					return false;
@@ -173,22 +172,23 @@ namespace ec {
 							break;
 						memcpy(skey, _r + _idx[i], pos - _idx[i]);
 						skey[pos - _idx[i]] = 0;
-						strtrim(skey);
+						if (strim)
+							strtrim(skey, strim);
 						if (!strieq(sname, skey)) // not equal
 							break;
 						poss = pos + 1;
 					}
 					else if (_r[pos] == '\n')
 					{
-						if (poss)
-						{
+						if (poss) {
 						lpend:
 							if (valbuflen <= pos - poss)
 								return false;
 							if (pos > poss)
 								memcpy(val, _r + poss, pos - poss);
+							val[pos - poss] = 0;
 							if (strim)
-								strtrim(skey, strim);
+								strtrim(val, strim);
 							val[pos - poss] = 0;
 							return true;
 						}
@@ -212,8 +212,7 @@ namespace ec {
 			for (i = 0; i < n; i++)
 			{
 				pos = _idx[i];
-				while (pos < _size)
-				{
+				while (pos < _size) {
 					if (_r[pos] == ':') {
 						if (pos == _idx[i])
 							break;
