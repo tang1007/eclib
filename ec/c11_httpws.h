@@ -61,13 +61,7 @@ namespace ec {
 				return false;
 			}
 			return base_::start(_cfg._wport, uThreads);
-		}
-		void stop()
-		{
-			base_::stop();
-			if (base_::_plog)
-				base_::_plog->add(CLOG_DEFAULT_MSG, "http server(port %u) stop success!", _cfg._wport);
-		}
+		}		
 	};
 
 	template< class _CLS>
