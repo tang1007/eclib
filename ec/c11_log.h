@@ -38,7 +38,8 @@ limitations under the License.
 #include <stdarg.h>
 #include <malloc.h>
 #include "c_time.h"
-#include "c11_keyval.h"
+#include "c_str.h"
+//#include "c11_keyval.h"
 #include "c11_array.h"
 #include "c11_config.h"
 #include "c11_mutex.h"
@@ -72,7 +73,7 @@ limitations under the License.
 #endif
 
 #define CLOG_DEFAULT_ERR  10
-#define CLOG_DEFAULT_WAN  20
+#define CLOG_DEFAULT_WRN  20
 #define CLOG_DEFAULT_MSG  30
 #define CLOG_DEFAULT_DBG  40
 
@@ -91,7 +92,7 @@ namespace ec
 
 	[level]
 	10 = err    # error
-	20 = wan    # warning
+	20 = wrn    # warning
 	30 = msg    # message
 	40 = dbg    # debug
 	*/
@@ -112,22 +113,44 @@ namespace ec
 			int _savesec;
 			char _logpath[512];
 			Array<t_i, 16> _levels;
+			void initdefault(const char* slogpath)
+			{
+				str_lcpy(_logpath, slogpath, sizeof(_logpath));
+				_outleval = 100;
+				_savesec = 5;
+				t_i t;
+				str_lcpy(t.name, "err", sizeof(t.name));
+				t.level = 10;
+				_levels.add(&t);
+
+				str_lcpy(t.name, "wrn", sizeof(t.name));
+				t.level = 20;
+				_levels.add(&t);
+
+				str_lcpy(t.name, "msg", sizeof(t.name));
+				t.level = 30;
+				_levels.add(&t);
+
+				str_lcpy(t.name, "dbg", sizeof(t.name));
+				t.level = 40;
+				_levels.add(&t);
+			}
 		protected:
 			virtual void OnBlkName(const char* sblk) {};
 			virtual void OnDoKeyVal(const char* sblk, const char* skey, const char* sval)
 			{
-				if (strieq("clog", sblk)) {
-					if (strieq("logpath", skey))
+				if (str_ieq("clog", sblk)) {
+					if (str_ieq("logpath", skey))
 						str_ncpy(_logpath, sval, sizeof(_logpath) - 1);
-					else if (strieq("outlevel", skey))
+					else if (str_ieq("outlevel", skey))
 						_outleval = atoi(sval);
-					else if (strieq("savesecond", skey)) {
+					else if (str_ieq("savesecond", skey)) {
 						_savesec = atoi(sval);
 						if (_savesec < 1)
 							_savesec = 1;
 					}
 				}
-				else if (strieq("level", sblk)) {
+				else if (str_ieq("level", sblk)) {
 					if (*skey && *sval) {
 						t_i t;
 						str_ncpy(t.name, sval, sizeof(t.name) - 1);
@@ -200,10 +223,129 @@ namespace ec
 			return _unkown;
 		}
 	public:
-		bool	open(const char* scfgfile, bool bLineStyleWin = false)
+		bool opendefault(const char* logpath, bool bLineStyleWin = false)
+		{
+			_cfg.initdefault(logpath);
+			return _open(bLineStyleWin);
+		}
+		
+		bool open(const char* scfgfile, bool bLineStyleWin = false)
 		{
 			if (!_cfg.fromfile(scfgfile))
 				return false;
+			return _open(bLineStyleWin);
+		}
+		void close()
+		{
+			SaveLog();
+			StopThread();
+		}
+
+		void	add(int level, const char * format, ...)
+		{
+			if (level > _cfg._outleval)
+				return;
+			unique_lock lock(&_cs);
+			cTime ctm(time(NULL));
+			unsigned int udate = ((unsigned int)ctm._year) << 16 | ((unsigned int)ctm._mon) << 8 | (unsigned int)ctm._day;
+			if (udate != _udate) {
+				Write2Disk();
+				_udate = udate;
+				_nFileNo = 1;
+				sprintf(_scurlogfile, "%04d%02d%02d-%04d.txt", ctm._year, ctm._mon, ctm._day, _nFileNo);
+				_lastlogtime = 0;
+			}
+			int npos = 0;
+			if (ctm.GetTime() != _lastlogtime) {
+				sprintf(_slog, "%02d:%02d:%02d [%s] ", ctm._hour, ctm._min, ctm._sec, levelstr(level));
+				npos = (int)strlen(_slog);
+				_lastlogtime = ctm.GetTime();
+			}
+			else {
+				sprintf(_slog, "\t [%s] ", levelstr(level));
+				npos = (int)strlen(_slog);				
+			}
+
+			va_list arg_ptr;
+			va_start(arg_ptr, format);
+			int nbytes = vsnprintf(&_slog[npos], MAX_LOG_SIZE - npos, format, arg_ptr);
+			va_end(arg_ptr);
+			if (nbytes <= 0 || nbytes >= MAX_LOG_SIZE)
+				return;
+			nbytes += npos;
+			if (_blinestylewin)
+				_slog[nbytes++] = '\r';
+			_slog[nbytes++] = '\n';
+			_slog[nbytes] = 0;
+
+			if ((_buf.size() + nbytes) > (RUNLOG_BUFSIZE - 1))
+				Write2Disk();
+			_buf.add(_slog, nbytes);
+		}
+
+		void		append(int level, const char * format, ...)
+		{
+			if (level > _cfg._outleval)
+				return;
+			unique_lock lock(&_cs);
+			va_list arg_ptr;
+			va_start(arg_ptr, format);
+			int nbytes = vsnprintf(_slog, MAX_LOG_SIZE, format, arg_ptr);
+
+			va_end(arg_ptr);
+
+			if (nbytes <= 0 || nbytes >= MAX_LOG_SIZE)
+				return;
+			_slog[nbytes] = 0;
+
+			cTime ctm(time(NULL));
+
+			unsigned int udate = ((unsigned int)ctm._year) << 16 | ((unsigned int)ctm._mon) << 8 | (unsigned int)ctm._day;
+			if (udate != _udate) {
+				Write2Disk();
+				_udate = udate;
+				_nFileNo = 1;
+				sprintf(_scurlogfile, "%04d%02d%02d-%04d.txt", ctm._year, ctm._mon, ctm._day, _nFileNo);
+			}
+
+			if ((_buf.size() + nbytes) > (RUNLOG_BUFSIZE - 1))
+				Write2Disk();
+			_buf.add(_slog, nbytes);
+		}
+
+		void addbin(int level, const void* pm, size_t size)
+		{
+			if (level > _cfg._outleval)
+				return;
+			size_t i,ido = 0;
+			char o[1024];
+			unsigned char ul, uh;
+			const unsigned char* s = (const unsigned char*)pm;
+			while (ido < size) {
+				for (i = 0; ido < size && i < 256; i++)
+				{
+					uh = (s[i] & 0xF0) >> 4;
+					ul = (s[i] & 0x0F);
+					if (uh < 10)
+						o[i * 3] = '0' + uh;
+					else
+						o[i * 3] = 'A' + uh - 10;
+					if (ul < 10)
+						o[i * 3 + 1] = '0' + ul;
+					else
+						o[i * 3 + 1] = 'A' + ul - 10;
+					o[i * 3 + 2] = '\x20';
+					ido++;
+				}
+				o[i * 3] = '\0';
+				append(level,"%s", o);
+			}
+		}
+	protected:		
+		bool _open( bool bLineStyleWin = false)
+		{
+//			if (!_cfg.fromfile(scfgfile))
+	//			return false;
 			_blinestylewin = bLineStyleWin;
 			if (!_cfg._logpath[0])
 				return false;
@@ -318,114 +460,6 @@ namespace ec
 			StartThread(NULL);
 			return true;
 		}
-
-		void close()
-		{
-			SaveLog();
-			StopThread();
-		}
-
-		void	add(int level, const char * format, ...)
-		{
-			if (level > _cfg._outleval)
-				return;
-			unique_lock lock(&_cs);
-			cTime ctm(time(NULL));
-			unsigned int udate = ((unsigned int)ctm._year) << 16 | ((unsigned int)ctm._mon) << 8 | (unsigned int)ctm._day;
-			if (udate != _udate) {
-				Write2Disk();
-				_udate = udate;
-				_nFileNo = 1;
-				sprintf(_scurlogfile, "%04d%02d%02d-%04d.txt", ctm._year, ctm._mon, ctm._day, _nFileNo);
-				_lastlogtime = 0;
-			}
-			int npos = 0;
-			if (ctm.GetTime() != _lastlogtime) {
-				sprintf(_slog, "%02d:%02d:%02d [%s] ", ctm._hour, ctm._min, ctm._sec, levelstr(level));
-				npos = (int)strlen(_slog);
-				_lastlogtime = ctm.GetTime();
-			}
-			else {
-				sprintf(_slog, "\t [%s] ", levelstr(level));
-				npos = (int)strlen(_slog);				
-			}
-
-			va_list arg_ptr;
-			va_start(arg_ptr, format);
-			int nbytes = vsnprintf(&_slog[npos], MAX_LOG_SIZE - npos, format, arg_ptr);
-			va_end(arg_ptr);
-			if (nbytes <= 0 || nbytes >= MAX_LOG_SIZE)
-				return;
-			nbytes += npos;
-			if (_blinestylewin)
-				_slog[nbytes++] = '\r';
-			_slog[nbytes++] = '\n';
-			_slog[nbytes] = 0;
-
-			if ((_buf.size() + nbytes) > (RUNLOG_BUFSIZE - 1))
-				Write2Disk();
-			_buf.add(_slog, nbytes);
-		}
-
-		void		append(int level, const char * format, ...)
-		{
-			if (level > _cfg._outleval)
-				return;
-			unique_lock lock(&_cs);
-			va_list arg_ptr;
-			va_start(arg_ptr, format);
-			int nbytes = vsnprintf(_slog, MAX_LOG_SIZE, format, arg_ptr);
-
-			va_end(arg_ptr);
-
-			if (nbytes <= 0 || nbytes >= MAX_LOG_SIZE)
-				return;
-			_slog[nbytes] = 0;
-
-			cTime ctm(time(NULL));
-
-			unsigned int udate = ((unsigned int)ctm._year) << 16 | ((unsigned int)ctm._mon) << 8 | (unsigned int)ctm._day;
-			if (udate != _udate) {
-				Write2Disk();
-				_udate = udate;
-				_nFileNo = 1;
-				sprintf(_scurlogfile, "%04d%02d%02d-%04d.txt", ctm._year, ctm._mon, ctm._day, _nFileNo);
-			}
-
-			if ((_buf.size() + nbytes) > (RUNLOG_BUFSIZE - 1))
-				Write2Disk();
-			_buf.add(_slog, nbytes);
-		}
-
-		void addbin(int level, const void* pm, size_t size)
-		{
-			if (level > _cfg._outleval)
-				return;
-			size_t i,ido = 0;
-			char o[1024];
-			unsigned char ul, uh;
-			const unsigned char* s = (const unsigned char*)pm;
-			while (ido < size) {
-				for (i = 0; ido < size && i < 256; i++)
-				{
-					uh = (s[i] & 0xF0) >> 4;
-					ul = (s[i] & 0x0F);
-					if (uh < 10)
-						o[i * 3] = '0' + uh;
-					else
-						o[i * 3] = 'A' + uh - 10;
-					if (ul < 10)
-						o[i * 3 + 1] = '0' + ul;
-					else
-						o[i * 3 + 1] = 'A' + ul - 10;
-					o[i * 3 + 2] = '\x20';
-					ido++;
-				}
-				o[i * 3] = '\0';
-				append(level,"%s", o);
-			}
-		}
-	protected:		
 		bool	Write2Disk() 
 		{
 			if (!_buf.size())
