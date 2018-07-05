@@ -172,13 +172,19 @@ namespace ec {
 	public:
 		typedef AioTcpClient<AioTlsClient<_CLS>> base_;
 		friend  base_;
-		AioTlsClient(cLog* plog, memory* _pmem) : base_(_pmem), _plog(plog), _tls(0, _pmem, plog)
+		AioTlsClient(cLog* plog, memory* _pmem) : base_(_pmem), _plog(plog), _tls(0, _pmem, plog), _nstatus(TLS_SESSION_NONE)
 		{
+		}
+		inline bool SetServerPubkey(int len, const unsigned char *pubkey)
+		{
+			return _tls.SetServerPubkey(len, pubkey);			
 		}
 		bool start(const char* ip, uint16_t port, const char* srvcafile)
 		{
-			if (!_tls.SetServerCa(srvcafile))
-				return false;
+			if (srvcafile) {
+				if (!_tls.SetServerCa(srvcafile))
+					return false;
+			}
 			return base_::open(ip, port);
 		}
 		inline void stop() {
@@ -192,6 +198,9 @@ namespace ec {
 				return false;
 			return base_::tcp_post(&pkg);// zero copy
 		}	
+		inline int status() {
+			return _nstatus;
+		}
 	protected:
 		void  onrecv(const void* pdata, size_t bytesize) {
 			vector<uint8_t> pkg(1024 * 32, base_::_pmem);
@@ -203,6 +212,7 @@ namespace ec {
 			else if (TLS_SESSION_HKOK == nst) {
 				if (pkg.size())
 					base_::tcp_post(pkg.data(), pkg.size());
+				_nstatus = TLS_SESSION_HKOK;
 				static_cast<_CLS*>(this)->onhandshake();
 			}
 			else if (TLS_SESSION_APPDATA == nst) {
@@ -216,6 +226,7 @@ namespace ec {
 			base_::tcp_post(pkg.data(), pkg.size());
 		}
 		inline void ondisconnect() {
+			_nstatus = TLS_SESSION_NONE;
 			static_cast<_CLS*>(this)->ondisconnect();
 		}
 	protected:
