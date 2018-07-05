@@ -150,6 +150,7 @@ namespace ec {
 			}
 			return false;
 		}
+
 		bool erase(size_type pos) noexcept
 		{
 			if (pos >= _size)
@@ -160,7 +161,20 @@ namespace ec {
 			}
 			_size--;
 			return true;
-		}					
+		}
+
+		void erase(size_type pos, size_type size) noexcept
+		{
+			if ( pos >= _size)
+				return;
+			if (pos + size >= _size)
+				_size = pos;
+			else {
+				memmove(&_data[pos], &_data[pos + size], (_size - (pos + size)) * sizeof(value_type));
+				_size -= size;
+			}
+		}
+
 		value_type* find(std::function <bool(value_type& val)> fun) {
 			for (size_type i = 0; i < _size; i++) {
 				if (fun(_data[i]))
