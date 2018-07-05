@@ -67,6 +67,7 @@ namespace tls
 #include "c_stream.h"
 #include "c11_array.h"
 #include "c11_vector.h"
+#include "c11_map.h"
 
 #include "openssl/rand.h"
 #include "openssl/x509.h"
