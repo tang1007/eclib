@@ -581,11 +581,7 @@ namespace ec
 					delete pt;
 				});//stop all workers
 				_workers.clear();
-
-				_fd_listen = INVALID_SOCKET;
-				if (_plog) {
-					_plog->add(CLOG_DEFAULT_MSG, "TCP server port %d  close success", _wport);
-				}
+				_fd_listen = INVALID_SOCKET;				
 			}
 		}
 	private:
@@ -628,10 +624,7 @@ namespace ec
 					_plog->add(CLOG_DEFAULT_ERR, "TCP port %d  listen failed with error %d", wport, errno);
 				fprintf(stderr, "ERR: TCP port %d  listen failed with error %d\n", wport, errno);
 				return INVALID_SOCKET;
-			}
-			if (_plog) {
-				_plog->add(CLOG_DEFAULT_MSG, "TCP server port %d listen success", wport);
-			}
+			}			
 			return sl;
 		}
 
