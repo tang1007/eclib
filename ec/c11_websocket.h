@@ -156,12 +156,13 @@ namespace ec
 
 	inline bool ws_make_permsg(const void* pdata, size_t sizes, unsigned char wsopt, vector<uint8_t>* pout, int ncompress) //multi-frame,permessage_deflate
 	{
+		unsigned char uc;
 		const char* pds = (const char*)pdata;
 		size_t slen = sizes;
 		vector<char> tmp(2048 + sizes - sizes % 1024, pout->get_mem_allocator());
-		unsigned char uc;
 		if (ncompress)
 		{
+			tmp.set_grow(2048 + sizes / 2 - sizes % 1024);
 			if (Z_OK != ws_encode_zlib(pdata, sizes, &tmp) || tmp.size() < 6)
 				return false;
 			pds = tmp.data() + 2;
@@ -1119,7 +1120,7 @@ namespace ec
 				httpreterr(ucid, http_sret404);
 				return pPkg->HasKeepAlive();
 			}
-			vector<char>	filetmp(1024 * 64, _pmem);
+			vector<char>	filetmp(1024 * 4, _pmem);
 			if (!IO::LckRead(sfile, &filetmp)) {
 				httpreterr(ucid, http_sret404);
 				return pPkg->HasKeepAlive();
@@ -1161,7 +1162,7 @@ namespace ec
 				}
 			}
 
-			vector<char> encodetmp(1024 * 64, _pmem);
+			vector<char> encodetmp(filetmp.size() / 2, _pmem);
 			if (HTTPENCODE_DEFLATE == necnode) {
 				if (Z_OK != ec::ws_encode_zlib(filetmp.data(), filetmp.size(), &encodetmp))
 					return false;
@@ -1233,11 +1234,18 @@ namespace ec
 		{
 			bool bsend;
 			int ncomp = _pclis->GetCompress(ucid);
-			vector<uint8_t> vret(1024 * 64, cWebsocket::_pmem);
-			if (ncomp == ws_x_webkit_deflate_frame) //deflate-frame压缩
+			vector<uint8_t> vret(2048 + size - size % 1024, cWebsocket::_pmem);
+			if (ncomp == ws_x_webkit_deflate_frame) //deflate-frame
+			{				
+				vret.set_grow(2048 + size / 2 - size % 1024);
 				bsend = ws_make_perfrm(pdata, size, wsopt, &vret);
-			else
-				bsend = ws_make_permsg(pdata, size, wsopt, &vret, size > 256 && ncomp);
+			}
+			else // ws_permessage_deflate
+			{
+				if(size > 128 && ncomp)
+					vret.set_grow(2048 + size / 2 - size % 1024);
+				bsend = ws_make_permsg(pdata, size, wsopt, &vret, size > 128 && ncomp);
+			}
 			if (!bsend) {
 				if (cWebsocket::_plog)
 					cWebsocket::_plog->add(CLOG_DEFAULT_ERR, "send ucid %u make wsframe failed,size %u", ucid, (unsigned int)size);
