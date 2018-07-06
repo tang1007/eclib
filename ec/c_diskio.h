@@ -151,6 +151,22 @@ namespace ec
             return true;
         }
 
+		static size_t filesize(const char* wsfile)
+		{
+			struct __stat64 statbuf;
+			if (!_stat64(wsfile, &statbuf))
+				return (size_t)statbuf.st_size;
+			return 0;
+		}
+
+		static size_t filesize(const wchar_t* wsfile)
+		{
+			struct __stat64 statbuf;
+			if(!_wstat64(wsfile, &statbuf))
+				return (size_t)statbuf.st_size;
+			return 0;
+		}
+
         /*!
         \brief lock read whole file for windows
         */
@@ -164,6 +180,13 @@ namespace ec
             if (hFile == INVALID_HANDLE_VALUE)
                 return false;
 
+			size_t size = filesize(sfile);
+			if (!size) {
+				CloseHandle(hFile);
+				pout->clear();
+				return false;
+			}
+
             OVERLAPPED	 op;//!<
             memset(&op, 0, sizeof(op));
             op.Offset = 0;
@@ -174,8 +197,9 @@ namespace ec
                 return false;
             }
 
-            pout->ClearData();
-            char tmp[16384];
+            pout->clear();
+			pout->set_grow(size);
+            char tmp[1024 * 32];
             DWORD dwr = 0;
             do
             {
@@ -200,7 +224,14 @@ namespace ec
 			if (hFile == INVALID_HANDLE_VALUE)
 				return false;
 
-			OVERLAPPED	 op;//!<
+			size_t size = filesize(sfile);
+			if (!size) {
+				CloseHandle(hFile);
+				pout->clear();
+				return false;
+			}
+
+			OVERLAPPED	 op;
 			memset(&op, 0, sizeof(op));
 			op.Offset = 0;
 			op.OffsetHigh = 0;
@@ -209,9 +240,9 @@ namespace ec
 				CloseHandle(hFile);
 				return false;
 			}
-
 			pout->clear();
-			char tmp[16384];
+			pout->set_grow(size);
+			char tmp[1024 * 32];
 			DWORD dwr = 0;
 			do
 			{
@@ -331,6 +362,15 @@ namespace ec
 
         }
     public:
+
+		static size_t filesize(const char* utf8file)
+		{
+			struct stat statbuf;
+			if(!::stat(utf8file, &statbuf))
+				return (size_t)statbuf.st_size;
+			return 0;
+		}
+
         /*!
         \brief lock read whole file for linux
 
@@ -353,8 +393,15 @@ namespace ec
             int nfd = ::open(utf8file, O_RDONLY, S_IROTH | S_IRUSR | S_IRGRP);
             if (nfd == -1)
                 return false;
-            pout->ClearData();
-            char tmp[16384];
+			size_t size = filesize(utf8file);
+			if (!size) {
+				::close(nfd);
+				pout->clear();
+				return false;
+			}
+            pout->clear();
+			pout->set_grow(size);
+            char tmp[1024 * 32];
             ssize_t nr;
             if (!Lock(nfd, 0, 0, false))
             {
@@ -378,8 +425,15 @@ namespace ec
 			int nfd = ::open(utf8file, O_RDONLY, S_IROTH | S_IRUSR | S_IRGRP);
 			if (nfd == -1)
 				return false;
+			size_t size = filesize(utf8file);
+			if (!size) {
+				::close(nfd);
+				pout->clear();
+				return false;
+			}
 			pout->clear();
-			char tmp[16384];
+			pout->set_grow(size);
+			char tmp[1024 * 32];
 			ssize_t nr;
 			if (!Lock(nfd, 0, 0, false))
 			{
