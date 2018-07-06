@@ -600,7 +600,7 @@ namespace ec
 					if (_pkgtcp[1] != TLSVER_MAJOR)
 					{
 						if (_plog)
-							_plog->add(CLOG_DEFAULT_MSG, "ucid %u not support TLS ver %d.%d", _ucid, _pkgtcp[1], _pkgtcp[2]);
+							_plog->add(CLOG_DEFAULT_DBG, "ucid %u not support TLS ver %d.%d", _ucid, _pkgtcp[1], _pkgtcp[2]);
 						Alert(2, 70, pout);//protocol_version(70)
 					}
 					return TLS_SESSION_ERR;
@@ -612,7 +612,7 @@ namespace ec
 					if (!decrypt_record(p, ulen + 5, tmp, &ndl))
 					{
 						if (_plog)
-							_plog->add(CLOG_DEFAULT_MSG, "ucid %u Alert decode_error(50)	", _ucid);
+							_plog->add(CLOG_DEFAULT_DBG, "ucid %u Alert decode_error(50)	", _ucid);
 						Alert(2, 50, pout);//decode_error(50)						
 						return TLS_SESSION_ERR;
 					}
@@ -916,11 +916,11 @@ namespace ec
 					break;
 				case tls::hsk_server_key_exchange:
 					if (_plog)
-						_plog->add(CLOG_DEFAULT_MSG, "hsk_server_key_exchange size=%u", ulen + 4);
+						_plog->add(CLOG_DEFAULT_DBG, "hsk_server_key_exchange size=%u", ulen + 4);
 					break;
 				case tls::hsk_certificate_request:
 					if (_plog)
-						_plog->add(CLOG_DEFAULT_MSG, "hsk_certificate_request size=%u", ulen + 4);
+						_plog->add(CLOG_DEFAULT_DBG, "hsk_certificate_request size=%u", ulen + 4);
 					break;
 				case tls::hsk_server_hello_done:
 					if (!OnServerHelloDone(p, ulen + 4, pout))
@@ -928,11 +928,11 @@ namespace ec
 					break;
 				case tls::hsk_finished:
 					if (_plog)
-						_plog->add(CLOG_DEFAULT_MSG, "hsk_finished size=%u", ulen + 4);
+						_plog->add(CLOG_DEFAULT_DBG, "hsk_finished size=%u", ulen + 4);
 					if (!OnServerFinished(p, ulen + 4, pout))
 						return TLS_SESSION_ERR;
 					if (_plog)
-						_plog->add(CLOG_DEFAULT_MSG, "server hsk_finished chech success");
+						_plog->add(CLOG_DEFAULT_DBG, "server hsk_finished chech success");
 					_bsrvfinished = true;
 					nret = TLS_SESSION_HKOK;
 					break;
@@ -1078,7 +1078,7 @@ namespace ec
 			}
 			if (puc[4] != TLSVER_MAJOR || puc[5] < TLSVER_NINOR) {
 				if (_plog)
-					_plog->add(CLOG_DEFAULT_ERR, "client Hello Ver %d.%d", puc[4], puc[5]);
+					_plog->add(CLOG_DEFAULT_DBG, "client Hello Ver %d.%d", puc[4], puc[5]);
 				Alert(2, 70, po);//protocol_version(70),
 				return false;
 			}
@@ -1100,7 +1100,7 @@ namespace ec
 			for (i = 0; i < cipherlen; i += 2)
 			{
 				if (_plog)
-					_plog->add(CLOG_DEFAULT_MSG, "cipher %02X,%02X", pch[i], pch[i + 1]);
+					_plog->add(CLOG_DEFAULT_DBG, "cipher %02X,%02X", pch[i], pch[i + 1]);
 
 				if (pch[i] == 0 && (pch[i + 1] == TLS_RSA_WITH_AES_128_CBC_SHA256 || pch[i + 1] == TLS_RSA_WITH_AES_256_CBC_SHA256
 					|| pch[i + 1] == TLS_RSA_WITH_AES_128_CBC_SHA || pch[i + 1] == TLS_RSA_WITH_AES_256_CBC_SHA)
@@ -1114,7 +1114,7 @@ namespace ec
 				return false;
 			}
 			if (_plog)
-				_plog->add(CLOG_DEFAULT_MSG, "srv:cipher = %02x,%02x", (_cipher_suite >> 8) & 0xFF, _cipher_suite & 0xFF);
+				_plog->add(CLOG_DEFAULT_DBG, "srv:cipher = %02x,%02x", (_cipher_suite >> 8) & 0xFF, _cipher_suite & 0xFF);
 
 			MakeServerHello();
 			MakeCertificateMsg();
@@ -1222,7 +1222,7 @@ namespace ec
 			_cli_finished.clear();
 			_cli_finished.add(pmsg, sizemsg);
 			if (_plog)
-				_plog->add(CLOG_DEFAULT_DBG, "rec_change_cipher_spec success!\n");
+				_plog->add(CLOG_DEFAULT_DBG, "rec_change_cipher_spec success!");
 			if (!mkr_ServerFinished(po))
 				return false;
 			if (_plog)
@@ -1289,7 +1289,7 @@ namespace ec
 					break;
 				case tls::hsk_finished:
 					if (_plog)
-						_plog->add(CLOG_DEFAULT_DBG, "srvtls ucid %u read hsk_finished size=%u\n", _ucid, ulen + 4);
+						_plog->add(CLOG_DEFAULT_DBG, "srvtls ucid %u read hsk_finished size=%u", _ucid, ulen + 4);
 					if (!OnClientFinish(p, ulen + 4, po)) {
 						if (_plog)
 							_plog->add(CLOG_DEFAULT_ERR, "srvtls ucid %u client hsk_finished failed", _ucid);
