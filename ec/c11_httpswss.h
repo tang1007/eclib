@@ -61,13 +61,7 @@ namespace ec {
 				return false;
 			}
 			return base_::start(_cfg._ca_server, _cfg._ca_root, _cfg._private_key, _cfg._wport_wss, uThreads, sip);
-		}
-		void stop()
-		{
-			base_::stop();
-			if (base_::_plog)
-				base_::_plog->add(CLOG_DEFAULT_MSG, "https server(port %u) stop success!", _cfg._wport_wss);
-		}
+		}		
 	};
 
 	template< class _CLS>
