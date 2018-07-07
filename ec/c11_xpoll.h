@@ -677,6 +677,7 @@ namespace ec {
 #endif
 			if (n <= 0)
 				return;
+			int nevtout = 0;
 			pollfd* p = _pollfd.data();
 			uint32_t* puid = _pollkey.data();
 			for (i = 0; i < _pollfd.size(); i++) {
@@ -691,18 +692,21 @@ namespace ec {
 					do_delete(puid[i], XPOLL_EVT_ST_ERR);
 					continue;
 				}
+				nevtout = 0;
 				if (get_send(puid[i], &ts)) { //send first		
 					if (!ts.usize)
 						do_delete(puid[i], XPOLL_EVT_ST_CLOSE);// zero size msg will disconenct
 					else {
 						if (sendts(&ts) > 0) // not send complete 
-							p[i].events = POLLIN | POLLOUT;
-						else // send complete 
-							p[i].events = POLLIN;
+							nevtout = 1;							
 					}
 				}
 				if (p[i].revents & POLLIN)  //read
 					do_read(puid[i], p[i].fd);
+				if(nevtout)
+					p[i].events = POLLIN | POLLOUT;
+				else
+					p[i].events = POLLIN;
 				p[i].revents = 0;
 			}
 		};
