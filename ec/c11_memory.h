@@ -45,7 +45,7 @@ namespace ec {
 			if (_sz_s % 8)
 				_sz_s += sblksize - sblksize % 8;
 			_blk_s = sblknum;
-			_ps = malloc(_sz_s * sblknum);
+			_ps = ::malloc(_sz_s * sblknum);
 			if (_ps){
 				uint8_t *p = (uint8_t *)_ps;
 				for (i = 0; i < sblknum; i++)
@@ -72,11 +72,11 @@ namespace ec {
 			_stkm.clear();
 			_stkl.clear();
 			if (_ps)
-				free(_ps);
+				::free(_ps);
 			if (_pm)
-				free(_pm);
+				::free(_pm);
 			if (_pl)
-				free(_pl);
+				::free(_pl);
 		}
 		void *mem_malloc(size_t size)
 		{
@@ -98,7 +98,7 @@ namespace ec {
 				if (_stkl.pop(pr))
 					return pr;
 			}
-			return malloc(size);
+			return ::malloc(size);
 		}
 		void mem_free(void *pmem)
 		{
@@ -115,6 +115,39 @@ namespace ec {
 			else
 				free(pmem);
 		}
+
+		void *malloc(size_t size,size_t &outsize)
+		{
+			unique_lock lck(_pmutex);
+			void* pr = nullptr;
+			if (size <= _sz_s) {
+				if (_stks.pop(pr)) {
+					outsize = _sz_s;
+					return pr;
+				}
+			}
+			else if (size <= _sz_m) {
+				if (!_pm)
+					malloc_block(_sz_m, _blk_m, _pm, _stkm);
+				if (_stkm.pop(pr)) {
+					outsize = _sz_m;
+					return pr;
+				}
+			}
+			else if (size <= _sz_l) {
+				if (!_pl)
+					malloc_block(_sz_l, _blk_l, _pl, _stkl);
+				if (_stkl.pop(pr)) {
+					outsize = _sz_l;
+					return pr;
+				}
+			}
+			outsize = size;
+			pr = ::malloc(size);
+			if (!pr)
+				outsize = 0;
+			return pr;
+		}
 	private:		
 		void *_ps, *_pm, *_pl;
 		std::mutex* _pmutex;
@@ -129,13 +162,62 @@ namespace ec {
 			if (!blknum || !blksize)
 				return false;
 			size_t i;
-			ph = malloc(blksize * blknum);
+			ph = ::malloc(blksize * blknum);
 			if (ph)	{
 				uint8_t *p = (uint8_t *)ph;
 				for (i = 0; i < blknum; i++)
 					stk.add(p + (blknum - 1 - i) * blksize);
 			}
 			return ph != nullptr;
+		}
+	};
+
+	class auto_buffer
+	{
+	public:
+		auto_buffer(memory* pmem = nullptr):_pmem(pmem), _pbuf(0), _size(0), _sizebuf(0){
+		}
+		~auto_buffer() {
+			clear();
+		}
+	private:
+		memory* _pmem;
+		void*   _pbuf;
+		size_t  _size;
+		size_t  _sizebuf;
+	public:
+		inline void *data() {
+			return _pbuf;
+		}
+		inline size_t size() {
+			return _size;
+		}
+		inline void clear() {
+			if (_pbuf) {
+				if (_pmem)
+					_pmem->mem_free(_pbuf);
+				else
+					::free(_pbuf);
+				_pbuf = nullptr;
+				_size = 0;
+				_sizebuf = 0;
+			}
+		}
+		inline void* resize(size_t rsz) {
+			_size = rsz;
+			if (_size > _sizebuf){				
+				clear();
+				if (_pmem)
+					_pbuf = _pmem->malloc(rsz, _sizebuf);
+				else
+					_pbuf = ::malloc(_size);
+				if (!_pbuf) {
+					_pbuf = nullptr;
+					_size = 0;
+					_sizebuf = 0;
+				}
+			}
+			return _pbuf;
 		}
 	};
 }
