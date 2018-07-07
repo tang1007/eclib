@@ -198,5 +198,10 @@ namespace ec {
 		{
 			std::sort(begin(), end(), cmp);
 		}
+		void setsize(size_t size)
+		{
+			if (size <= _bufsize)
+				_size = size;
+		}
 	};
 }
