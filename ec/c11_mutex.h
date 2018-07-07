@@ -23,7 +23,7 @@ limitations under the License.
 */
 #pragma once
 
-#include "c11_event.h"
+#include <mutex>
 namespace ec {
 	class unique_lock {
 	private:
