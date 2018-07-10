@@ -93,9 +93,10 @@ namespace ec
 		size_type	_ugrown;
 	private:
 		ec::memory *_pmem;
-		inline void *mem_malloc(size_t size) {
+		inline void *mem_malloc(size_t size, size_t sizeout) {
 			if (_pmem)
-				return _pmem->mem_malloc(size);
+				return _pmem->malloc(size, sizeout);
+			sizeout = size;
 			return malloc(size);
 		}
 		inline void mem_free(void* p) {
@@ -104,9 +105,9 @@ namespace ec
 			else
 				free(p);
 		}
-		inline void* mem_realloc(size_t size) {
+		inline void* mem_realloc(size_t size, size_t sizeout) {
 			if (_pmem) {
-				void *pnew = _pmem->mem_malloc(size);
+				void *pnew = _pmem->malloc(size, sizeout);
 				if (!pnew)
 					return nullptr;
 				if (_pbuf) {
@@ -114,8 +115,10 @@ namespace ec
 						memcpy(pnew, _pbuf, ((_usize < size) ? _usize : size) * sizeof(value_type));
 					_pmem->mem_free(_pbuf);
 				}
+				sizeout = size;
 				return pnew;
 			}
+			sizeout = size;
 			return realloc(_pbuf, size);
 		}
 	public:
@@ -317,20 +320,22 @@ namespace ec
 			}
 			if (_usize >= size)
 				return;
-			value_type* pnew = (value_type*)mem_malloc(size * sizeof(value_type));
+			size_t sizeout = 0;
+			value_type* pnew = (value_type*)mem_malloc(size * sizeof(value_type), sizeout);
 			if (!pnew)
 				return;
 			if (_usize)
 				memcpy(pnew, _pbuf, _usize * sizeof(value_type));
 			mem_free(_pbuf);
 			_pbuf = pnew;
-			_ubufsize = size;
+			_ubufsize = sizeout / sizeof(value_type);
 		}
 		bool expand(size_type size) noexcept
 		{
 			if (_ubufsize >= size)
 				return true;
-			value_type* pnew = (value_type*)mem_malloc(size * sizeof(value_type));
+			size_t sizeout = 0;
+			value_type* pnew = (value_type*)mem_malloc(size * sizeof(value_type), sizeout);
 			if (!pnew)
 				return false;
 			if (_pbuf)
@@ -340,7 +345,7 @@ namespace ec
 				mem_free(_pbuf);
 			}
 			_pbuf = pnew;
-			_ubufsize = size;
+			_ubufsize = sizeout / sizeof(value_type);
 			return true;
 		}
 		void* detach_buf() {
@@ -359,11 +364,12 @@ namespace ec
 			if (usizet > max_size())
 				return false;
 			usizet += _ugrown - (usizet % _ugrown);
-			value_type	*pt = (value_type*)mem_realloc(usizet * sizeof(value_type));
+			size_t sizeout = 0;
+			value_type	*pt = (value_type*)mem_realloc(usizet * sizeof(value_type), sizeout);
 			if (!pt)
 				return false;
-			_pbuf = pt;
-			_ubufsize = usizet;
+			_pbuf = pt;			
+			_ubufsize = sizeout / sizeof(value_type);
 			return true;
 		}
 	};
