@@ -209,8 +209,10 @@ namespace ec {
 				clear();
 				if (_pmem)
 					_pbuf = _pmem->malloc(rsz, _sizebuf);
-				else
+				else {
 					_pbuf = ::malloc(_size);
+					_sizebuf = _size;
+				}
 				if (!_pbuf) {
 					_pbuf = nullptr;
 					_size = 0;
