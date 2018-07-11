@@ -113,6 +113,12 @@ namespace ec
 			}
 			return *this;
 		}
+		void tostring(char* sout, size_t sizeout,bool hastime = true) {
+			if (hastime)
+				snprintf(sout, sizeout, "%d/%d/%d %d:%d:%d", _year, _mon, _day, _hour, _min, _sec);
+			else
+				snprintf(sout, sizeout, "%d/%d/%d", _year, _mon, _day);
+		}
 	protected:
 		time_t _gmt; // GMT time
 	public:
