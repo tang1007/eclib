@@ -119,6 +119,11 @@ namespace ec
 			else
 				snprintf(sout, sizeout, "%d/%d/%d", _year, _mon, _day);
 		}
+		int weekday() { // 1=monday,..., 7=sunday, 0:error
+			if (!_gmt)
+				return 0;
+			return ((_gmt / 86400) % 7 + 3) % 7 + 1;// 1970/1/1 is Thursday
+		}
 	protected:
 		time_t _gmt; // GMT time
 	public:
@@ -234,6 +239,11 @@ namespace ec
 				return false;
 			memcpy(st, s, len);
 			return parse(st);
+		}
+		int weekday() { // 1=monday,..., 7=sunday, 0:error
+			if (!_gmt)
+				return 0;
+			return ((_gmt / 86400) % 7 + 3) % 7 + 1; // 1970/1/1 is Thursday
 		}
 	};
 
