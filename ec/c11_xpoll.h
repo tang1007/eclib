@@ -38,6 +38,16 @@ limitations under the License.
 #	include <Winsock2.h>
 #	include <mstcpip.h>
 #	include <ws2tcpip.h>
+
+#	if(_WIN32_WINNT < 0x0600)
+typedef struct pollfd {
+
+	SOCKET  fd;
+	SHORT   events;
+	SHORT   revents;
+
+} WSAPOLLFD;
+#	endif
 #	define  pollfd WSAPOLLFD
 #else
 #	include <sys/socket.h>
@@ -188,7 +198,7 @@ namespace ec {
 		uint8_t  res[2];//res,set 0
 		void*    pdata; //if ucopt==read,pdata is xpoll buffer,else is user buffer
 	};
-
+#if (!defined _WIN32) || (_WIN32_WINNT >= 0x0600)
 	template<>
 	struct key_equal<uint32_t, t_xpoll_item>
 	{
@@ -698,12 +708,12 @@ namespace ec {
 						do_delete(puid[i], XPOLL_EVT_ST_CLOSE);// zero size msg will disconenct
 					else {
 						if (sendts(&ts) > 0) // not send complete 
-							nevtout = 1;							
+							nevtout = 1;
 					}
 				}
 				if (p[i].revents & POLLIN)  //read
 					do_read(puid[i], p[i].fd);
-				if(nevtout)
+				if (nevtout)
 					p[i].events = POLLIN | POLLOUT;
 				else
 					p[i].events = POLLIN;
@@ -711,4 +721,5 @@ namespace ec {
 			}
 		};
 	};
+#endif
 }
