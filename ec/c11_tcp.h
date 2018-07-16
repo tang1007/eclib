@@ -33,13 +33,14 @@ limitations under the License.
 #include "c11_log.h"
 #include "c11_netio.h"
 #include "c11_xpoll.h"
+
 namespace ec
 {
 	template<class _CLS>
-	class AioTcpClient : public cThread // Asynchronous auto reconnect TCP client
+	class AioTcpClient : public cThread // Asynchronous auto reconnect TCP client, for compatible with windows XP, use the select model
 	{
 	public:
-		AioTcpClient(memory* pmem) : _pmem(pmem), _cpevt(128, &_cpevtlock), _fd(INVALID_SOCKET), _bconnect(false), _fdchanged(false)
+		AioTcpClient(memory* pmem) : _pmem(pmem), _cpevt(128, &_cpevtlock), _fd(INVALID_SOCKET), _bconnect(false)
 		{
 			memset(_sip, 0, sizeof(_sip));
 			_port = 0;
@@ -143,8 +144,8 @@ namespace ec
 		char _sip[32];
 		uint16_t _port;
 		SOCKET _fd;
-		pollfd _pollfd[2];
-		std::atomic_bool _bconnect, _fdchanged;
+
+		std::atomic_bool _bconnect;
 		t_xpoll_item _xitem;
 		uint32_t _ucid;
 		std::mutex _slock;//lock for socket
@@ -203,13 +204,13 @@ namespace ec
 				add_event(_ucid, XPOLL_EVT_OPT_SEND, status, t.pkg[t.uhead].pd, 0);
 				_udpevt.set_event();
 				t.uhead = (t.uhead + 1) % XPOLL_SEND_PKG_NUM;
-			}
-			_fdchanged = true;
+			}		
 		}
 	protected:
 		virtual	void dojob()
 		{
 			doevent();
+
 			if (!_bconnect) {
 				SOCKET s = netio_tcpconnect(_sip, _port, 6, true);
 				if (INVALID_SOCKET == s)
@@ -220,54 +221,51 @@ namespace ec
 					_ucid++;
 				memset(&_xitem, 0, sizeof(_xitem));// reset xpollitem
 				_xitem.fd = _fd;
-				_bconnect = true;
-				_fdchanged = true;
+				_bconnect = true;			
 				static_cast<_CLS*>(this)->onconnect();
-			}
-			if (_fdchanged) {
-				_pollfd[0].fd = _udpevt.getfd();
-				_pollfd[0].events = POLLIN;
-				_pollfd[0].revents = 0;
+			}			
 
-				_pollfd[1].fd = _fd;
-				_pollfd[1].events = POLLIN | POLLOUT;
-				_pollfd[1].revents = 0;
+			TIMEVAL tv01 = { 0, 100 * 1000 }; // 100 ms
+			fd_set fdr, fdw, fde;
+			FD_ZERO(&fdr);
+			FD_ZERO(&fde);
+			FD_ZERO(&fdw);
 
-				_fdchanged = false;
-			}
+			FD_SET(_udpevt.getfd(), &fdr);
+			FD_SET(_fd, &fdr);
+			if(!isempty())
+				FD_SET(_fd, &fdw);
+			FD_SET(_fd, &fde);
+
 #ifdef _WIN32
-			int n = WSAPoll(_pollfd, (ULONG)2, 200);
+			int nret = ::select(0, &fdr, &fdw, &fde, &tv01);
 #else
-			int n = poll(_pollfd, 2, 200);
+			int nfdmax = _fd;
+			if (nfdmax < _udpevt.getfd())
+				nfdmax = _udpevt.getfd();
+			int nret = ::select(nfdmax + 1, &fdr, &fdw,  &fde, &tv01);
 #endif
-			if (n <= 0)
+			if (nret <= 0)
 				return;
-			t_xpoll_send ts;
-			for (auto i = 0; i < 2; i++) {
-				if (i == 0) { //udpevt
-					if (_pollfd[i].revents & POLLIN) {
-						_udpevt.reset_event();
-						_pollfd[i].revents = 0;
-					}
-					continue;
-				}
-				if (_pollfd[i].revents & (POLLERR | POLLHUP | POLLNVAL)) { // error,
-					_disconnect(XPOLL_EVT_ST_ERR);
-					continue;
-				}
-				if (get_send(&ts)) { //send first					
-					if (sendts(&ts) > 0) // not send complete 
-						_pollfd[i].events = POLLIN | POLLOUT;
-					else // send complete 
-						_pollfd[i].events = POLLIN;
-				}
-				if (_pollfd[i].revents & POLLIN)  //read
-					do_read(_fd);
-				_pollfd[i].revents = 0;
+
+			if (FD_ISSET(_udpevt.getfd(), &fdr))			
+				_udpevt.reset_event();
+
+			if (FD_ISSET(_fd, &fde)) {
+				_disconnect(XPOLL_EVT_ST_ERR);
+				return;
 			}
-			doevent();
+			t_xpoll_send ts;
+			if (get_send(&ts)) 
+				sendts(&ts);
+			if (FD_ISSET(_fd, &fdr)) 
+				do_read(_fd);		
 		};
 	private:
+		bool isempty() {
+			ec::unique_lock lck(&_slock);
+			return _xitem.uhead == _xitem.utail;
+		}
 		void add_event(uint32_t ucid, uint8_t opt, uint8_t st, void *pdata, size_t datasize)
 		{
 			t_xpoll_event evt;
@@ -339,8 +337,7 @@ namespace ec
 					pi->lasterr = 0;
 					pi->usendsize = 0;
 					_slock.unlock();
-					add_event(ps->ucid, XPOLL_EVT_OPT_SEND, XPOLL_EVT_ST_OK, ps->pd, ps->usendsize);
-					_udpevt.set_event();
+					add_event(ps->ucid, XPOLL_EVT_OPT_SEND, XPOLL_EVT_ST_OK, ps->pd, ps->usendsize);					
 					if (pi->uhead != pi->utail)
 						nret = 1;
 					return nret;
@@ -376,7 +373,7 @@ namespace ec
 		void do_read(int fd)
 #endif
 		{
-			char rbuf[32 * 1024];
+			char rbuf[16 * 1024];
 #ifdef _WIN32
 			int nr = ::recv(fd, rbuf, (int)sizeof(rbuf), 0);
 #else
@@ -410,6 +407,7 @@ namespace ec
 		}
 	};
 
+#if (!defined _WIN32) || (_WIN32_WINNT >= 0x0600)
 
 	/*! -----------------------------------------------------------------------------------------
 	\brief  Asynchronous TCP server TCP workthread
@@ -581,9 +579,9 @@ namespace ec
 					delete pt;
 				});//stop all workers
 				_workers.clear();
-				_fd_listen = INVALID_SOCKET;				
-			}
+				_fd_listen = INVALID_SOCKET;
 		}
+	}
 	private:
 		SOCKET listen_port(unsigned short wport, const char* sip = nullptr)
 		{
@@ -624,7 +622,7 @@ namespace ec
 					_plog->add(CLOG_DEFAULT_ERR, "TCP port %d  listen failed with error %d", wport, errno);
 				fprintf(stderr, "ERR: TCP port %d  listen failed with error %d\n", wport, errno);
 				return INVALID_SOCKET;
-			}			
+			}
 			return sl;
 		}
 
@@ -679,8 +677,9 @@ namespace ec
 #endif
 				::closesocket(sAccept);
 				return;
-			}
-		};
+		}
+};
 	};
+#endif
 } // namespace ec
 
