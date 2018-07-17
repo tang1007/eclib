@@ -90,6 +90,11 @@ namespace ec {
 	protected:
 		Array<unsigned int, KEYV_MAX_ITEMS> _idx;  const char* _r;   size_t _size;
 	public:
+		void reset() {
+			_r = nullptr;
+			_size = 0;
+			_idx.clear();
+		}
 		int init(const char* srecs, size_t size)
 		{
 			_r = srecs;
