@@ -222,6 +222,7 @@ namespace ec
 				SOCKET s = netio_tcpconnect(_sip, _port, 4, true);
 				if (INVALID_SOCKET == s)
 					return;
+				netio_setkeepalive(s);
 				_fd = s;
 				_ucid++;
 				while (!_ucid)
