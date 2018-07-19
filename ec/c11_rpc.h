@@ -2,7 +2,7 @@
 \file c11_rpc.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.6.24
+\update 2018.7.19
 
 eclibe Asynchronous Remote Procedure Call  template class for windows & linux
 
@@ -125,7 +125,6 @@ namespace ec {
 		vector<uint8_t>* pmsg;
 	};
 
-
 	template<>
 	struct key_equal<uint32_t, t_msg_notify>
 	{
@@ -134,11 +133,11 @@ namespace ec {
 			return key == val.seqno;
 		}
 	};
-	
+
 	class msg_notify
 	{
 	public:
-		msg_notify():_mapmem(ec::map<uint32_t, t_msg_notify>::size_node(),8){
+		msg_notify() :_mapmem(ec::map<uint32_t, t_msg_notify>::size_node(), 8) {
 		}
 		~msg_notify() {
 			_map.clear();
@@ -159,14 +158,13 @@ namespace ec {
 
 		bool wait(uint32_t seqno, ec::cEvent *pevt, int timeoutmsec)
 		{
-			if (!pevt->Wait(timeoutmsec))
-			{
+			if (!pevt->Wait(timeoutmsec)) {
 				_cs.lock();
-				_map.erase(seqno); //超时从map中移除
+				_map.erase(seqno); //time over erase from map
 				_cs.unlock();
 				return false;
 			}
-			return true;//成功后已经在Trigger调用时移除,此处不再移除
+			return true;//success , erase from map at trigger
 		}
 		void del(uint32_t seqno)
 		{
@@ -174,16 +172,15 @@ namespace ec {
 			_map.erase(seqno);
 			_cs.unlock();
 		}
-		bool trigger(uint32_t seqno, const uint8_t* pmsg, size_t msglen) //触发,并移除
+		bool trigger(uint32_t seqno, const uint8_t* pmsg, size_t msglen)
 		{
 			t_msg_notify nty;
 			_cs.lock();
-			if (!_map.get(seqno, nty))
-			{
+			if (!_map.get(seqno, nty)) {
 				_cs.unlock();
 				return false;
 			}
-			_map.erase(seqno);//触发成功，移除map
+			_map.erase(seqno);
 			_cs.unlock();
 
 			uint32_t gr = (uint32_t)msglen;
@@ -1028,6 +1025,7 @@ namespace ec {
 				if (!str_getnextstring(',', ps, len, pos, sarg, sizeof(sarg)))
 					return rpc_c_disconnected_msgerr;
 				if (atoi(sarg)) {
+					base_::_delaytks = 150;// 15 seconds reconnect
 					static_cast<_CLS*>(this)->OnLoginEvent(rpc_c_login_pswerr);
 					return rpc_c_login_pswerr;
 				}
