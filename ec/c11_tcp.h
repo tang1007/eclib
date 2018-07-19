@@ -29,6 +29,7 @@ limitations under the License.
 
 #pragma once
 
+#include <atomic>
 #include "c11_keyval.h"
 #include "c11_log.h"
 #include "c11_netio.h"
@@ -40,7 +41,7 @@ namespace ec
 	class AioTcpClient : public cThread // Asynchronous auto reconnect TCP client, for compatible with windows XP, use the select model
 	{
 	public:
-		AioTcpClient(memory* pmem) : _pmem(pmem), _cpevt(128, &_cpevtlock), _fd(INVALID_SOCKET), _bconnect(false)
+		AioTcpClient(memory* pmem) : _pmem(pmem), _delaytks(0), _cpevt(128, &_cpevtlock), _fd(INVALID_SOCKET), _bconnect(false)
 		{
 			memset(_sip, 0, sizeof(_sip));
 			_port = 0;
@@ -55,6 +56,7 @@ namespace ec
 				return false;
 			if (!_udpevt.open())
 				return false;
+			_delaytks = 0;
 			strncpy(_sip, sip, sizeof(_sip) - 1);
 			_port = port;
 			StartThread(nullptr);
@@ -62,7 +64,7 @@ namespace ec
 		}
 		void close()
 		{
-			StopThread();// stop send thread first			
+			StopThread();
 			_disconnect(XPOLL_EVT_ST_CLOSE);
 			_udpevt.close();
 		}
@@ -98,6 +100,7 @@ namespace ec
 		}
 	protected:
 		memory * _pmem; //memory for send
+		std::atomic_int _delaytks; // reconnect delay 100ms tks
 		bool post_onread(const void *pd, size_t size) //called in onrecv.
 		{
 			int nr = post_msg(pd, size);
@@ -210,9 +213,13 @@ namespace ec
 		virtual	void dojob()
 		{
 			doevent();
-
 			if (!_bconnect) {
-				SOCKET s = netio_tcpconnect(_sip, _port, 6, true);
+				if (_delaytks > 0) {
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+					_delaytks--;
+					return;
+				}
+				SOCKET s = netio_tcpconnect(_sip, _port, 4, true);
 				if (INVALID_SOCKET == s)
 					return;
 				_fd = s;
@@ -223,8 +230,7 @@ namespace ec
 				_xitem.fd = _fd;
 				_bconnect = true;			
 				static_cast<_CLS*>(this)->onconnect();
-			}			
-
+			}
 			TIMEVAL tv01 = { 0, 100 * 1000 }; // 100 ms
 			fd_set fdr, fdw, fde;
 			FD_ZERO(&fdr);
@@ -236,7 +242,6 @@ namespace ec
 			if(!isempty())
 				FD_SET(_fd, &fdw);
 			FD_SET(_fd, &fde);
-
 #ifdef _WIN32
 			int nret = ::select(0, &fdr, &fdw, &fde, &tv01);
 #else
@@ -247,10 +252,8 @@ namespace ec
 #endif
 			if (nret <= 0)
 				return;
-
 			if (FD_ISSET(_udpevt.getfd(), &fdr))			
 				_udpevt.reset_event();
-
 			if (FD_ISSET(_fd, &fde)) {
 				_disconnect(XPOLL_EVT_ST_ERR);
 				return;
