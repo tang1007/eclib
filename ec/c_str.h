@@ -78,8 +78,12 @@ namespace ec
 
 	inline char* str_ncpy(char* sd, const char* ss, size_t count)//like strncpy,add null to the end of sd, buffer size of sd must > count
 	{
-		if (!ss || !sd || !count)
+		if (!sd)
 			return nullptr;
+		if (!ss || !(*ss) || !count) {
+			*sd = '\0';
+			return nullptr;
+		}
 		char* sr = sd;
 		while (count && (*sd++ = *ss++) != '\0')
 			count--;
@@ -91,6 +95,8 @@ namespace ec
 	inline size_t str_lcpy(char* sd, const char* ss, size_t count)// like strlcpy for linux,add null to the end of sd
 	{		
 		size_t n = count;
+		if (!sd)
+			return 0;
 		if (!ss || !(*ss) || !count){
 			if(sd)
 				*sd = '\0';
