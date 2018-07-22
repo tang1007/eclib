@@ -1,7 +1,8 @@
 ﻿/*!
 \file c11_handle.h
-\author kipway@outlook.com
-\update 2018.7.19
+\author	jiangyong
+\email  kipway@outlook.com
+\update 2018.7.22
 
 eclib for handle template class 
 
