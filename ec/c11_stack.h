@@ -2,7 +2,7 @@
 \file c11_stack.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.5.26
+\update 2018.7.22
 
 eclib class stack with c++11.
 
@@ -32,10 +32,12 @@ namespace ec {
 		typedef _Tp		value_type;
 		typedef size_t	size_type;
 		typedef _Tp*	iterator;
-		stack( size_t size) :_bufsize(size), _size(0) {
-			_data = new value_type[size];
-			if (!_data)
-				_bufsize = 0;			
+		stack(size_t size) :_bufsize(size), _size(0), _data(nullptr) {
+			if (size) {
+				_data = new value_type[size];
+				if (!_data)
+					_bufsize = 0;
+			}
 		}
 		~stack() {
 			if (_data) {
