@@ -2,7 +2,7 @@
 \file c11_memory.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.5.27
+\update 2018.7.22
 
 eclib class fast memory allocator with c++11.
 
@@ -26,10 +26,6 @@ limitations under the License.
 #include <memory.h>
 #include "c11_mutex.h"
 #include "c11_stack.h"
-#include "c11_array.h"
-#ifndef MEM_ML_BLKNUM 
-#define MEM_ML_BLKNUM 512 //max medium/large memory block number
-#endif
 namespace ec {
 	class memory
 	{
@@ -38,33 +34,23 @@ namespace ec {
 			size_t mblksize = 0, size_t mblknum = 0,
 			size_t lblksize = 0, size_t lblknum = 0,
 			std::mutex* pmutex = nullptr
-		) : _pm(nullptr), _pl(nullptr), _pmutex(pmutex), _stks(sblknum)
+		) : _ps(nullptr),_pm(nullptr), _pl(nullptr), _pmutex(pmutex), _stks(sblknum), _stkm(mblknum), _stkl(lblknum)
 		{
-			size_t i;
-			_sz_s = sblksize;
-			if (_sz_s % 8)
-				_sz_s += sblksize - sblksize % 8;
+			_sz_s = sblksize;// small memory blocks,Pre-allocation
+			if (_sz_s % (sizeof(size_t) * 2))
+				_sz_s += (sizeof(size_t) * 2) - sblksize % (sizeof(size_t) * 2);
 			_blk_s = sblknum;
-			_ps = ::malloc(_sz_s * sblknum);
-			if (_ps){
-				uint8_t *p = (uint8_t *)_ps;
-				for (i = 0; i < sblknum; i++)
-					_stks.add(p + (sblknum -1 -i) * _sz_s);
-			}
-
-			_sz_m = mblksize;
-			if (_sz_m % 16)
-				_sz_m += mblksize - mblksize % 16;
+			malloc_block(_sz_s, _blk_s, _ps, _stks);
+			
+			_sz_m = mblksize; // medium memory blocks, malloc at the time of use
+			if (_sz_m % (sizeof(size_t)*2))
+				_sz_m += (sizeof(size_t) * 2) - mblksize % (sizeof(size_t) * 2);
 			_blk_m = mblknum;
-			if (_blk_m > MEM_ML_BLKNUM)
-				_blk_m = MEM_ML_BLKNUM;
-
-			_sz_l = lblksize;
-			if (_sz_l % 16)
-				_sz_l += lblksize - lblksize % 16;
+			
+			_sz_l = lblksize; // large memory blocks, malloc at the time of use
+			if (_sz_l % (sizeof(size_t) * 2))
+				_sz_l += (sizeof(size_t) * 2) - lblksize % (sizeof(size_t) * 2);
 			_blk_l = lblknum;
-			if (_blk_l > MEM_ML_BLKNUM)
-				_blk_l = MEM_ML_BLKNUM;
 		}
 		~memory()
 		{
@@ -154,10 +140,10 @@ namespace ec {
 		size_t _sz_s, _sz_m, _sz_l;  //blocks size
 		size_t _blk_s, _blk_m, _blk_l; // blocks number
 		ec::stack<void*> _stks;     // small memory blocks
-		ec::Array<void*, MEM_ML_BLKNUM> _stkm; // medium memory blocks
-		ec::Array<void*, MEM_ML_BLKNUM> _stkl; // large memory blocks
+		ec::stack<void*> _stkm; // medium memory blocks
+		ec::stack<void*> _stkl; // large memory blocks		
 
-		bool malloc_block(size_t blksize, size_t blknum, void * &ph, ec::Array<void*, MEM_ML_BLKNUM> &stk)
+		bool malloc_block(size_t blksize, size_t blknum, void * &ph, ec::stack<void*> &stk)
 		{
 			if (!blknum || !blksize)
 				return false;
