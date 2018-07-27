@@ -49,6 +49,10 @@ namespace ec
 			set_grow(ugrownsize);
 			add(pval, size);
 		};
+		vector(size_type initsize, bool doublegrown, ec::memory* pmem = nullptr) : _pbuf(nullptr), _usize(0), _ubufsize(0), _pmem(pmem), _doublegrown(doublegrown)
+		{
+			set_grow(initsize);
+		}
 		vector(vector &&v)
 		{
 			_pbuf = v._pbuf;
@@ -91,9 +95,10 @@ namespace ec
 		size_type	_usize;
 		size_type	_ubufsize;
 		size_type	_ugrown;
+		bool		_doublegrown; //auto double grown
 	private:
 		ec::memory *_pmem;
-		inline void *mem_malloc(size_t size, size_t sizeout) {
+		inline void *mem_malloc(size_t size, size_t &sizeout) {
 			if (_pmem)
 				return _pmem->malloc(size, sizeout);
 			sizeout = size;
@@ -105,7 +110,7 @@ namespace ec
 			else
 				free(p);
 		}
-		inline void* mem_realloc(size_t size, size_t sizeout) {
+		inline void* mem_realloc(size_t size, size_t &sizeout) {
 			if (_pmem) {
 				void *pnew = _pmem->malloc(size, sizeout);
 				if (!pnew)
@@ -115,7 +120,6 @@ namespace ec
 						memcpy(pnew, _pbuf, ((_usize < size) ? _usize : size) * sizeof(value_type));
 					_pmem->mem_free(_pbuf);
 				}
-				sizeout = size;
 				return pnew;
 			}
 			sizeout = size;
@@ -129,6 +133,8 @@ namespace ec
 		void set_grow(size_type ugrowsize) noexcept
 		{
 			_ugrown = ugrowsize;
+			if (!_ugrown)
+				_ugrown = 4;
 			if (_ugrown % 4)
 				_ugrown += 4 - (_ugrown % 4);
 			if (_ugrown > max_size())
@@ -360,7 +366,16 @@ namespace ec
 		{
 			if (_usize + usize <= _ubufsize || !usize)
 				return true;
-			size_type usizet = _usize + usize;
+			size_type usizet;
+			if (_doublegrown) {
+				usizet = _ubufsize;
+				if (!usizet)
+					usizet = _ugrown;
+				while (usizet < _usize + usize)
+					usizet *= 2;
+			}
+			else
+				usizet = _usize + usize;
 			if (usizet > max_size())
 				return false;
 			usizet += _ugrown - (usizet % _ugrown);
