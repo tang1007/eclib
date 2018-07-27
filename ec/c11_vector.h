@@ -375,11 +375,13 @@ namespace ec
 				while (usizet < _usize + usize)
 					usizet *= 2;
 			}
-			else
+			else {
 				usizet = _usize + usize;
+				if(usizet % _ugrown)
+					usizet += _ugrown - (usizet % _ugrown);
+			}
 			if (usizet > max_size())
-				return false;
-			usizet += _ugrown - (usizet % _ugrown);
+				return false;			
 			size_t sizeout = 0;
 			value_type	*pt = (value_type*)mem_realloc(usizet * sizeof(value_type), sizeout);
 			if (!pt)
