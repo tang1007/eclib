@@ -2,7 +2,7 @@
 \file c11_vector.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.6.30
+\update 2018.7.27
 
 eclib class vector with c++11. fast noexcept simple vector. members of a vector can only be simple types, pointers and structures
 
@@ -35,16 +35,16 @@ namespace ec
 		typedef _Tp		value_type;
 		typedef size_t	size_type;
 		typedef _Tp*	iterator;
-		vector(size_type ugrownsize, ec::memory* pmem = nullptr) : _pbuf(nullptr), _usize(0), _ubufsize(0), _pmem(pmem)
+		vector(size_type ugrownsize, ec::memory* pmem = nullptr) : _pbuf(nullptr), _usize(0), _ubufsize(0), _pmem(pmem), _doublegrown(false)
 		{
 			set_grow(ugrownsize);
 		};
-		vector(size_type ugrownsize, const value_type& val, ec::memory* pmem = nullptr) : _pbuf(nullptr), _usize(0), _ubufsize(0), _pmem(pmem)
+		vector(size_type ugrownsize, const value_type& val, ec::memory* pmem = nullptr) : _pbuf(nullptr), _usize(0), _ubufsize(0), _pmem(pmem), _doublegrown(false)
 		{
 			set_grow(ugrownsize);
 			push_back(val);
 		};
-		vector(size_type ugrownsize, const value_type* pval, size_type size, ec::memory* pmem = nullptr) : _pbuf(nullptr), _usize(0), _ubufsize(0), _pmem(pmem)
+		vector(size_type ugrownsize, const value_type* pval, size_type size, ec::memory* pmem = nullptr) : _pbuf(nullptr), _usize(0), _ubufsize(0), _pmem(pmem), _doublegrown(false)
 		{
 			set_grow(ugrownsize);
 			add(pval, size);
@@ -60,6 +60,7 @@ namespace ec
 			_ubufsize = v._ubufsize;
 			_ugrown = v._ugrown;
 			_pmem = v._pmem;
+			_doublegrown = v._doublegrown;
 			v._pbuf = nullptr;
 			v._usize = 0;
 			v._ubufsize = 0;
