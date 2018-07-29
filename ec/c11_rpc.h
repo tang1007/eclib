@@ -1015,7 +1015,7 @@ namespace ec {
 					sha[i * 2 + 1] = (uc >= 0x0A) ? 'A' + (uc - 0x0A) : '0' + uc;
 				}
 				sha[40] = 0;
-				sprintf(sarg, "sha1,%s", sha);
+				snprintf(sarg, sizeof(sarg), "sha1,%s", sha);
 
 				SendShMsg(sarg, _seqno++);
 				return 0;
