@@ -44,7 +44,7 @@ namespace ec {
 	enum RPCMSGTYPE //message type
 	{
 		rpcmsg_sys = 0, //system message
-		rpcmsg_sh = 1,  //handshake message					   
+		rpcmsg_sh = 1,  //handshake message
 		rpcmsg_request = 10, //client request
 		rpcmsg_put = 11,	 //server put
 		rpcmsg_response = 12 //server response
@@ -269,7 +269,7 @@ namespace ec {
 			_rbuf.add(pdata, usize);
 			return DoLeftData(pout);
 		}
-		int DoLeftData(vector<uint8_t>* pout)//return -1:error will disconnect ; 0: wait ; 1: one msg checked and Decrypt. 
+		int DoLeftData(vector<uint8_t>* pout)//return -1:error will disconnect ; 0: wait ; 1: one msg checked and Decrypt.
 		{
 			pout->clear();
 			size_t ulen = _rbuf.size();
@@ -595,7 +595,7 @@ namespace ec {
 			return true;
 		}
 	protected:
-		cRpcClientMap _mapss;  //map for  sessions		
+		cRpcClientMap _mapss;  //map for  sessions
 	};
 
 	template<class _CLS>
@@ -680,7 +680,7 @@ namespace ec {
 			else if (pkg->comp == rpccomp_zlib) {
 				size_t uen = CNetInt::NetUInt(pkg->size_en), udn = CNetInt::NetUInt(pkg->size_dn);
 				if (!vtmp.resize(udn)) {
-					close_ucid(ucid);
+					base_::close_ucid(ucid);
 					return -1;
 				}
 				if (!decode_zlib(pkg->msg, uen, vtmp.data(), &udn))
@@ -704,7 +704,7 @@ namespace ec {
 			t_rpcuserinfo usri;
 			memset(&usri, 0, sizeof(usri));
 			size_t pos = 0;
-			if (!str_getnextstring(',', sd, msglen, pos, sod, sizeof(sod)))//读取命令			
+			if (!str_getnextstring(',', sd, msglen, pos, sod, sizeof(sod)))//读取命令
 				return RetShMsg(ucid, "onconnect,-1,msg format error!", seqno, true);
 			if (!strcmp(sod, "connect")) // "connnect,username"
 			{
@@ -966,7 +966,7 @@ namespace ec {
 					return -1;
 				}
 				if (!decode_zlib(pkg->msg, uen, vtmp.data(), &udn))
-					return roc_c_disconnected_msgerr;
+					return rpc_c_disconnected_msgerr;
 				pmsg = vtmp.data();
 				ulen = udn;
 			}
