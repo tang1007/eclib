@@ -191,12 +191,12 @@ namespace ec {
 			base_::close();
 		}
 
-		bool tls_post(const void* pd, size_t size)
+		bool tls_post(const void* pd, size_t size, int timeovermsec = 100)
 		{
 			vector<uint8_t> pkg(88 * (size / TLS_CBCBLKSIZE) + size + 88 - size % 88, base_::_pmem);
 			if (!_tls.MakeAppRecord(&pkg, pd, size))
 				return false;
-			return base_::tcp_post(&pkg);// zero copy
+			return base_::tcp_post(&pkg, timeovermsec);// zero copy
 		}	
 		inline int status() {
 			return _nstatus;

@@ -612,7 +612,7 @@ namespace ec {
 			_pssmap = pargs->_pssmap;
 		}
 		bool rpc_send(uint32_t ucid, const void* pdata, size_t bytesize, RPCMSGTYPE msgtype,
-			uint32_t seqno, int timeovermsec = 0) // post send data
+			uint32_t seqno, int timeovermsec = 100) // post send data
 		{
 			t_rpcuserinfo usrinfo;
 			usrinfo._ucid = ucid;
@@ -627,7 +627,7 @@ namespace ec {
 		cRpcClientMap * _pssmap;
 	private:
 		bool SendRpcMsg(uint32_t ucid, const void* pd, size_t size, RPCMSGTYPE msgtype, RPCCOMPRESS compress,
-			uint32_t seqno, const uint8_t* pmask, int timeovermsec = 0)
+			uint32_t seqno, const uint8_t* pmask, int timeovermsec = 100)
 		{
 			vector<uint8_t> pkg(size, base_::_pmem);
 			if (args_rpc::MakePkg(pd, size, msgtype, compress, seqno, pmask, base_::_pmem, _pssmap->IsEncryptData(), &pkg)) {
@@ -825,11 +825,11 @@ namespace ec {
 		{
 			base_::close();
 		}
-		inline bool rpc_request(const void* pd, size_t size, uint32_t seqno, int timeovermsec = 0)
+		inline bool rpc_request(const void* pd, size_t size, uint32_t seqno, int timeovermsec = 100)
 		{
 			return SendRpcMsg(pd, size, rpcmsg_request, (size > 80) ? rpccomp_lz4 : rpccomp_none, seqno, _pswsha1, timeovermsec);
 		}
-		inline bool rpc_put(const void* pd, size_t size, uint32_t seqno, int timeovermsec = 0)
+		inline bool rpc_put(const void* pd, size_t size, uint32_t seqno, int timeovermsec = 100)
 		{
 			return SendRpcMsg(pd, size, rpcmsg_put, (size > 80) ? rpccomp_lz4 : rpccomp_none, _seqno++, _pswsha1, timeovermsec);
 		}
@@ -861,7 +861,7 @@ namespace ec {
 		std::atomic_uint _seqno;
 		vector<uint8_t> _rbuf;
 	protected:
-		bool SendRpcMsg(const void* pd, size_t size, RPCMSGTYPE msgtype, RPCCOMPRESS compress, uint32_t seqno, const uint8_t* pmask, int timeovermsec = 0) {
+		bool SendRpcMsg(const void* pd, size_t size, RPCMSGTYPE msgtype, RPCCOMPRESS compress, uint32_t seqno, const uint8_t* pmask, int timeovermsec = 100) {
 			vector<uint8_t> pkg(size + 64, base_::_pmem);
 			if (args_rpc::MakePkg(pd, size, msgtype, compress, seqno, pmask, base_::_pmem, _bEncrypt, &pkg)) {
 				size_t pkglen = pkg.size();

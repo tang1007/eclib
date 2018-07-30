@@ -68,7 +68,7 @@ namespace ec
 			_disconnect(XPOLL_EVT_ST_CLOSE);
 			_udpevt.close();
 		}
-		bool tcp_post(const void* pdata, size_t bytesize, int timeovermsec = 0) // post send data
+		bool tcp_post(const void* pdata, size_t bytesize, int timeovermsec = 100) // post send data
 		{
 			int nerr = post_msg(pdata, bytesize);
 			if (nerr < 0)
@@ -83,7 +83,7 @@ namespace ec
 			}
 			return nerr > 0;
 		}
-		bool tcp_post(ec::vector<uint8_t> *pd, int timeovermsec = 0) // post send data
+		bool tcp_post(ec::vector<uint8_t> *pd, int timeovermsec = 100) // post send data
 		{
 			int nerr = post_msg(pd);
 			if (nerr < 0)
@@ -427,7 +427,7 @@ namespace ec
 		inline int get_unsends(uint32_t ucid) { // Get the number of unfinished packages , < XPOLL_SEND_PKG_NUM,used for server put message
 			return _ppoll->sendnodone(ucid);
 		}
-		bool tcp_post(uint32_t ucid, void* pdata, size_t bytesize, int timeovermsec = 0) // post data, warning: zero copy, direct put pdata pointer to send buffer
+		bool tcp_post(uint32_t ucid, void* pdata, size_t bytesize, int timeovermsec = 100) // post data, warning: zero copy, direct put pdata pointer to send buffer
 		{
 			int nerr = _ppoll->post_msg(ucid, pdata, bytesize);
 			if (nerr < 0)
@@ -442,7 +442,7 @@ namespace ec
 			}
 			return nerr > 0;
 		}
-		bool tcp_post(uint32_t ucid, vector<uint8_t> *pvd, int timeovermsec = 0) // post data, warning: zero copy, direct put pdata pointer to send buffer
+		bool tcp_post(uint32_t ucid, vector<uint8_t> *pvd, int timeovermsec = 100) // post data, warning: zero copy, direct put pdata pointer to send buffer
 		{
 			int nerr = _ppoll->post_msg(ucid, pvd);
 			if (nerr < 0)
