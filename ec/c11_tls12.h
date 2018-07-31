@@ -2,7 +2,7 @@
 \file c11_tls12.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.6.24
+\update 2018.7.31
 
 eclib TLS1.2(rfc5246)  class
 support:
@@ -1396,12 +1396,14 @@ namespace ec
 			return -1;
 		}
 		bool mkr_appdata(uint32_t ucid, ec::vector<uint8_t>*po, const void* pd, size_t len)
-		{
-			unique_lock lck(&_cs);
+		{			
 			t_tls_session* pv = _map.get(ucid);
 			if (pv)
 				return pv->Pss->MakeAppRecord(po, pd, len);
 			return false;
+		}
+		inline std::mutex* getcs() {
+			return &_cs;
 		}
 	};
 

@@ -2,7 +2,7 @@
 \file c11_tcptls.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.6.24
+\update 2018.7.31
 
 eclib secret(TLS1.2 rfc5246) TCP  server and client template class
 
@@ -107,8 +107,9 @@ namespace ec {
 		tls_srvca * _pca;
 		sessiontlsmap* _psss;
 	public:
-		bool tls_post(uint32_t ucid, const void* pdata, size_t size, int waitmsec = 0)
+		bool tls_post(uint32_t ucid, const void* pdata, size_t size, int waitmsec = 100)
 		{
+			ec::unique_lock lck(_psss->getcs());
 			vector<uint8_t> pkg(88 * (size / TLS_CBCBLKSIZE) + size + 88 - size % 88, base_::_pmem);
 			if (!_psss->mkr_appdata(ucid, &pkg, pdata, size))
 				return false;
@@ -218,6 +219,8 @@ namespace ec {
 			else if (TLS_SESSION_APPDATA == nst) {
 				static_cast<_CLS*>(this)->onrecv(pkg.data(), pkg.size());
 			}
+			if (TLS_SESSION_ERR == nst) 				
+				base_::_disconnect(XPOLL_EVT_ST_ERR);			
 		};
 		void onconnect() {
 			_tls.Reset();
