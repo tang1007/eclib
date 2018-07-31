@@ -1230,7 +1230,7 @@ namespace ec
 				static_cast<_CLS*>(this)->dodisconnect(ucid);
 			}
 		};
-		int ws_send(unsigned int ucid, const void* pdata, size_t size, unsigned char wsopt, int waitmsec = 0) //return -1 error, >0 is send bytes
+		int ws_send(unsigned int ucid, const void* pdata, size_t size, unsigned char wsopt, int waitmsec = 100) //return -1 error, >0 is send bytes
 		{
 			bool bsend;
 			int ncomp = _pclis->GetCompress(ucid);
