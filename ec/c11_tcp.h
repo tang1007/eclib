@@ -73,11 +73,11 @@ namespace ec
 			int nerr = post_msg(pdata, bytesize);
 			if (nerr < 0)
 				return false;
-			int nt = timeovermsec / 10, i = 0;;
-			if (nt % 10)
+			int nt = timeovermsec / 2, i = 0;;
+			if (nt % 2)
 				nt++;
 			while (!nerr && i < nt) {
-				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				std::this_thread::sleep_for(std::chrono::milliseconds(2));
 				nerr = post_msg(pdata, bytesize);
 				i++;
 			}
@@ -88,11 +88,11 @@ namespace ec
 			int nerr = post_msg(pd);
 			if (nerr < 0)
 				return false;
-			int nt = timeovermsec / 10, i = 0;;
-			if (nt % 10)
+			int nt = timeovermsec / 2, i = 0;;
+			if (nt % 2)
 				nt++;
 			while (!nerr && i < nt) {
-				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				std::this_thread::sleep_for(std::chrono::milliseconds(2));
 				nerr = post_msg(pd);
 				i++;
 			}
@@ -185,6 +185,7 @@ namespace ec
 			_udpevt.set_event();
 			return (int)nret;
 		}
+	protected:
 		void _disconnect(int status) {
 			_bconnect = false;
 			t_xpoll_item t;
@@ -432,11 +433,11 @@ namespace ec
 			int nerr = _ppoll->post_msg(ucid, pdata, bytesize);
 			if (nerr < 0)
 				return false;
-			int nt = timeovermsec / 10, i = 0;;
-			if (nt % 10)
+			int nt = timeovermsec / 2, i = 0;;
+			if (nt % 2)
 				nt++;
 			while (!nerr && i < nt) {
-				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				std::this_thread::sleep_for(std::chrono::milliseconds(2));
 				nerr = _ppoll->post_msg(ucid, pdata, bytesize);
 				i++;
 			}
@@ -447,11 +448,11 @@ namespace ec
 			int nerr = _ppoll->post_msg(ucid, pvd);
 			if (nerr < 0)
 				return false;
-			int nt = timeovermsec / 10, i = 0;;
-			if (nt % 10)
+			int nt = timeovermsec / 2, i = 0;;
+			if (nt % 2)
 				nt++;
 			while (!nerr && i < nt) {
-				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				std::this_thread::sleep_for(std::chrono::milliseconds(2));
 				nerr = _ppoll->post_msg(ucid, pvd);
 				i++;
 			}
@@ -561,7 +562,13 @@ namespace ec
 			StartThread(nullptr);
 			return true;
 		}
-
+		bool post_self_event(uint32_t ucid, uint8_t optcode, void *pdata, size_t datasize) // post self event, optcode >= XPOLL_EVT_OPT_APP
+		{
+			if (optcode < XPOLL_EVT_OPT_APP)
+				return false;
+			_poll.add_event(ucid, optcode, 0, pdata, datasize);
+			return true;
+		}
 		void stop()
 		{
 			if (_fd_listen) {
