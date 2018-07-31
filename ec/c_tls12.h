@@ -599,7 +599,7 @@ namespace ec
                     if (_pkgtcp[1] != TLSVER_MAJOR)
                     {
                         ECTRACE("not support Ver %d.%d\n", _pkgtcp[1], _pkgtcp[2]);
-                        Alert(2, 70, OnData, pParam);//protocol_version(70)
+                       // Alert(2, 70, OnData, pParam);//protocol_version(70)
                     }
                     return -1;
                 }
@@ -609,7 +609,7 @@ namespace ec
                 {
                     if (!decrypt_record(p, ulen + 5, tmp, &ndl))
                     {
-                        Alert(2, 50, OnData, pParam);//decode_error(50)						
+                       // Alert(2, 50, OnData, pParam);//decode_error(50)						
                         return -1;
                     }
                     if (dorecord(tmp, ndl, OnData, pParam) < 0)
@@ -1723,13 +1723,15 @@ namespace ec
             return -1;
         }
         bool mkr_appdata(unsigned int ucid, ec::tArray<unsigned char>*po, const void* pd, size_t len)
-        {
-            cSafeLock lck(_css[ucid%_ugroups]);
+        {           
             t_tlsse* pv = _maps[ucid%_ugroups]->Lookup(ucid);
             if (pv)
                 return pv->Pss->MakeAppRecord(po, pd, len);
             return false;
         }
+		cCritical *getcs(unsigned int ucid) {
+			return _css[ucid%_ugroups];
+		}
     };
 
     class cTlsSrvThread : public cTcpSvrWorkThread
@@ -1804,6 +1806,7 @@ namespace ec
     protected:
         bool SendAppData(unsigned ucid, const void* pd, size_t len, bool bAddCount = false, unsigned int uSendOpt = TCPIO_OPT_SEND)
         {
+			cSafeLock lck(_psss->getcs(ucid));
 			_tlsrectmp.set_grow(len + 264 - len % 8 + (len / 16384) * 256);            
 			if (!_psss->mkr_appdata(ucid, &_tlsrectmp, pd, len)) {
 				_tlsrectmp.clear();
