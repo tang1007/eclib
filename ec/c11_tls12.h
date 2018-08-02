@@ -2,7 +2,7 @@
 \file c11_tls12.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.7.31
+\update 2018.8.2
 
 eclib TLS1.2(rfc5246)  class
 support:
@@ -206,6 +206,12 @@ namespace ec
 
 		bool decrypt_record(const uint8_t*pd, size_t len, uint8_t* pout, int *poutsize)
 		{
+			size_t maclen = 32;
+			if (_cipher_suite == TLS_RSA_WITH_AES_128_CBC_SHA || _cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA)
+				maclen = 20;
+			if (len < 2 * AES_BLOCK_SIZE + 5 + maclen)
+				return false;
+			
 			int i;
 			unsigned char sout[1024 * 20], iv[AES_BLOCK_SIZE], *pkey = _key_sw, *pkmac = _key_swmac;
 			AES_KEY aes_d;
@@ -226,10 +232,11 @@ namespace ec
 			unsigned int ufsize = sout[len - 5 - AES_BLOCK_SIZE - 1];//verify data MAC
 			if (ufsize > 15)
 				return false;
-			size_t maclen = 32;
-			if (_cipher_suite == TLS_RSA_WITH_AES_128_CBC_SHA || _cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA)
-				maclen = 20;
+			
 			size_t datasize = len - 5 - AES_BLOCK_SIZE - 1 - ufsize - maclen;
+			if (datasize > tls_rec_fragment_len)
+				return false;
+
 			unsigned char mac[32], macsrv[32];
 			memcpy(macsrv, &sout[datasize], maclen);
 			if (!caldatahmac(pd[0], _seqno_read, sout, datasize, pkmac, mac))
@@ -597,12 +604,10 @@ namespace ec
 				if (uct < (uint8_t)tls::rec_change_cipher_spec || uct >(uint8_t)tls::rec_application_data ||
 					_pkgtcp[1] != TLSVER_MAJOR || ulen > tls_rec_fragment_len + 2048)
 				{
-					if (_pkgtcp[1] != TLSVER_MAJOR)
-					{
-						if (_plog)
-							_plog->add(CLOG_DEFAULT_DBG, "ucid %u not support TLS ver %d.%d", _ucid, _pkgtcp[1], _pkgtcp[2]);
+					if (_plog)
+						_plog->add(CLOG_DEFAULT_DBG, "ucid %u protocol error!", _ucid);					
+					if (!_breadcipher)
 						Alert(2, 70, pout);//protocol_version(70)
-					}
 					return TLS_SESSION_ERR;
 				}
 				if (ulen + 5 > nl)
@@ -612,8 +617,8 @@ namespace ec
 					if (!decrypt_record(p, ulen + 5, tmp, &ndl))
 					{
 						if (_plog)
-							_plog->add(CLOG_DEFAULT_DBG, "ucid %u Alert decode_error(50)	", _ucid);
-						Alert(2, 50, pout);//decode_error(50)						
+							_plog->add(CLOG_DEFAULT_DBG, "ucid %u Alert decode_error(50)", _ucid);
+						//Alert(2, 50, pout);//decode_error(50)						
 						return TLS_SESSION_ERR;
 					}
 					nret = dorecord(tmp, ndl, pout);
@@ -621,8 +626,7 @@ namespace ec
 						return nret;
 				}
 				else
-				{
-					pout->add(p, ndl);
+				{					
 					nret = dorecord(p, (int)ulen + 5, pout);
 					if (nret == TLS_SESSION_ERR)
 						return nret;
@@ -1393,7 +1397,8 @@ namespace ec
 			t_tls_session* pv = _map.get(ucid);
 			if (pv)
 				return pv->Pss->OnTcpRead(pd, dsize, pout);
-			return -1;
+			pout->clear();
+			return TLS_SESSION_NONE;
 		}
 		bool mkr_appdata(uint32_t ucid, ec::vector<uint8_t>*po, const void* pd, size_t len)
 		{			

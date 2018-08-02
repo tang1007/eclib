@@ -1,7 +1,7 @@
 /*!
 \file c_tls12.h
 \author	kipway@outlook.com
-\update 2018.4.3 fix RSA_private_decrypt multithread safety
+\update 2018.8.2 
 
 eclib TLS1.2(rfc5246) server and client class
 support:
@@ -192,6 +192,12 @@ namespace ec
         */
         bool decrypt_record(const unsigned char*pd, size_t len, unsigned char* pout, int *poutsize)
         {
+			size_t maclen = 32;
+			if (_cipher_suite == TLS_RSA_WITH_AES_128_CBC_SHA || _cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA)
+				maclen = 20;
+			if (len < 2 * AES_BLOCK_SIZE + 5 + maclen)
+				return false;
+
             int i;
             unsigned char sout[1024 * 20], iv[AES_BLOCK_SIZE], *pkey = _key_sw, *pkmac = _key_swmac;
             AES_KEY aes_d;
@@ -212,10 +218,11 @@ namespace ec
             unsigned int ufsize = sout[len - 5 - AES_BLOCK_SIZE - 1];//verify data MAC
             if (ufsize > 15)
                 return false;
-            size_t maclen = 32;
-            if (_cipher_suite == TLS_RSA_WITH_AES_128_CBC_SHA || _cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA)
-                maclen = 20;
+            
             size_t datasize = len - 5 - AES_BLOCK_SIZE - 1 - ufsize - maclen;
+			if (datasize > tls_rec_fragment_len)
+				return false;
+
             unsigned char mac[32], macsrv[32];
             memcpy(macsrv, &sout[datasize], maclen);
             if (!caldatahmac(pd[0], _seqno_read, sout, datasize, pkmac, mac))
