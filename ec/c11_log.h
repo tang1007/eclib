@@ -2,7 +2,7 @@
 \file c11_log.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.6.11
+\update 2018.8.2
 
 eclibe log for windows & linux
 
@@ -39,7 +39,6 @@ limitations under the License.
 #include <malloc.h>
 #include "c_time.h"
 #include "c_str.h"
-//#include "c11_keyval.h"
 #include "c11_array.h"
 #include "c11_config.h"
 #include "c11_mutex.h"
@@ -61,9 +60,9 @@ limitations under the License.
 #endif
 #ifndef MAX_LOG_SIZE
 #ifdef _ARM_LINUX
-#define MAX_LOG_SIZE		(1024 * 32)
-#else
 #define MAX_LOG_SIZE		(1024 * 16)
+#else
+#define MAX_LOG_SIZE		(1024 * 32)
 #endif
 #endif
 #ifdef _ARM_LINUX
@@ -240,7 +239,12 @@ namespace ec
 			SaveLog();
 			StopThread();
 		}
-
+		inline void set_outlevel(int nlevel) {
+			_cfg._outleval = nlevel;
+		}
+		inline int get_outlevel() {
+			return _cfg._outleval;
+		}
 		void	add(int level, const char * format, ...)
 		{
 			if (level > _cfg._outleval)
@@ -344,8 +348,6 @@ namespace ec
 	protected:		
 		bool _open( bool bLineStyleWin = false)
 		{
-//			if (!_cfg.fromfile(scfgfile))
-	//			return false;
 			_blinestylewin = bLineStyleWin;
 			if (!_cfg._logpath[0])
 				return false;
