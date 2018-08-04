@@ -2,7 +2,7 @@
 \file c11_fifo.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.6.21
+\update 2018.8.4
 
 FIFO class for windows & linux
 
@@ -77,6 +77,17 @@ namespace ec
 				*pbfull = ((_utail + 1) % _usize == _uhead);
 			return 1; //success
 		};
+		void add_overflow(value_type &item) {
+			unique_lock lck(_pmutex);
+			if (!_pbuf)
+				return; // error
+			if ((_utail + 1) % _usize == _uhead) { // full
+				_pbuf[_uhead].~value_type();
+				_uhead = (_uhead + 1) % _usize;				
+			}
+			_pbuf[_utail] = item;
+			_utail = (_utail + 1) % _usize;			
+		}
 		bool get(value_type& item) noexcept
 		{
 			unique_lock lck(_pmutex);
@@ -110,6 +121,17 @@ namespace ec
 				uh = (uh + 1) % _usize;
 			}
 			return n;
+		}
+		void for_each(std::function<void(value_type& val)> fun) noexcept
+		{
+			unique_lock lck(_pmutex);
+			if (!_pbuf)
+				return;
+			size_t h = _uhead, t = _utail;
+			while (h != t) {
+				fun(_pbuf[h]);
+				h = (h + 1) % _usize;
+			}			
 		}
 	};
 }
