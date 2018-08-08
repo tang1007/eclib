@@ -75,6 +75,8 @@ namespace ec
 	public:
 		size_t parse(const char *s) {
 			_a.clear();
+			if (!s || !(*s))
+				return 0;
 			size_t pos = 0, len = strlen(s);
 			char z[80] = { 0 };
 			if (ec::str_getnext("\x20\t\n\r", s, len, pos, z, sizeof(z)))
