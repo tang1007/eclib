@@ -208,8 +208,8 @@ namespace ec
 		{
 			size_t maclen = 32;
 			if (_cipher_suite == TLS_RSA_WITH_AES_128_CBC_SHA || _cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA)
-				maclen = 20;
-			if (len < 2 * AES_BLOCK_SIZE + 5 + maclen)
+				maclen = 20;			
+			if (len <  53) // 5 + pading16(IV + maclen + datasize)
 				return false;
 			
 			int i;
@@ -613,17 +613,28 @@ namespace ec
 				if (ulen + 5 > nl)
 					break;
 				if (_breadcipher)
-				{
-					if (!decrypt_record(p, ulen + 5, tmp, &ndl))
-					{
-						if (_plog)
-							_plog->add(CLOG_DEFAULT_DBG, "ucid %u Alert decode_error(50)", _ucid);
-						//Alert(2, 50, pout);//decode_error(50)						
-						return TLS_SESSION_ERR;
+				{					
+					if (decrypt_record(p, ulen + 5, tmp, &ndl))
+					{						
+						nret = dorecord(tmp, ndl, pout);
+						if (nret == TLS_SESSION_ERR)
+							return nret;
 					}
-					nret = dorecord(tmp, ndl, pout);
-					if (nret == TLS_SESSION_ERR)
-						return nret;
+					else{
+						if (uct == (uint8_t)tls::rec_handshake && ulen == 2) { //Alert
+							nret = dorecord(p, (int)ulen + 5, pout);
+							if (nret == TLS_SESSION_ERR)
+								return nret;
+						}
+						else {
+							if (_plog) {
+								_plog->add(CLOG_DEFAULT_DBG, "ucid %u Alert decode_error(50):record size %u", _ucid, ulen + 5);
+								_plog->addbin(CLOG_DEFAULT_DBG, p, ulen > 128 ? 128 : ulen);
+							}
+							//Alert(2, 50, pout);//decode_error(50)						
+							return TLS_SESSION_ERR;
+						}
+					}					
 				}
 				else
 				{					
@@ -881,14 +892,16 @@ namespace ec
 			if (p[0] == tls::rec_handshake)
 				return dohandshakemsg(p + 5, sizerec - 5, pout);
 			else if (p[0] == tls::rec_alert) {
-				if (_plog)
-					_plog->add(CLOG_DEFAULT_ERR, "Alert level = %d, , AlertDescription = %d", p[5], p[6]);
+				if (_plog) {
+					_plog->add(CLOG_DEFAULT_WRN, "Alert level = %d, AlertDescription = %d,size = %zu", p[5], p[6], sizerec);
+					_plog->addbin(CLOG_DEFAULT_DBG, prec, sizerec > 32 ? 32 : sizerec);
+				}
 			}
 			else if (p[0] == tls::rec_change_cipher_spec) {
 				_breadcipher = true;
 				_seqno_read = 0;
 				if (_plog)
-					_plog->add(CLOG_DEFAULT_MSG, "server change_cipher_spec");
+					_plog->add(CLOG_DEFAULT_DBG, "server change_cipher_spec");
 			}
 			else if (p[0] == tls::rec_application_data) {
 				pout->add(p + 5, (int)sizerec - 5);
@@ -1243,8 +1256,10 @@ namespace ec
 			if (p[0] == tls::rec_handshake)
 				return dohandshakemsg(p + 5, sizerec - 5, po);
 			else if (p[0] == tls::rec_alert) {
-				if (_plog)
-					_plog->add(CLOG_DEFAULT_DBG, "Alert level = %d,,AlertDescription = %d", p[5], p[6]);
+				if (_plog) {
+					_plog->add(CLOG_DEFAULT_DBG, "Alert level = %d,AlertDescription = %d,size = %zu", p[5], p[6], sizerec);
+					_plog->addbin(CLOG_DEFAULT_DBG, prec, sizerec > 32 ? 32 : sizerec);
+				}
 			}
 			else if (p[0] == tls::rec_change_cipher_spec) {
 				_breadcipher = true;

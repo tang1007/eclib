@@ -195,7 +195,7 @@ namespace ec
 			size_t maclen = 32;
 			if (_cipher_suite == TLS_RSA_WITH_AES_128_CBC_SHA || _cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA)
 				maclen = 20;
-			if (len < 2 * AES_BLOCK_SIZE + 5 + maclen)
+			if (len <  53) // 5 + pading16(IV + maclen + datasize)
 				return false;
 
             int i;
