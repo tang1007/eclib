@@ -594,6 +594,29 @@ namespace ec {
 			}
 			return true;
 		}
+		bool rpc_send(uint32_t ucid, const void* pdata, size_t bytesize, RPCMSGTYPE msgtype,
+			uint32_t seqno, int timeovermsec = 100) // post send data
+		{
+			t_rpcuserinfo usrinfo;
+			usrinfo._ucid = ucid;
+			if (!_mapss.GetUserInfo(&usrinfo))
+				return false;
+			if (bytesize > 80)
+				return SendRpcMsg(ucid, pdata, bytesize, msgtype, rpccomp_lz4, seqno, usrinfo._pswsha1, timeovermsec);
+			else
+				return SendRpcMsg(ucid, pdata, bytesize, msgtype, rpccomp_none, seqno, usrinfo._pswsha1, timeovermsec);
+		}
+	private:
+		bool SendRpcMsg(uint32_t ucid, const void* pd, size_t size, RPCMSGTYPE msgtype, RPCCOMPRESS compress,
+			uint32_t seqno, const uint8_t* pmask, int timeovermsec = 100)
+		{
+			vector<uint8_t> pkg(size, base_::_pmem);
+			if (args_rpc::MakePkg(pd, size, msgtype, compress, seqno, pmask, base_::_pmem, _mapss.IsEncryptData(), &pkg)) {
+				size_t pkglen = pkg.size();
+				return base_::tcp_post(ucid, pkg.detach_buf(), pkglen, timeovermsec);
+			}
+			return false;
+		}
 	protected:
 		cRpcClientMap _mapss;  //map for  sessions
 	};
