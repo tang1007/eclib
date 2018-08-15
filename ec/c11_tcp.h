@@ -569,6 +569,21 @@ namespace ec
 			_poll.add_event(ucid, optcode, 0, pdata, datasize);
 			return true;
 		}
+		bool tcp_post(uint32_t ucid, void* pdata, size_t bytesize, int timeovermsec = 100) // post data, warning: zero copy, direct put pdata pointer to send buffer
+		{
+			int nerr = _poll.post_msg(ucid, pdata, bytesize);
+			if (nerr < 0)
+				return false;
+			int nt = timeovermsec / 2, i = 0;;
+			if (nt % 2)
+				nt++;
+			while (!nerr && i < nt) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				nerr = _poll.post_msg(ucid, pdata, bytesize);
+				i++;
+			}
+			return nerr > 0;
+		}
 		void stop()
 		{
 			if (_fd_listen) {
