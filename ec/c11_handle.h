@@ -2,7 +2,7 @@
 \file c11_handle.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.7.22
+\update 2018.8.18
 
 eclib for handle template class 
 
@@ -32,6 +32,11 @@ limitations under the License.
 
 #include "c11_map.h"
 #include "c11_mutex.h"
+
+#ifndef EC_HANDLE_UVSIZE
+#define EC_HANDLE_UVSIZE 4  // user data
+#endif
+
 namespace ec
 {
 	template<class _Ty>
@@ -42,6 +47,11 @@ namespace ec
 		struct t_i {
 			int key;
 			value_type *pcls;
+			union {
+				void* pv;
+				int32_t iv;
+				int64_t lv;
+			}uv[EC_HANDLE_UVSIZE];//app data
 		};	
 		int _next;
 		std::mutex _cs;
@@ -74,6 +84,7 @@ namespace ec
 			while (_map.get(_next))
 				nexthv();
 			t_i tmp;
+			memset(&tmp, 0, sizeof(tmp));
 			tmp.key = _next;			
 			tmp.pcls = new value_type();
 			_map.set(tmp.key, tmp);
@@ -104,5 +115,73 @@ namespace ec
 		{
 			return GetClsByHandle(h);
 		}
+
+		void *getpv(int h, int nindex) {
+			unique_lock lck(&_cs);
+			t_i* p = _map.get(h);
+			if (p) {
+				if (nindex < 0 || nindex >= EC_HANDLE_UVSIZE)
+					return nullptr;
+				return p->uv[nindex].pv;
+			}				
+			return nullptr;			
+		}
+
+		int32_t getiv(int h, int nindex) {
+			unique_lock lck(&_cs);
+			t_i* p = _map.get(h);
+			if (p) {
+				if (nindex < 0 || nindex >= EC_HANDLE_UVSIZE)
+					return 0;
+				return p->uv[nindex].iv;
+			}
+			return 0;
+		}
+
+		int64_t getlv(int h, int nindex) {
+			unique_lock lck(&_cs);
+			t_i* p = _map.get(h);
+			if (p) {
+				if (nindex < 0 || nindex >= EC_HANDLE_UVSIZE)
+					return 0;
+				return p->uv[nindex].lv;
+			}
+			return 0;
+		}
+
+		bool setpv(int h, int nindex,void *v) {
+			unique_lock lck(&_cs);
+			t_i* p = _map.get(h);
+			if (p) {
+				if (nindex < 0 || nindex >= EC_HANDLE_UVSIZE)
+					return false;
+				p->uv[nindex].pv = v;
+				return true;
+			}
+			return false;
+		}
+
+		bool setiv(int h, int nindex, int32_t v) {
+			unique_lock lck(&_cs);
+			t_i* p = _map.get(h);
+			if (p) {
+				if (nindex < 0 || nindex >= EC_HANDLE_UVSIZE)
+					return false;
+				p->uv[nindex].iv = v;
+				return true;
+			}
+			return false;
+		}
+		bool setlv(int h, int nindex, int64_t v) {
+			unique_lock lck(&_cs);
+			t_i* p = _map.get(h);
+			if (p) {
+				if (nindex < 0 || nindex >= EC_HANDLE_UVSIZE)
+					return false;
+				p->uv[nindex].lv = v;
+				return true;
+			}
+			return false;
+		}		
 	};	
 };
