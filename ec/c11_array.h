@@ -207,5 +207,16 @@ namespace ec {
 		{
 			std::sort(istart, iend, cmp);
 		}
+		bool insert(size_type pos, const value_type *pval, size_t insize = 1) noexcept // insert before
+		{
+			if (_size + insize > _bufsize || !insize || !pval)
+				return false;
+			if (_size >= _size)
+				return add(pval, insize);
+			memmove(&_data[pos] + insize, &_data[pos], (_size - pos) * sizeof(value_type));
+			memcpy(&_data[pos], pval, insize * sizeof(value_type));
+			_size += insize;
+			return true;
+		}
 	};
 }
