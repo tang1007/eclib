@@ -203,5 +203,9 @@ namespace ec {
 			if (size <= _bufsize)
 				_size = size;
 		}
+		inline void sort(iterator istart, iterator iend, bool(*cmp)(const value_type& v1, const value_type& v2))
+		{
+			std::sort(istart, iend, cmp);
+		}
 	};
 }
