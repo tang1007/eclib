@@ -1253,7 +1253,7 @@ namespace ec
 			}
 			return static_cast<_CLS*>(this)->dosend(ucid, &vret, waitmsec);
 		}
-		inline int http_send(unsigned int ucid, vector<uint8_t> *pvd, int waitmsec = 0)
+		inline int http_send(unsigned int ucid, vector<uint8_t> *pvd, int waitmsec = 100)
 		{
 			return  static_cast<_CLS*>(this)->dosend(ucid, pvd, waitmsec);
 		}
