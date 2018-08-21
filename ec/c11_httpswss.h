@@ -89,7 +89,7 @@ namespace ec {
 		void dodisconnect(uint32_t ucid) {
 			base_::disconnect(ucid);
 		};
-		int  dosend(uint32_t ucid, vector<uint8_t>* pvd, int timeovermsec = 0)
+		int  dosend(uint32_t ucid, vector<uint8_t>* pvd, int timeovermsec = 100)
 		{
 			if (!base_::tls_post(ucid, pvd->data(), pvd->size(), timeovermsec))
 				return -1;
