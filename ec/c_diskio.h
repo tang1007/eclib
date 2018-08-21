@@ -17,6 +17,7 @@
 #ifdef _WIN32
 #include  <io.h>
 #include <windows.h>
+#include <sys/stat.h>
 #else
 #include <string.h>
 #include <sys/types.h>
