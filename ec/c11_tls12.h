@@ -87,7 +87,7 @@ namespace tls
 #define TLSVER_MAJOR        3
 #define TLSVER_NINOR        3
 
-#define TLS_CBCBLKSIZE  16296   // (16384-16-32-32 - 4)
+#define TLS_CBCBLKSIZE  16292   // (16384-16-32-32 - 8)
 
 #define TLS_SESSION_ERR		(-1)// error
 #define TLS_SESSION_NONE    0 
