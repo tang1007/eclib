@@ -110,7 +110,7 @@ namespace ec {
 		bool tls_post(uint32_t ucid, const void* pdata, size_t size, int waitmsec = 100)
 		{
 			ec::unique_lock lck(_psss->getcs());
-			vector<uint8_t> pkg(88 * (size / TLS_CBCBLKSIZE) + size + 88 - size % 88, base_::_pmem);
+			vector<uint8_t> pkg(128 * (size / TLS_CBCBLKSIZE) + size + 256 - size % 128, base_::_pmem);
 			if (!_psss->mkr_appdata(ucid, &pkg, pdata, size))
 				return false;
 			if (pkg.size())
@@ -194,7 +194,7 @@ namespace ec {
 
 		bool tls_post(const void* pd, size_t size, int timeovermsec = 100)
 		{
-			vector<uint8_t> pkg(88 * (size / TLS_CBCBLKSIZE) + size + 88 - size % 88, base_::_pmem);
+			vector<uint8_t> pkg(128 * (size / TLS_CBCBLKSIZE) + size + 256 - size % 128, base_::_pmem);
 			if (!_tls.MakeAppRecord(&pkg, pd, size))
 				return false;
 			return base_::tcp_post(&pkg, timeovermsec);// zero copy
