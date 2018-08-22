@@ -1192,9 +1192,13 @@ namespace ec
 		{
 			vector<uint8_t> vret(1024 * 2, _pmem);
 			vret.add((const uint8_t*)sret, strlen(sret));
-			http_send(ucid, &vret);
-			if (_plog)
-				_plog->add(CLOG_DEFAULT_DBG, "write ucid %u:\n%s", ucid, sret);
+			int nret = http_send(ucid, &vret);
+			if (_plog) {
+				if(nret > 0)
+					_plog->add(CLOG_DEFAULT_DBG, "http write ucid %u:\n%s", ucid, sret);
+				else
+					_plog->add(CLOG_DEFAULT_DBG, "http write ucid %u failed.\n%s", ucid, sret);
+			}
 		}
 
 		void doreadbytes(unsigned int ucid, const void* pdata, size_t usize)
