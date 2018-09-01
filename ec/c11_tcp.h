@@ -41,11 +41,13 @@ namespace ec
 	class AioTcpClient : public cThread // Asynchronous auto reconnect TCP client, for compatible with windows XP, use the select model
 	{
 	public:
-		AioTcpClient(memory* pmem) : _pmem(pmem), _delaytks(0), _cpevt(128, &_cpevtlock), _fd(INVALID_SOCKET), _bconnect(false)
+		AioTcpClient(memory* pmem) : _pmem(pmem), _delaytks(0), _cpevt(128, &_cpevtlock), _bconnect(false)
 		{
 			memset(_sip, 0, sizeof(_sip));
 			_port = 0;
 			_ucid = 0;
+			memset(&_xitem, 0, sizeof(_xitem));
+			_xitem.fd = INVALID_SOCKET;
 		}
 	public:
 		bool open(const char* sip, uint16_t port)
@@ -146,7 +148,6 @@ namespace ec
 
 		char _sip[32];
 		uint16_t _port;
-		SOCKET _fd;
 
 		std::atomic_bool _bconnect;
 		t_xpoll_item _xitem;
@@ -200,7 +201,6 @@ namespace ec
 #endif
 				::closesocket(_xitem.fd);
 				_xitem.fd = INVALID_SOCKET;
-				_fd = INVALID_SOCKET;
 				static_cast<_CLS*>(this)->ondisconnect();
 			}
 			_slock.unlock();
@@ -224,12 +224,11 @@ namespace ec
 				if (INVALID_SOCKET == s)
 					return;
 				netio_setkeepalive(s);
-				_fd = s;
 				_ucid++;
 				while (!_ucid)
 					_ucid++;
 				memset(&_xitem, 0, sizeof(_xitem));// reset xpollitem
-				_xitem.fd = _fd;
+				_xitem.fd = s;
 				_bconnect = true;			
 				static_cast<_CLS*>(this)->onconnect();
 			}
@@ -240,14 +239,14 @@ namespace ec
 			FD_ZERO(&fdw);
 
 			FD_SET(_udpevt.getfd(), &fdr);
-			FD_SET(_fd, &fdr);
+			FD_SET(_xitem.fd, &fdr);
 			if(!isempty())
-				FD_SET(_fd, &fdw);
-			FD_SET(_fd, &fde);
+				FD_SET(_xitem.fd, &fdw);
+			FD_SET(_xitem.fd, &fde);
 #ifdef _WIN32
 			int nret = ::select(0, &fdr, &fdw, &fde, &tv01);
 #else
-			int nfdmax = _fd;
+			int nfdmax = _xitem.fd;
 			if (nfdmax < _udpevt.getfd())
 				nfdmax = _udpevt.getfd();
 			int nret = ::select(nfdmax + 1, &fdr, &fdw,  &fde, &tv01);
@@ -256,15 +255,15 @@ namespace ec
 				return;
 			if (FD_ISSET(_udpevt.getfd(), &fdr))			
 				_udpevt.reset_event();
-			if (FD_ISSET(_fd, &fde)) {
+			if (FD_ISSET(_xitem.fd, &fde)) {
 				_disconnect(XPOLL_EVT_ST_ERR);
 				return;
 			}
 			t_xpoll_send ts;
 			if (get_send(&ts)) 
 				sendts(&ts);
-			if (FD_ISSET(_fd, &fdr)) 
-				do_read(_fd);		
+			if (FD_ISSET(_xitem.fd, &fdr))
+				do_read(_xitem.fd);
 		};
 	private:
 		bool isempty() {
