@@ -3,7 +3,7 @@
 \brief parse json from string or file
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.8.10
+\update 2018.9.4
 
 eclibe parse json for windows & linux
 
@@ -126,7 +126,7 @@ namespace ec {
 					v.val = nullptr;
 				});
 				_kvs.clear(true);
-			}
+			}			
 		public:
 			json(ec::memory *pmem) : _pmem(pmem), _kvs(SIZE_JSON_KVS_GROWN, pmem) {
 			}
@@ -176,6 +176,27 @@ namespace ec {
 					return from_obj(ps, pe);
 				return false;
 			}
+			static void del_comment(ec::vector<char>* pin, ec::vector<char>* pout) {
+				pout->clear();
+				size_t size = pin->size();
+				const char* s = pin->data(), *sp = s, *se = s + size;
+				while (s < se) {
+					if (*s == '/') {
+						if (s != pin->data() && *(s - 1) == '*' && !sp)  // */
+							sp = s + 1;
+					}
+					else if (*s == '*') {
+						if (s != pin->data() && *(s - 1) == '/') { // /*
+							if (sp && s > sp + 1)
+								pout->add(sp, s - sp - 1);
+							sp = nullptr;
+						}
+					}
+					s++;
+				}
+				if (sp && s > sp + 1)
+					pout->add(sp, s - sp - 1);
+			}
 			bool from_file(const char *sfile) {
 				if (!sfile)
 					return false;
@@ -186,6 +207,7 @@ namespace ec {
 				if (!(c == 0xef && c2 == 0xbb && c3 == 0xbf)) // not utf8 with bom
 					fseek(pf, 0, SEEK_SET);
 				char s[1024 * 8];
+				
 				ec::vector<char> v(1024 * 8, true, _pmem);
 				size_t sz;
 				while ((sz = fread(s, 1, sizeof(s), pf)) > 0)
@@ -193,7 +215,9 @@ namespace ec {
 				fclose(pf);
 				if (!v.size())
 					return false;
-				return from_str(v.data(), v.size());
+				ec::vector<char> vjstr(1024 * 8, true, _pmem);
+				del_comment(&v,&vjstr);
+				return from_str(vjstr.data(), vjstr.size());
 			}
 			inline void prt(int nspace) {
 				while (nspace > 0) {
@@ -317,6 +341,7 @@ namespace ec {
 				if (*ps != '[')
 					return false;
 				ps++;
+				pv = ps;
 				char *s;
 				while (ps < pe)
 				{
@@ -333,6 +358,7 @@ namespace ec {
 						memcpy(s, pv, nv);
 						s[nv] = '\0';
 						_kvs.add(t_i(nullptr, s));
+						pv = ps;
 					}
 					else if (*ps == '\"') { //JSON数组字符串成员
 						ps++;	pv = ps;
@@ -346,9 +372,39 @@ namespace ec {
 						s[nv] = '\0';
 						_kvs.add(t_i(nullptr, s));
 						ps++;
+						pv = ps;
 					}
-					else if (*ps == ']')
+					else if (*ps == ',') {
+						if (pv) {
+							ps_skip(pv, ps);
+							if (pv != ps) {
+								nv = (int)(ps - pv);
+								s = (char*)_pmem->mem_malloc(nv + 1);
+								if (!s)
+									return false;
+								memcpy(s, pv, nv);
+								s[nv] = '\0';
+								_kvs.add(t_i(nullptr, s));								
+							}
+						}
+						ps++;
+						pv = ps;
+					}
+					else if (*ps == ']') {
+						if (pv) {
+							ps_skip(pv, ps);
+							if (pv != ps) {
+								nv = (int)(ps - pv);
+								s = (char*)_pmem->mem_malloc(nv + 1);
+								if (!s)
+									return false;
+								memcpy(s, pv, nv);
+								s[nv] = '\0';
+								_kvs.add(t_i(nullptr, s));
+							}
+						}
 						return true; //结束
+					}
 					else
 						ps++;
 				}
