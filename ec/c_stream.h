@@ -1,7 +1,7 @@
 /*!
 \file c_stream.h
 \author kipway@outlook.com
-\update 2018.1.12
+\update 2018.9.5
 
 eclib class memery stream
 
@@ -20,8 +20,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-#ifndef C_STREAM_H
-#define C_STREAM_H
+
+#pragma once
 #include <memory.h>
 namespace ec
 {
@@ -213,11 +213,14 @@ namespace ec
             return *this;
         };
 
-        inline size_t getpos() { return _pos; };
+        inline size_t getpos() const { return _pos; };
         inline size_t leftsize() { return _size - _pos; }
         inline void* getp() { return _ps; };
 		inline bool iseof() {
 			return _pos == _size;
+		}
+		inline size_t size() const {
+			return _size;
 		}
     protected:
         size_t	_pos;
@@ -226,4 +229,4 @@ namespace ec
     };
 };
 
-#endif
+
