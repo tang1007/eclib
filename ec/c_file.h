@@ -428,7 +428,8 @@ namespace ec
 				if (bprtinfo) {
 					ncur = (int)(n / n100);
 					if (np != ncur) {
-						printf("%%%3d\r", 100 - np);
+						printf("\r%%%3d", 100 - np);
+						fflush(stdout);
 						np = ncur;
 					}
 				}
@@ -439,6 +440,8 @@ namespace ec
 #else            
 			fsync(m_hFile);
 #endif
+			if (bprtinfo)
+				printf("\r%%100\n");			
 			return true;
 
 		}
