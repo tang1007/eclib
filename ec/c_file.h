@@ -385,15 +385,12 @@ namespace ec
 				return false;
 			memset(stmp, 0, sizeof(stmp));
 			int n = nsize;
-			while (n > 0)
-			{
-				if (n >= (int)sizeof(stmp))
-				{
+			while (n > 0) {
+				if (n >= (int)sizeof(stmp)) {
 					if (Write(stmp, (unsigned int)sizeof(stmp)) != (int)sizeof(stmp))
 						return false;
 				}
-				else
-				{
+				else {
 					if (Write(stmp, (unsigned int)n) != n)
 						return false;
 				}
@@ -406,6 +403,44 @@ namespace ec
 			fsync(m_hFile);
 #endif
 			return true;
+		}
+		bool FastGrownTo(int64_t lsize, bool bprtinfo = false)
+		{
+			char stmp[64 * 1024];
+			int64_t lend = Seek(0, seek_end);
+			if (lsize < 0 || lend < 0)
+				return false;
+			if (lend >= lsize)
+				return true;
+			memset(stmp, 0, sizeof(stmp));
+			int64_t n = lsize - lend, n100 = n / 100;
+			int np = 100, ncur;
+			while (n > 0) {
+				if (n >= (int)sizeof(stmp)) {
+					if (Write(stmp, (unsigned int)sizeof(stmp)) != (int)sizeof(stmp))
+						return false;
+				}
+				else {
+					if (Write(stmp, (unsigned int)n) != n)
+						return false;
+				}
+				n -= (int)sizeof(stmp);
+				if (bprtinfo) {
+					ncur = (int)(n / n100);
+					if (np != ncur) {
+						printf("%%%3d\r", 100 - np);
+						np = ncur;
+					}
+				}
+			}
+#ifdef _WIN32
+			if (!::SetEndOfFile(m_hFile))
+				return false;
+#else            
+			fsync(m_hFile);
+#endif
+			return true;
+
 		}
 #else
 		bool FastGrown(int nsize)
@@ -428,7 +463,6 @@ namespace ec
 		}
 		bool FastGrownTo(int64_t lsize)
 		{
-			int64_t lend = Seek(0, seek_end);
 			if (lsize < 0 || Seek(lsize - 1, seek_set) < 0)
 				return false;
 			char c = 0;
