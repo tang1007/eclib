@@ -32,6 +32,7 @@ limitations under the License.
 #include "c11_map.h"
 #include "c11_fifo.h"
 #include "c11_vector.h"
+#include "c11_log.h"
 
 #ifdef _WIN32
 #	include <windows.h>
@@ -228,14 +229,15 @@ namespace ec {
 		udpevt _udpevt;
 		uint32_t _unextid, _umaxconnects;
 
+		cLog* _plog;
 	public:
-		xpoll(uint32_t maxconnum) :
+		xpoll(uint32_t maxconnum, cLog* plog = nullptr) :
 			_cpevt(maxconnum * 5, &_cpevtlock),
 			_memread(XPOLL_READ_BLK_SIZE, 16 + maxconnum / 8, 0, 0, 0, 0, &_memread_lock),
 			_memmap(ec::map<uint32_t, t_xpoll_item>::size_node(), maxconnum),
 			_map(11 + (uint32_t)(maxconnum / 3), &_memmap),
 			_pollfd(maxconnum),
-			_pollkey(maxconnum), _unextid(100), _umaxconnects(maxconnum)
+			_pollkey(maxconnum), _unextid(100), _umaxconnects(maxconnum), _plog(plog)
 		{
 			_posnext = 0;
 			_fdchanged = false;
@@ -474,6 +476,8 @@ namespace ec {
 				do_sendbyte(ps, -1);
 				return -1;
 			}
+			if (ns > 1024 * 64)
+				ns = 1024 * 64;
 #ifdef _WIN32            
 			nret = ::send(ps->fd, (char*)ps->pd + ps->usendsize, ns, 0);
 			if (-1 == nret) {
@@ -482,6 +486,8 @@ namespace ec {
 					do_sendbyte(ps, 0);
 					return 0;
 				}
+				if (_plog)
+					_plog->add(CLOG_DEFAULT_ERR, "ucid %u send error =%d", ps->ucid, nerr);
 			}
 #else
 			nret = ::send(ps->fd, (char*)ps->pd + ps->usendsize, ns, MSG_DONTWAIT | MSG_NOSIGNAL);
@@ -490,6 +496,8 @@ namespace ec {
 					do_sendbyte(ps, 0);
 					return 0;
 				}
+				if (_plog)
+					_plog->add(CLOG_DEFAULT_ERR,"ucid %u send error =%d", ps->ucid, errno);				
 			}
 #endif
 			if (nret > 0)
@@ -565,8 +573,10 @@ namespace ec {
 						nret = 1;
 					return nret;
 				}
-				else
+				else {
+					pi->usendsize = ps->usendsize;
 					nret = 1;
+				}
 			}
 			else if (nerr == 0)
 			{
@@ -578,6 +588,8 @@ namespace ec {
 					if (pi->lasterr && (tcur - pi->lasterr) > 5) {
 						_maplock.unlock();
 						do_delete(ps->ucid, XPOLL_EVT_ST_ERR);
+						if (_plog)
+							_plog->add(CLOG_DEFAULT_ERR, "ucid %u send timeout", ps->ucid);
 						return 0;
 					}
 				}

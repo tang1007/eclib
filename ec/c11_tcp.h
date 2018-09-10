@@ -513,7 +513,7 @@ namespace ec
 	{
 	public:
 		AioTcpSrv(uint32_t maxconnum, ec::cLog* plog, memory* pmem, void* pappcls = nullptr, void* pargs = nullptr) : _pmem(pmem), _bkeepalivefast(false), _busebnagle(true), _wport(0),
-			_plog(plog), _poll(maxconnum) {
+			_plog(plog), _poll(maxconnum, plog) {
 		}
 		inline int getsendnodone(uint32_t ucid) { // get send not done pkg number
 			return _poll.sendnodone(ucid);
