@@ -304,6 +304,8 @@ namespace ec
 				do_sendbyte(ps, -1);
 				return -1;
 			}
+			if (ns > 1024 * 64)
+				ns = 1024 * 64;
 #ifdef _WIN32            
 			nret = ::send(ps->fd, (char*)ps->pd + ps->usendsize, ns, 0);
 			if (-1 == nret) {
@@ -346,8 +348,10 @@ namespace ec
 						nret = 1;
 					return nret;
 				}
-				else
+				else {
+					pi->usendsize = ps->usendsize;
 					nret = 1;
+				}
 			}
 			else if (nerr == 0)
 			{
