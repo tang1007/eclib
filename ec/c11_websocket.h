@@ -30,6 +30,7 @@ limitations under the License.
 #include <stdio.h>
 #include "c11_netio.h"
 #include "c11_config.h"
+#include "c_diskio.h"
 
 #include "c_base64.h"
 
@@ -40,6 +41,9 @@ limitations under the License.
 #ifndef stricmp
 #define stricmp(a,b)    strcasecmp(a,b)
 #endif // stricmp
+#endif
+#ifndef MAX_FILESIZE_HTTP_DOWN
+#define MAX_FILESIZE_HTTP_DOWN (1024 * 1024 * 32u)
 #endif
 
 #define EC_SIZE_WS_FRAME (1024 * 62)
@@ -78,6 +82,7 @@ namespace ec
 		he_ver,
 	};
 	static const char* http_sret404 = "http/1.1 404  not found!\r\nServer:rdb5 websocket server\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:9\r\n\r\nnot found";
+	static const char* http_sret404outsize = "http/1.1 404  over size!\r\nServer:rdb5 websocket server\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:15\r\n\r\nfile over size!";
 	static const char* http_sret400 = "http/1.1 400  Bad Request!\r\nServer:rdb5 websocket server\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:11\r\n\r\nBad Request";
 
 	struct t_httpmime
@@ -112,7 +117,7 @@ namespace ec
 		err = deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15, 8, Z_DEFAULT_STRATEGY);
 		if (err != Z_OK)
 			return err;
-
+		uLong uout = 0;
 		stream.avail_out = 0;
 		while (!stream.avail_out) {
 			stream.next_out = (unsigned char*)outbuf;
@@ -120,7 +125,46 @@ namespace ec
 			err = deflate(&stream, Z_SYNC_FLUSH);
 			if (err != Z_OK)
 				break;
-			pout->add(outbuf, stream.total_out - (uLong)pout->size());
+			if(!pout->add(outbuf, stream.total_out - uout)) {
+				err = Z_MEM_ERROR;
+				break;
+			}
+			uout += stream.total_out - uout;
+		}
+		deflateEnd(&stream);
+		return err;
+	}
+
+	inline int ws_encode_zlib(const void *pSrc, size_t size_src, ec::vector<uint8_t>* pout)//pout first two byte x78 and x9c,the end  0x00 x00 xff xff, no  adler32
+	{
+		z_stream stream;
+		int err;
+		uint8_t outbuf[SIZE_WSZLIBTEMP];
+
+		stream.next_in = (z_const Bytef *)pSrc;
+		stream.avail_in = (uInt)size_src;
+
+		stream.zalloc = (alloc_func)0;
+		stream.zfree = (free_func)0;
+		stream.opaque = (voidpf)0;
+
+		err = deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15, 8, Z_DEFAULT_STRATEGY);
+		if (err != Z_OK)
+			return err;
+
+		uLong uout = 0;
+		stream.avail_out = 0;
+		while (!stream.avail_out) {
+			stream.next_out = (unsigned char*)outbuf;
+			stream.avail_out = (unsigned int)sizeof(outbuf);
+			err = deflate(&stream, Z_SYNC_FLUSH);
+			if (err != Z_OK)
+				break;
+			if (!pout->add(outbuf, stream.total_out - uout)) {
+				err = Z_MEM_ERROR;
+				break;
+			}
+			uout += stream.total_out - uout;
 		}
 		deflateEnd(&stream);
 		return err;
@@ -142,13 +186,18 @@ namespace ec
 		err = inflateInit(&stream);
 		if (err != Z_OK)
 			return err;
+		uLong uout = 0;
 		while (stream.avail_in > 0) {
 			stream.next_out = (unsigned char*)outbuf;
 			stream.avail_out = (unsigned int)sizeof(outbuf);
 			err = inflate(&stream, Z_SYNC_FLUSH);
 			if (err != Z_OK)
 				break;
-			pout->add(outbuf, stream.total_out - (uLong)pout->size());
+			if(!pout->add(outbuf, stream.total_out - uout)) {
+				err = Z_MEM_ERROR;
+				break;
+			}
+			uout += stream.total_out - uout;
 		}
 		inflateEnd(&stream);
 		return err;
@@ -1120,13 +1169,13 @@ namespace ec
 				httpreterr(ucid, http_sret404);
 				return pPkg->HasKeepAlive();
 			}
-			vector<char>	filetmp(1024 * 4, _pmem);
-			if (!IO::LckRead(sfile, &filetmp)) {
-				httpreterr(ucid, http_sret404);
+			size_t flen = ec::IO::filesize(sfile);
+			if (flen > MAX_FILESIZE_HTTP_DOWN) {
+				httpreterr(ucid, http_sret404outsize);
 				return pPkg->HasKeepAlive();
 			}
-
-			vector<uint8_t>	answer(1024 * 64, _pmem);
+			
+			vector<uint8_t> answer(1024 * 32, true, _pmem);
 			sc = "HTTP/1.1 200 ok\r\n";
 			answer.add((const uint8_t*)sc, strlen(sc));
 
@@ -1160,32 +1209,36 @@ namespace ec
 						break;
 					}
 				}
+			}			
+			vector<char>	filetmp(1024 * 16, true, _pmem);
+			if (!IO::LckRead(sfile, &filetmp)) {
+				httpreterr(ucid, http_sret404);
+				return pPkg->HasKeepAlive();
 			}
-
-			vector<char> encodetmp(filetmp.size() / 2, _pmem);
-			if (HTTPENCODE_DEFLATE == necnode) {
-				if (Z_OK != ec::ws_encode_zlib(filetmp.data(), filetmp.size(), &encodetmp))
-					return false;
-				sprintf(tmp, "Content-Length: %d\r\n\r\n", (int)encodetmp.size());
-			}
-			else
-				sprintf(tmp, "Content-Length: %d\r\n\r\n", (int)filetmp.size());
+			size_t poslen = answer.size(),sizehead;
+			sprintf(tmp, "Content-Length: %9d\r\n\r\n", (int)filetmp.size());
 			answer.add((const uint8_t*)tmp, strlen(tmp));
-
-			if (_plog) {
-				Array<char, 4096> atmp;
-				atmp.add((const char*)answer.data(), answer.size());
-				atmp.add((char)0);
-				_plog->add(CLOG_DEFAULT_DBG, "write ucid %u:", ucid);
-				_plog->append(CLOG_DEFAULT_DBG, "%s", atmp.data());
-			}
-			if (bGet) { //get			
-				if (HTTPENCODE_DEFLATE == necnode)
-					answer.add((const uint8_t*)encodetmp.data(), encodetmp.size());
-				else
+			sizehead = answer.size();
+			if (HTTPENCODE_DEFLATE == necnode) {
+				if (Z_OK != ec::ws_encode_zlib(filetmp.data(), filetmp.size(), &answer)) {		
+					if(_plog)
+						_plog->add(CLOG_DEFAULT_ERR, "ucid %u ws_encode_zlib failed", ucid);
+					return false;
+				}
+				filetmp.~vector();
+				sprintf(tmp, "Content-Length: %9d\r\n\r\n", (int)(answer.size() - sizehead));
+				memcpy(answer.data() + poslen, tmp, strlen(tmp));	// reset Content-Length	
+				if (!bGet)
+					answer.set_size(sizehead);
+			}	
+			else {
+				if (bGet)
 					answer.add((const uint8_t*)filetmp.data(), filetmp.size());
 			}
-			return http_send(ucid, &answer) > 0;
+									
+			if (_plog)
+				_plog->add(CLOG_DEFAULT_MSG, "write ucid %u size %zu", ucid, answer.size());
+			return http_send(ucid, &answer) > 0;			
 		}
 
 		void httpreterr(unsigned int ucid, const char* sret)
