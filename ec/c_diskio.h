@@ -284,6 +284,7 @@ namespace ec
                 }
                 else {
                     *pct = *lpszPath;
+					cl = *pct;
                     pct++;
                     *pct = '\0';
                 }
