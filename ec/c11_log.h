@@ -345,6 +345,26 @@ namespace ec
 				append(level,"%s", o);
 			}
 		}
+
+		void addstr(int level, const char* pm, size_t size)
+		{
+			if (level > _cfg._outleval)
+				return;
+			unique_lock lock(&_cs);			
+			cTime ctm(time(NULL));
+
+			unsigned int udate = ((unsigned int)ctm._year) << 16 | ((unsigned int)ctm._mon) << 8 | (unsigned int)ctm._day;
+			if (udate != _udate) {
+				Write2Disk();
+				_udate = udate;
+				_nFileNo = 1;
+				sprintf(_scurlogfile, "%04d%02d%02d-%04d.txt", ctm._year, ctm._mon, ctm._day, _nFileNo);
+			}			
+			_buf.add(pm, size);
+			if (_buf.size() > RUNLOG_BUFSIZE / 2 )
+				Write2Disk();
+		}
+
 	protected:		
 		bool _open( bool bLineStyleWin = false)
 		{
