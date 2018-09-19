@@ -27,7 +27,7 @@ limitations under the License.
 #pragma once
 #include "c_minisrv.h"
 #include "c_tcp_tl.h"
-#include "c_log.h"
+#include "c11_log.h"
 #ifndef MINI_PKG_FLAG
 #	define MINI_PKG_FLAG 0xF5
 #endif
@@ -105,7 +105,7 @@ namespace ec
 			ss > &h.msglen;
 			if (h.sync != MINI_PKG_FLAG || h.flag != 0x10 || h.msglen > MINI_MSG_MAXSIZE) {
 				if (plog) {
-					plog->AddLog("ERR: parsepkg failed sync=%u,flag=%u,msglen=%u", h.sync, h.flag, h.msglen);
+					plog->add(CLOG_DEFAULT_ERR,"parsepkg failed sync=%u,flag=%u,msglen=%u", h.sync, h.flag, h.msglen);
 					//plog->AddLogMem(pu, _rbuf.size());
 				}
 				return -1;
@@ -156,7 +156,7 @@ namespace ec
 		{			
 			if (!pid->pcls) {
 				if (_plog) {
-					_plog->AddLog("ERR: ucid %u onreadbytes pid->pcls==null", pid->uid);					
+					_plog->add(CLOG_DEFAULT_ERR,"ucid %u onreadbytes pid->pcls==null", pid->uid);					
 				}
 				return false;
 			}
