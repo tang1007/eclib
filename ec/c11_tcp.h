@@ -208,7 +208,7 @@ namespace ec
 				add_event(_ucid, XPOLL_EVT_OPT_SEND, status, t.pkg[t.uhead].pd, 0);
 				_udpevt.set_event();
 				t.uhead = (t.uhead + 1) % XPOLL_SEND_PKG_NUM;
-			}		
+			}
 		}
 	protected:
 		virtual	void dojob()
@@ -229,7 +229,7 @@ namespace ec
 					_ucid++;
 				memset(&_xitem, 0, sizeof(_xitem));// reset xpollitem
 				_xitem.fd = s;
-				_bconnect = true;			
+				_bconnect = true;
 				static_cast<_CLS*>(this)->onconnect();
 			}
 			TIMEVAL tv01 = { 0, 100 * 1000 }; // 100 ms
@@ -240,7 +240,7 @@ namespace ec
 
 			FD_SET(_udpevt.getfd(), &fdr);
 			FD_SET(_xitem.fd, &fdr);
-			if(!isempty())
+			if (!isempty())
 				FD_SET(_xitem.fd, &fdw);
 			FD_SET(_xitem.fd, &fde);
 #ifdef _WIN32
@@ -249,18 +249,18 @@ namespace ec
 			int nfdmax = _xitem.fd;
 			if (nfdmax < _udpevt.getfd())
 				nfdmax = _udpevt.getfd();
-			int nret = ::select(nfdmax + 1, &fdr, &fdw,  &fde, &tv01);
+			int nret = ::select(nfdmax + 1, &fdr, &fdw, &fde, &tv01);
 #endif
 			if (nret <= 0)
 				return;
-			if (FD_ISSET(_udpevt.getfd(), &fdr))			
+			if (FD_ISSET(_udpevt.getfd(), &fdr))
 				_udpevt.reset_event();
 			if (FD_ISSET(_xitem.fd, &fde)) {
 				_disconnect(XPOLL_EVT_ST_ERR);
 				return;
 			}
 			t_xpoll_send ts;
-			if (get_send(&ts)) 
+			if (get_send(&ts))
 				sendts(&ts);
 			if (FD_ISSET(_xitem.fd, &fdr))
 				do_read(_xitem.fd);
@@ -343,7 +343,7 @@ namespace ec
 					pi->lasterr = 0;
 					pi->usendsize = 0;
 					_slock.unlock();
-					add_event(ps->ucid, XPOLL_EVT_OPT_SEND, XPOLL_EVT_ST_OK, ps->pd, ps->usendsize);					
+					add_event(ps->ucid, XPOLL_EVT_OPT_SEND, XPOLL_EVT_ST_OK, ps->pd, ps->usendsize);
 					if (pi->uhead != pi->utail)
 						nret = 1;
 					return nret;
@@ -609,8 +609,8 @@ namespace ec
 				});//stop all workers
 				_workers.clear();
 				_fd_listen = INVALID_SOCKET;
+			}
 		}
-	}
 	private:
 		SOCKET listen_port(unsigned short wport, const char* sip = nullptr)
 		{
@@ -706,8 +706,8 @@ namespace ec
 #endif
 				::closesocket(sAccept);
 				return;
-		}
-};
+			}
+		};
 	};
 #endif
 } // namespace ec
