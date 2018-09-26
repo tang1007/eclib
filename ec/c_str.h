@@ -113,6 +113,8 @@ namespace ec
 
 	inline bool str_eq(const char* s1, const char* s2)
 	{
+		if (!s1 || !s2)
+			return false;
 		while (*s1 && *s2) {
 			if (*s1++ != *s2++)
 				return false;
@@ -122,6 +124,8 @@ namespace ec
 
 	inline bool str_ieq(const char* s1, const char* s2)
 	{
+		if (!s1 || !s2)
+			return false;
 		while (*s1 && *s2) {
 			if (*s1 != *s2 && tolower(*s1) != tolower(*s2))
 				return false;
@@ -133,6 +137,8 @@ namespace ec
 
 	inline bool str_neq(const char* s1, const char* s2, size_t n)
 	{
+		if (!s1 || !s2)
+			return false;
 		size_t i = 0;
 		while (i < n && *s1 && *s2) {
 			if (*s1++ != *s2++)
@@ -144,6 +150,8 @@ namespace ec
 
 	inline bool str_ineq(const char* s1, const char* s2, size_t n)
 	{
+		if (!s1 || !s2)
+			return false;
 		size_t i = 0;
 		while (i < n && *s1 && *s2) {
 			if (*s1 != *s2 && tolower(*s1) != tolower(*s2))
