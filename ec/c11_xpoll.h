@@ -283,6 +283,7 @@ namespace ec {
 			evt.pdata = pdata;
 			evt.ubytes = (uint32_t)datasize;
 			add_evt_wait(evt);
+			_evtiocp.SetEvent();
 		}
 		bool add_fd(SOCKET fd, const char* sinfo) //add to pool
 		{
@@ -421,7 +422,7 @@ namespace ec {
 			if (nr > 0)
 			{
 				if (!bfull)
-					_evtcanadd.SetEvent();
+					_evtcanadd.SetEvent();				
 				return true;
 			}
 			else if (nr < 0)
