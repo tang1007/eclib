@@ -154,6 +154,7 @@ namespace ec
 				_sclient = acp();
 				if (INVALID_SOCKET == _sclient)
 					continue;
+				SetTcpNoDelay(_sclient);
 				while (!_bKilling)//read
 				{
 					nr = tcp_read(_sclient, buf, (int)sizeof(buf), 100);
@@ -426,6 +427,7 @@ namespace ec
 				_sclient = tcp_connect("127.0.0.1", _port, 2);
 				if (INVALID_SOCKET == _sclient)
 					continue;
+				SetTcpNoDelay(_sclient);
 				nr = _pkg.send(_sclient, _psw, (int)strlen(_psw) + 1);//send login message
 				if (SOCKET_ERROR == nr)
 				{
