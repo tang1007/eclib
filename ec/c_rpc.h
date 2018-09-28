@@ -44,7 +44,7 @@ ec library is free C++ library.
 
 #include "c_array.h"
 #include "c_str.h"
-#include "c11_log.h"
+#include "c_log.h"
 #include "c_tcp_srv.h"
 #include "c_tcp_cli.h"
 #include "c_crc32.h"
@@ -931,11 +931,11 @@ namespace ec
                 ntf.out[0] = 0;
                 _OnNotify(&ntf);
                 if (_plog)
-                    _plog->add(CLOG_DEFAULT_MSG ,"Server(%s) UCID %u TCP disconnected from %s", _srvname, ucid, usrinfo._sip);
+                    _plog->AddLog("MSG: Server(%s) UCID %u TCP disconnected from %s", _srvname, ucid, usrinfo._sip);
                 return;
             }
             if (_plog)
-                _plog->add(CLOG_DEFAULT_MSG, "Server(%s) UCID %u TCP disconnected from %s", _srvname, ucid, usrinfo._sip);
+                _plog->AddLog("MSG: Server(%s) UCID %u TCP disconnected from %s", _srvname, ucid, usrinfo._sip);
         }
         virtual bool	OnReadBytes(unsigned int ucid, const void* pdata, unsigned int usize) //返回false表示要断开客户端连接.
         {
@@ -1159,7 +1159,7 @@ namespace ec
         virtual void    OnConnected(unsigned int ucid, const char* sip)
         {
             if (_plog)
-                _plog->add(CLOG_DEFAULT_MSG,"Server(%s) UCID %u IP=%s TCP connected!", _sname, ucid, sip);
+                _plog->AddLog("MSG: Server(%s) UCID %u IP=%s TCP connected!", _sname, ucid, sip);
             _clients.Add(ucid, sip);
         };
         virtual void	OnRemovedUCID(unsigned int ucid)//继承的类先调用基类的实现
@@ -1178,11 +1178,11 @@ namespace ec
                 ntf.out[0] = 0;
                 _OnNotify(&ntf);
                 if (_plog)
-                    _plog->add(CLOG_DEFAULT_MSG,"Server(%s) UCID %u TCP disconnected from %s", _sname, ucid, usrinfo._sip);
+                    _plog->AddLog("MSG: Server(%s) UCID %u TCP disconnected from %s", _sname, ucid, usrinfo._sip);
                 return;
             }
             if (_plog)
-                _plog->add(CLOG_DEFAULT_MSG,"Server(%s) UCID %u TCP disconnected from %s", _sname, ucid, usrinfo._sip);
+                _plog->AddLog("MSG: Server(%s) UCID %u TCP disconnected from %s", _sname, ucid, usrinfo._sip);
         };
 
         virtual void    CheckNotLogin() //chech not login 
@@ -1200,9 +1200,9 @@ namespace ec
                 {
                     usrinfo._ucid = pu[i];
                     if (_clients.GetUserInfo(&usrinfo))//取用户信息
-                        _plog->add(CLOG_DEFAULT_MSG,"Server(%s) Delete UCID %u IP=%s as long time no login!", _sname, pu[i], usrinfo._sip);
+                        _plog->AddLog("MSG: Server(%s) Delete UCID %u IP=%s as long time no login!", _sname, pu[i], usrinfo._sip);
                     else
-                        _plog->add(CLOG_DEFAULT_MSG,"Server(%s) Delete UCID %u as long time no login!", _sname, pu[i]);
+                        _plog->AddLog("MSG: Server(%s) Delete UCID %u as long time no login!", _sname, pu[i]);
                 }
                 DisconnectUser(pu[i]);
             }
