@@ -1,7 +1,7 @@
 ﻿/*!
 \file c_ipc.h
 \author	kipway@outlook.com
-\update 2018.2.5
+\update 2018.10.9
 
 InterProcess Communication with socket
 
@@ -53,7 +53,7 @@ limitations under the License.
 #define ECIPC_ST_SEND_NOTLOGIN  (-2)
 #define ECIPC_ST_SEND_PKGERR    (-3)
 namespace ec
-{		
+{
 	class ipcpkg // IPC package
 	{
 	public:
@@ -65,15 +65,15 @@ namespace ec
 			uint8_t  flag;
 			uint32_t msglen;
 		};
-	public:		
+	public:
 		static int send(SOCKET sock, const void *pmsg, size_t sizemsg)
 		{
 			if (sizemsg > IPCMSG_MAXSIZE)
 				return ECIPC_ST_SEND_PKGERR;
 			unsigned char head[8]; //sync(1),flag(1),pkglen(4)
 			ec::cStream ss(head, sizeof(head));
-			ss < (uint8_t)0xF5;		
-			ss < (uint8_t)0x10;		
+			ss < (uint8_t)0xF5;
+			ss < (uint8_t)0x10;
 			ss < (uint32_t)(sizemsg);
 			int ns = tcp_send(sock, head, 6);
 			if (ns < 0)
@@ -115,9 +115,9 @@ namespace ec
 				if (_rbuf.capacity() < h.msglen + 6)
 					_rbuf.set_grow(h.msglen + 8);
 				return 0;
-			}			
+			}
 			pout->clear();
-			pout->add(pu + 6, h.msglen);						
+			pout->add(pu + 6, h.msglen);
 			_rbuf.erase(0, h.msglen + 6);
 			_rbuf.shrink(1024 * 32);
 			_rbuf.set_grow(1024 * 16);
@@ -175,7 +175,7 @@ namespace ec
 		};
 		bool onread(const uint8_t* pdata, size_t usize)
 		{
-			int nr = _pkg.parse(pdata, usize,&_msgr);
+			int nr = _pkg.parse(pdata, usize, &_msgr);
 			while (1 == nr)
 			{
 				if (!_nlogin)
@@ -184,7 +184,7 @@ namespace ec
 					if (_msgr.size() > 32 || strcmp(_psw, (const char*)_msgr.data()))
 						return false;
 					_nlogin = 1;
-					send("success", 8);					
+					send("success", 8);
 				}
 				else {
 					if (!OnMsg())
@@ -211,7 +211,7 @@ namespace ec
 #endif
 			_sclient = INVALID_SOCKET;
 		}
-		bool init(uint16_t wport,const char* psw)
+		bool init(uint16_t wport, const char* psw)
 		{
 			if (!wport)
 				return false;
@@ -219,19 +219,19 @@ namespace ec
 				return true;
 			_psw[0] = 0;
 			if (psw)
-				ec::str_ncpy(_psw, psw, sizeof(_psw)-1);
+				ec::str_ncpy(_psw, psw, sizeof(_psw) - 1);
 			_busenagle = false;
 			m_wport = wport;
 			struct sockaddr_in	InternetAddr;
 
-			if ((m_sListen = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == INVALID_SOCKET)
+			if ((m_sListen = socket(AF_UNIX, SOCK_STREAM, IPPROTO_TCP)) == INVALID_SOCKET)
 			{
 #ifndef _WIN32
 				fprintf(stderr, "cIpc_s @port %u bind error!\n", m_wport);
 #endif
 				return false;
 			}
-			InternetAddr.sin_family = AF_INET;
+			InternetAddr.sin_family = AF_UNIX;
 			InternetAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 			InternetAddr.sin_port = htons(m_wport);
 			if (bind(m_sListen, (const sockaddr *)&InternetAddr, sizeof(InternetAddr)) == SOCKET_ERROR)
@@ -309,9 +309,9 @@ namespace ec
 			return 0;
 		}
 #endif
-		bool StartIpcs(uint16_t port,const char* psw)
+		bool StartIpcs(uint16_t port, const char* psw)
 		{
-			if (!init(port,psw))
+			if (!init(port, psw))
 				return false;
 			StartThread(nullptr);
 			return true;
@@ -335,13 +335,13 @@ namespace ec
 			ec::cSafeLock lck(&_cs);
 			if (!_nlogin)
 				return ECIPC_ST_SEND_NOTLOGIN;
-			return _pkg.send(_sclient, pd,size);
+			return _pkg.send(_sclient, pd, size);
 		}
 	};
 	class cIpc_c : public ec::cThread //ipc client
 	{
 	public:
-		cIpc_c() :_port(0), _psw{ 0 }, _sclient(INVALID_SOCKET), _nlogin(0), _msgr(1024*32){
+		cIpc_c() :_port(0), _psw{ 0 }, _sclient(INVALID_SOCKET), _nlogin(0), _msgr(1024 * 32){
 		}
 		virtual ~cIpc_c() {
 			StopThread();
@@ -352,8 +352,8 @@ namespace ec
 			if (IsRun())
 				return true;
 			_port = port;
-			if(psw)
-				ec::str_ncpy(_psw,psw,sizeof(_psw)-1);
+			if (psw)
+				ec::str_ncpy(_psw, psw, sizeof(_psw) - 1);
 			else
 				strcpy(_psw, "ipcpsw");
 			StartThread(nullptr);
@@ -368,7 +368,7 @@ namespace ec
 			ec::cSafeLock lck(&_cs);
 			if (!_nlogin)
 				return ECIPC_ST_SEND_NOTLOGIN;
-			return _pkg.send(_sclient, pd, size);			
+			return _pkg.send(_sclient, pd, size);
 		}
 	protected:
 		uint16_t _port;
@@ -376,9 +376,9 @@ namespace ec
 		SOCKET   _sclient;
 		std::atomic_int _nlogin;
 		ipcpkg  _pkg;
-		ec::vector<uint8_t> _msgr;		
+		ec::vector<uint8_t> _msgr;
 		ec::cCritical _cs;
-	protected:		
+	protected:
 		virtual bool OnMsg() = 0; //Processes messages in _msgr, returning true if successful, false will disconnect	
 		void closeclient()
 		{
@@ -415,16 +415,16 @@ namespace ec
 			}
 			return -1 != nr;
 		}
-		
+
 		virtual	void dojob() // read and connect
-		{			
+		{
 			int nr;
 			uint8_t buf[1024 * 32];
 			while (!_bKilling)//connect
 			{
 				_pkg.clear();
 				_nlogin = 0;
-				_sclient = tcp_connect("127.0.0.1", _port, 2);
+				_sclient = tcp_connect("127.0.0.1", _port, 2, false, true);
 				if (INVALID_SOCKET == _sclient)
 					continue;
 				SetTcpNoDelay(_sclient);
@@ -450,8 +450,8 @@ namespace ec
 					}
 				}
 				closeclient();
-			}				
-		}		
+			}
+		}
 	};
 }
 /*!
