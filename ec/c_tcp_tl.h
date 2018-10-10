@@ -125,16 +125,18 @@ namespace ec
     }
 #endif 
 
-	inline  SOCKET	tcp_connect(const char* sip, unsigned short suport, int nTimeOutSec, bool bFIONBIO = false)
+	inline  SOCKET	tcp_connect(const char* sip, unsigned short suport, int nTimeOutSec, bool bFIONBIO = false,bool bafunix = false)
 	{
 		if (!sip || !*sip || !inet_addr(sip) || !suport)
 			return INVALID_SOCKET;
-
-		struct sockaddr_in ServerHostAddr = { 0 };
-		ServerHostAddr.sin_family = AF_INET;
+		int af = AF_INET;
+		if (bafunix)
+			af = AF_UNIX;
+		struct sockaddr_in ServerHostAddr = { 0 };		
+		ServerHostAddr.sin_family = af;		
 		ServerHostAddr.sin_port = htons(suport);
 		ServerHostAddr.sin_addr.s_addr = inet_addr(sip);
-		SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		SOCKET s = socket(af, SOCK_STREAM, IPPROTO_TCP);
 
 		if (s == INVALID_SOCKET)
 			return INVALID_SOCKET;
