@@ -34,9 +34,13 @@ namespace ec
             dfTim = dfMinus / dfFreq;
         };
 
-        double	time_milli() {
+        inline double	time_milli() {
             return dfTim * 1000.0;
         };
+
+		inline int	time_us() {
+			return (int)(dfTim * 1000000);
+		};
 
     private:
         LARGE_INTEGER   litmp;
@@ -63,6 +67,10 @@ namespace ec
         double	time_milli() {
             return ((_tv2.tv_sec - _tv1.tv_sec) * 1000000 + ((long)_tv2.tv_usec - (long)_tv1.tv_usec)) / 1000.0;
         };
+
+		inline int	time_us() {
+			return (int)((_tv2.tv_sec - _tv1.tv_sec) * 1000000 + ((long)_tv2.tv_usec - (long)_tv1.tv_usec));
+		};
 
     private:
         struct timeval    _tv1;
