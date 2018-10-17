@@ -133,18 +133,18 @@ namespace ec
 	/*!
 	\brief date time
 	fmt:
-	yyyy/mm/dd HH:MM:SS
-	yyyy-mm-dd HH:MM:SS
+	yyyy/mm/dd HH:MM:SS  or yyyy/mm/dd HH:MM:SS.mmm
+	yyyy-mm-dd HH:MM:SS  or yyyy-mm-dd HH:MM:SS.mmm
 	*/
 	class cDatetime
 	{
 	public:
-		cDatetime() :_nyear(0), _nmon(0), _nday(0), _nhour(0), _nmin(0), _nsec(0), _gmt(-1) { };
+		cDatetime() :_nyear(0), _nmon(0), _nday(0), _nhour(0), _nmin(0), _nsec(0), _nmsec(0), _gmt(-1) { };
 		cDatetime(const char *s) :_nyear(0), _nmon(0), _nday(0), _nhour(0), _nmin(0), _nsec(0), _gmt(-1) {
 			parse(s);
 		}
 	public:
-		int _nyear, _nmon, _nday, _nhour, _nmin, _nsec;
+		int _nyear, _nmon, _nday, _nhour, _nmin, _nsec, _nmsec;
 		time_t _gmt;
 		inline bool IsOk() {
 			return _gmt > 0;
@@ -161,7 +161,7 @@ namespace ec
 			char *sp = sd;
 			while (*sp)
 			{
-				if (*sp == '/' || *sp == '-' || *sp == '.') {
+				if (*sp == '/' || *sp == '-') {
 					sf[n++] = 0;
 					np++;
 					if (np > 2)
@@ -185,7 +185,10 @@ namespace ec
 				return false;
 			sf[n] = 0;
 			_nday = atoi(sf);
-
+			_nhour = 0;
+			_nmin = 0;
+			_nsec = 0;
+			_nmsec = 0;
 			if (st[0]) //has time filed
 			{
 				np = 0;  n = 0;
@@ -203,6 +206,16 @@ namespace ec
 							_nmin = atoi(sf);
 						n = 0;
 					}
+					else if (*sp == '.') {
+						sf[n++] = 0;
+						np++;
+						if (np == 3) {
+							_nsec = atoi(sf);
+							if(_nsec > 59 || _nsec < 0)
+								return false;
+						}
+						n = 0;
+					}
 					else if (*sp < '0' || *sp > '9')
 						return false;
 					else {
@@ -212,10 +225,15 @@ namespace ec
 					}
 					sp++;
 				}
-				if (np != 2 || !n)
+				if (np < 2 || !n)
 					return false;
 				sf[n] = 0;
-				_nsec = atoi(sf);
+				if (np == 2)
+					_nsec = atoi(sf);
+				else if (np == 3)
+					_nmsec = atoi(sf);				
+				if (_nmsec < 0 || _nmsec > 999)
+					return false;
 			}
 			if (_nyear < 1970 || _nmon > 12 || _nmon < 1 || _nday >31 || _nday < 1
 				|| _nhour>23 || _nhour < 0 || _nmin < 0 || _nmin > 59 || _nsec < 0 || _nsec > 59)
