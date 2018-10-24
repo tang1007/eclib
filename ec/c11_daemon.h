@@ -2,7 +2,7 @@
 \file c1_daemon.h
 \author	jiangyong
 \author kipway@outlook.com
-\update 2018.6.30
+\update 2018.10.24
 
 eclib template class  for linux daemon server
 
@@ -161,9 +161,10 @@ namespace ec
 					return -1;
 				if (ftruncate(m_nlockfile, 0))
 					return -1;
-				sprintf(buf, "%d", getpid());
-				if (write(m_nlockfile, buf, strlen(buf)))
-					return 0;
+				lseek(m_nlockfile,0,SEEK_SET);
+				sprintf(buf, "%ld\n", (long)getpid());
+				if (write(m_nlockfile, buf, strlen(buf)) <= 0)
+					return -1;
 				return 0;
 			}
 			static  int GetLockPID(const char *spidfile)//get lock PID. ret -1:err; 0:not lock; >0 PID;
