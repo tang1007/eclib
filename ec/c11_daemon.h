@@ -401,8 +401,8 @@ ec::daemon<CRunCls>_server;
 template<>
 	CRunCls * ec::daemon<CRunCls>::_pcls = nullptr;
 
-const char* g_sdamon = "kdserver";
-const char* g_spid = "/var/run/kdserver.pid";
+const char* g_sdamon = "yoursrv";
+const char* g_spid = "/var/run/yoursrv.pid";
 const char* g_sver = "for Linux,Ver = 1.0.0.0,fileversion 1.0.3.5,build 2018.6.14";
 const int   g_damonmsgkey = 8630;
 int main(int argc, char** argv)
