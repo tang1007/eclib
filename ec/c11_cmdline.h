@@ -1,7 +1,7 @@
 ﻿/*!
 \file c11_cmdline.h
 \author kipway@outlook.com
-\update 2018.10.14
+\update 2018.10.25
 
 eclib class cCmdLine ,parse command line
 
@@ -39,7 +39,7 @@ namespace ec
 	class cCmdLine
 	{
 	public:
-		cCmdLine(const char* s) : _scmd{ 0 }, _a(8, true) {
+		cCmdLine(const char* s) : _scmd{ 0 }, _a(8, true), _serr{ 0 }{
 			parse(s);
 		}
 	protected:
@@ -53,7 +53,7 @@ namespace ec
 				ec::str_lcpy(val, v, sizeof(val));
 			}
 			char key[16];
-			char val[80];
+			char val[80];			
 		};
 		char _scmd[32];
 		ec::vector<t_i> _a;
@@ -65,17 +65,28 @@ namespace ec
 			}
 			return s;
 		}
-		void addarg(const char*s) {
+		bool  addarg(const char*s,char *serr,size_t errsize) {
 			size_t pos = 0, len = strlen(s);
 			t_i t;
+			bool badd = false;
 			if (ec::str_getnext("\x20\t\n\r", s, len, pos, t.key, sizeof(t.key))) {
 				if (pos < len) {
 					memcpy(t.val, s + pos, len - pos);
 					t.val[len - pos] = '\0';
 					_a.push_back(t);
+					badd = true;
+					return true;
 				}
-			}
+				else {
+					snprintf(serr, errsize, "%s has no parameter", t.key);
+					return false;
+				}
+			}			
+			snprintf(serr, errsize, "%s error format", s);
+			return false;			
 		}
+	private:
+		char _serr[256];
 	public:
 		bool parse(const char *s) {
 			_scmd[0] = 0;
@@ -96,12 +107,15 @@ namespace ec
 				memcpy(z, ps, pe - ps);
 				z[pe - ps] = 0;
 				ec::str_trim(z);
-				addarg(z);
+				if(!addarg(z,_serr,sizeof(_serr)))
+					return false;
 				ps = pe;
 			}
 			return true;
 		}
-
+		const char* lasterr() {
+			return _serr;
+		}
 		inline const char* cmd() {
 			if (_scmd[0])
 				return _scmd;
