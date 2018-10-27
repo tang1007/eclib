@@ -250,7 +250,8 @@ namespace ec
 			if (level > _cfg._outleval)
 				return;
 			unique_lock lock(&_cs);
-			cTime ctm(time(NULL));
+			int ns = 0;			
+			cTime ctm(nstime(&ns));
 			unsigned int udate = ((unsigned int)ctm._year) << 16 | ((unsigned int)ctm._mon) << 8 | (unsigned int)ctm._day;
 			if (udate != _udate) {
 				Write2Disk();
@@ -260,15 +261,8 @@ namespace ec
 				_lastlogtime = 0;
 			}
 			int npos = 0;
-			if (ctm.GetTime() != _lastlogtime) {
-				sprintf(_slog, "%02d:%02d:%02d [%s] ", ctm._hour, ctm._min, ctm._sec, levelstr(level));
-				npos = (int)strlen(_slog);
-				_lastlogtime = ctm.GetTime();
-			}
-			else {
-				sprintf(_slog, "\t [%s] ", levelstr(level));
-				npos = (int)strlen(_slog);				
-			}
+			snprintf(_slog, sizeof(_slog),"%02d:%02d:%02d.%06d [%s] ", ctm._hour, ctm._min, ctm._sec, ns,levelstr(level));
+			npos = (int)strlen(_slog);			
 
 			va_list arg_ptr;
 			va_start(arg_ptr, format);
