@@ -11,6 +11,8 @@ ec library is free C++ library.
 #define C_TIME_H
 #ifdef _WIN32
 #pragma warning (disable : 4996)
+#else
+#include <sys/time.h>
 #endif
 #include <time.h>
 #include "c_str.h"
@@ -22,6 +24,28 @@ inline unsigned int GetTickCount()
 	return (unsigned int)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 #endif
+
+inline time_t nstime(int *pMicrosecond)
+{
+#ifdef _WIN32
+	FILETIME ft;
+	GetSystemTimeAsFileTime(&ft);
+	ULARGE_INTEGER ul;
+	ul.LowPart = ft.dwLowDateTime;
+	ul.HighPart = ft.dwHighDateTime;
+	if (pMicrosecond)
+		*pMicrosecond = (int)((ul.QuadPart % 10000000LL) / 10);
+
+	return (time_t)(ul.QuadPart / 10000000LL) - 11644473600LL;
+#else
+	struct timeval tv;
+	gettimeofday(&tv, nullptr);
+	if (pMicrosecond)
+		*pMicrosecond = (int)tv.tv_usec;
+	return tv.tv_sec;
+#endif
+}
+
 namespace ec
 {
 	class cTime
@@ -231,7 +255,7 @@ namespace ec
 				if (np == 2)
 					_nsec = atoi(sf);
 				else if (np == 3)
-					_nmsec = atoi(sf);				
+					_nmsec = atoi(sf);
 				if (_nmsec < 0 || _nmsec > 999)
 					return false;
 			}
