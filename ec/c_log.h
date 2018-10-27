@@ -248,7 +248,8 @@ namespace ec
             cSafeLock lock(&_cs);
             if (!_pstr)
                 return;
-            cTime ctm(time(NULL));
+			int ns = 0;
+			cTime ctm(nstime(&ns));            
             unsigned int udate = ((unsigned int)ctm._year) << 16 | ((unsigned int)ctm._mon) << 8 | (unsigned int)ctm._day;
             if (udate != _udate)
             {
@@ -258,20 +259,10 @@ namespace ec
                 sprintf(_scurlogfile, "%04d%02d%02d-%04d.txt", ctm._year, ctm._mon, ctm._day, _nFileNo);
                 _lastlogtime = 0;
             }
-            int npos = 0;
-            if (ctm.GetTime() != _lastlogtime)
-            {
-                sprintf(_slog, "%02d:%02d:%02d ", ctm._hour, ctm._min, ctm._sec);
-                npos = 9;
-                _lastlogtime = ctm.GetTime();
-            }
-            else
-            {
-                _slog[0] = '\t';                
-                _slog[1] = '\x20';
-                npos = 2;
-            }
-
+			int npos = 0;
+			snprintf(_slog, sizeof(_slog), "[%02d:%02d:%02d.%06d] ", ctm._hour, ctm._min, ctm._sec, ns);
+			npos = (int)strlen(_slog);
+			
             va_list arg_ptr;
             va_start(arg_ptr, format);
             int nbytes = vsnprintf(&_slog[npos], MAX_LOG_SIZE, format, arg_ptr);
@@ -302,7 +293,8 @@ namespace ec
 
             if (!_pstr)
                 return;
-            cTime ctm(time(NULL));
+			int ns = 0;
+            cTime ctm(nstime(&ns));
             unsigned int udate = ((unsigned int)ctm._year) << 16 | ((unsigned int)ctm._mon) << 8 | (unsigned int)ctm._day;
             if (udate != _udate)
             {
@@ -311,15 +303,15 @@ namespace ec
                 _nFileNo = 1;
                 sprintf(_scurlogfile, "%04d%02d%02d-%04d.txt", ctm._year, ctm._mon, ctm._day, _nFileNo);
             }
-            sprintf(_slog, "%02d:%02d:%02d ", ctm._hour, ctm._min, ctm._sec);
-
+            snprintf(_slog, sizeof(_slog),"[%02d:%02d:%02d.%06d] ", ctm._hour, ctm._min, ctm._sec, ns);
+			int npos = (int)strlen(_slog);
             va_list arg_ptr;
             va_start(arg_ptr, format);
-            int nbytes = vsnprintf(&_slog[9], MAX_LOG_SIZE, format, arg_ptr);
+            int nbytes = vsnprintf(&_slog[npos], MAX_LOG_SIZE, format, arg_ptr);
             va_end(arg_ptr);
             if (nbytes <= 0 || nbytes >= MAX_LOG_SIZE)
                 return;
-            nbytes += 9;
+            nbytes += npos;
             _slog[nbytes++] = 0x0D;
             _slog[nbytes++] = 0x0A;
             _slog[nbytes] = 0;

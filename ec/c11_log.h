@@ -261,7 +261,7 @@ namespace ec
 				_lastlogtime = 0;
 			}
 			int npos = 0;
-			snprintf(_slog, sizeof(_slog),"%02d:%02d:%02d.%06d [%s] ", ctm._hour, ctm._min, ctm._sec, ns,levelstr(level));
+			snprintf(_slog, sizeof(_slog),"[%02d:%02d:%02d.%06d] [%s] ", ctm._hour, ctm._min, ctm._sec, ns,levelstr(level));
 			npos = (int)strlen(_slog);			
 
 			va_list arg_ptr;
