@@ -2,7 +2,7 @@
 \file c11_netio.h
 \author	jiangyong
 \email  kipway@outlook.com
-update 2018.6.24
+update 2018.10.31
 
 eclibe NETIO for windows & linux
 
@@ -197,6 +197,63 @@ namespace ec {
 #endif
 		return s;
 	}
+
+#ifndef _WIN32
+	inline  SOCKET	afunix_connect(unsigned short uport, int nTimeOutSec, bool bFIONBIO = false)
+	{
+		if (!uport)
+			return INVALID_SOCKET;
+
+		struct sockaddr_un srvaddr;
+		memset(&srvaddr, 0, sizeof(srvaddr));
+		srvaddr.sun_family = AF_UNIX;
+		snprintf(srvaddr.sun_path, sizeof(srvaddr.sun_path), "/var/tmp/ECIPC:%d", uport);
+		SOCKET s = socket(AF_UNIX, SOCK_STREAM, 0);
+
+		if (s == INVALID_SOCKET)
+			return INVALID_SOCKET;
+
+		long ul = 1;
+
+		if (ioctl(s, FIONBIO, &ul) == -1) {
+			closesocket(s);
+			return INVALID_SOCKET;
+		}
+
+		connect(s, (sockaddr *)(&srvaddr), sizeof(srvaddr));
+
+		TIMEVAL tv01 = { nTimeOutSec,0 };
+		fd_set fdw;
+		FD_ZERO(&fdw);
+		FD_SET(s, &fdw);
+		int ne;
+
+		ne = ::select(s + 1, NULL, &fdw, NULL, &tv01);
+
+		if (ne <= 0 || !FD_ISSET(s, &fdw))
+		{
+			closesocket(s);
+			return  INVALID_SOCKET;
+		}
+		ul = 0;
+
+		int serr = 0;
+		socklen_t serrlen = sizeof(serr);
+		getsockopt(s, SOL_SOCKET, SO_ERROR, (void *)&serr, &serrlen);
+		if (serr)
+		{
+			::closesocket(s);
+			return INVALID_SOCKET;
+		}
+		if (!bFIONBIO) {
+			if (ioctl(s, FIONBIO, &ul) == -1) {
+				closesocket(s);
+				return INVALID_SOCKET;
+			}
+		}
+		return s;
+	}
+#endif
 
 	//return send bytes size or -1 for error,use for block or nonblocking  mode
 	inline int netio_tcpsend(SOCKET s, const void* pbuf, int nsize)

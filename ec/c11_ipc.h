@@ -1,9 +1,9 @@
 ﻿/*!
 \file c11_ipc.h
 \author	kipway@outlook.com
-\update 2018.10.13
+\update 2018.10.31
 
-InterProcess Communication with socket AF_UNIX(Linux/windows 10), AF_INET(windows 8 and old version)
+InterProcess Communication with socket AF_UNIX(Linux), AF_INET(windows)
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib
@@ -24,18 +24,7 @@ limitations under the License.
 #include <stdint.h>
 #include <time.h>
 
-#ifdef _WIN32
-#	if(_WIN32_WINNT >= 0x0A00) // windows 10
-#		define USE_AFUNIX 1
-#		define UNIX_PATH_MAX 108
-typedef struct sockaddr_un
-{
-	ADDRESS_FAMILY sun_family;     /* AF_UNIX */
-	char sun_path[UNIX_PATH_MAX];  /* pathname */
-} SOCKADDR_UN, *PSOCKADDR_UN;
-#	endif
-
-#else
+#ifndef _WIN32
 #	define USE_AFUNIX 1
 #	include <unistd.h>
 #	include <pthread.h>
@@ -59,7 +48,7 @@ typedef struct sockaddr_un
 
 #ifndef IPCMSG_MAXSIZE
 #define IPCMSG_MAXSIZE  (1024 * 1024 * 100)
-#endif 
+#endif
 
 #define ECIPC_ST_SEND_ERR		(-1)
 #define ECIPC_ST_SEND_NOTLOGIN  (-2)
@@ -176,6 +165,7 @@ namespace ec
 				if (INVALID_SOCKET == _sclient)
 					continue;
 				SetTcpNoDelay(_sclient);
+				SetSocketKeepAlive(_sclient, true);
 				while (!_bKilling)//read
 				{
 					nr = tcp_read(_sclient, buf, (int)sizeof(buf), 100);
@@ -215,7 +205,7 @@ namespace ec
 			}
 			return -1 != nr;
 		}
-		virtual bool OnMsg() = 0; //Processes messages in _msgr, returning true if successful, false will disconnect		
+		virtual bool OnMsg() = 0; //Processes messages in _msgr, returning true if successful, false will disconnect
 	protected:
 		void closeclient()
 		{
@@ -226,7 +216,7 @@ namespace ec
 #ifdef _WIN32
 			shutdown(_sclient, SD_BOTH);
 			closesocket(_sclient);
-#else						
+#else
 			shutdown(_sclient, SHUT_WR);
 			close(_sclient);
 #endif
@@ -244,14 +234,14 @@ namespace ec
 			_busenagle = false;
 			m_wport = wport;
 
-#ifdef USE_AFUNIX			
+#ifdef USE_AFUNIX
 			if ((m_sListen = socket(AF_UNIX, SOCK_STREAM, 0)) == INVALID_SOCKET)
 				return false;
 
 			struct sockaddr_un Addr;
 			memset(&Addr, 0, sizeof(Addr));
 			Addr.sun_family = AF_UNIX;
-			snprintf(Addr.sun_path, sizeof(Addr.sun_path), "ECIPC:%d", m_wport);
+			snprintf(Addr.sun_path, sizeof(Addr.sun_path), "/var/tmp/ECIPC:%d", m_wport);
 			unlink(Addr.sun_path);
 #else
 			if ((m_sListen = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == INVALID_SOCKET)
@@ -259,9 +249,9 @@ namespace ec
 			struct sockaddr_in	Addr;
 			memset(&Addr, 0, sizeof(Addr));
 			Addr.sin_family = AF_INET;
-			Addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+			Addr.sin_addr.s_addr = inet_addr("127.0.0.191");
 			Addr.sin_port = htons(m_wport);
-#endif						
+#endif
 
 			if (bind(m_sListen, (const sockaddr *)&Addr, sizeof(Addr)) == SOCKET_ERROR) {
 #ifdef _WIN32
@@ -324,7 +314,7 @@ namespace ec
 			return sAccept;
 		}
 	public:
-#ifndef _WIN32	
+#ifndef _WIN32
 		static int  SetNoBlock(int sfd)
 		{
 			int flags, s;
@@ -410,14 +400,14 @@ namespace ec
 			struct sockaddr_un srvaddr;
 			memset(&srvaddr, 0, sizeof(srvaddr));
 			srvaddr.sun_family = AF_UNIX;
-			snprintf(srvaddr.sun_path, sizeof(srvaddr.sun_path), "ECIPC:%d", uport);
+			snprintf(srvaddr.sun_path, sizeof(srvaddr.sun_path), "/var/tmp/ECIPC:%d", uport);
 			SOCKET s = socket(AF_UNIX, SOCK_STREAM, 0);
 #else
 			struct sockaddr_in srvaddr;
 			memset(&srvaddr, 0, sizeof(srvaddr));
 			srvaddr.sin_family = AF_INET;
 			srvaddr.sin_port = htons(uport);
-			srvaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+			srvaddr.sin_addr.s_addr = inet_addr("127.0.0.191");
 			SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 #endif
 			if (s == INVALID_SOCKET)
@@ -477,7 +467,7 @@ namespace ec
 			}
 #endif
 			return s;
-		}
+			}
 	protected:
 		uint16_t _port;
 		char _psw[32];
@@ -487,7 +477,7 @@ namespace ec
 		ec::vector<uint8_t> _msgr;
 		std::mutex _cs;
 	protected:
-		virtual bool OnMsg() = 0; //Processes messages in _msgr, returning true if successful, false will disconnect	
+		virtual bool OnMsg() = 0; //Processes messages in _msgr, returning true if successful, false will disconnect
 		void closeclient()
 		{
 			if (INVALID_SOCKET == _sclient)
@@ -497,7 +487,7 @@ namespace ec
 #ifdef _WIN32
 			shutdown(_sclient, SD_BOTH);
 			closesocket(_sclient);
-#else						
+#else
 			shutdown(_sclient, SHUT_WR);
 			close(_sclient);
 #endif
@@ -536,6 +526,7 @@ namespace ec
 				if (INVALID_SOCKET == _sclient)
 					continue;
 				SetTcpNoDelay(_sclient);
+				SetSocketKeepAlive(_sclient,true);
 				nr = _pkg.send(_sclient, _psw, (int)strlen(_psw) + 1);//send login message
 				if (SOCKET_ERROR == nr)
 				{
@@ -560,13 +551,13 @@ namespace ec
 				closeclient();
 			}
 		}
-	};
-}
+		};
+	}
 /*!
 \exmaple
 
-#include "ec/c_system.h"
-#include "ec/c_ipc.h"
+#include "ec/c11_system.h"
+#include "ec/c11_ipc.h"
 #ifdef _WIN32
 #include "ec/c_usews32.h"
 #endif
@@ -604,10 +595,10 @@ int main(int argc, char* argv[])
 	memset(sod, 0, sizeof(sod));
 
 	mysrv srv;
-	srv.StartIpcs(9527, "password");
+	srv.StartIpcs(9827, "password");
 
 	mycli cli;
-	cli.StartIpcc(9527, "password");
+	cli.StartIpcc(9827, "password");
 
 	while (1)
 	{

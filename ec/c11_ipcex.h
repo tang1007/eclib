@@ -6,9 +6,9 @@
 
 eclibe Asynchronous IPC AF_UNIX(Linux) AF_INET（windows） template class for windows & linux
 
-class AioTcpClient
-class AioTcpSrv
-class AioTcpSrvThread
+class AioIpcClient
+class AioIpcSrv
+class AioIpcSrvThread
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib
@@ -60,23 +60,19 @@ namespace ec
 	public:
 		AioIpcClient(memory* pmem) : _pmem(pmem), _delaytks(0), _cpevt(128, &_cpevtlock), _bconnect(false)
 		{
-			memset(_sip, 0, sizeof(_sip));
 			_port = 0;
 			_ucid = 0;
 			memset(&_xitem, 0, sizeof(_xitem));
 			_xitem.fd = INVALID_SOCKET;
 		}
 	public:
-		bool open(const char* sip, uint16_t port)
+		bool open(uint16_t port)
 		{
-			if (!sip || !sip[0] || !port)
-				return false;
 			if (IsRun())
 				return false;
 			if (!_udpevt.open())
 				return false;
 			_delaytks = 0;
-			strncpy(_sip, sip, sizeof(_sip) - 1);
 			_port = port;
 			StartThread(nullptr);
 			return true;
@@ -162,8 +158,7 @@ namespace ec
 		udpevt _udpevt;
 		std::mutex _cpevtlock;//lock for _cpevt
 		ec::fifo<t_xpoll_event> _cpevt;//completely event
-
-		char _sip[32];
+		
 		uint16_t _port;
 
 		std::atomic_bool _bconnect;
@@ -439,11 +434,11 @@ namespace ec
 #if (!defined _WIN32) || (_WIN32_WINNT >= 0x0600)
 
 	/*! -----------------------------------------------------------------------------------------
-	\brief  Asynchronous TCP server TCP workthread
+	\brief  Asynchronous IPC server IPC workthread
 	send data zero copy. Support for posting custom events
 	*/
 	template<class _CLS>
-	class AioIpcSrvThread : public cThread // Asynchronous TCP server TCP workthread
+	class AioIpcSrvThread : public cThread // Asynchronous IPC server IPC workthread
 	{
 	public:
 		AioIpcSrvThread(xpoll* ppoll, ec::cLog* plog, memory* pmem, int threadno, uint16_t srvport) :
@@ -534,7 +529,7 @@ namespace ec
 	};
 
 	template<class _THREAD, class _CLS>
-	class AioIpcSrv : public cThread // Asynchronous TCP server accpet thread
+	class AioIpcSrv : public cThread // Asynchronous IPC server accpet thread
 	{
 	public:
 		AioIpcSrv(uint32_t maxconnum, ec::cLog* plog, memory* pmem, void* pappcls = nullptr, void* pargs = nullptr) : _pmem(pmem), _bkeepalivefast(false), _busebnagle(true), _wport(0),
@@ -659,7 +654,7 @@ namespace ec
 			struct sockaddr_un netaddr;
 			memset(&netaddr, 0, sizeof(netaddr));
 			netaddr.sun_family = AF_UNIX;
-			snprintf(netaddr.sun_path, sizeof(netaddr.sun_path), "/var/tmp/ecipcex:%d", wport);
+			snprintf(netaddr.sun_path, sizeof(netaddr.sun_path), "/var/tmp/ECIPC:%d", wport);
 			unlink(netaddr.sun_path);
 #endif
 			if (bind(sl, (const sockaddr *)&netaddr, sizeof(netaddr)) == SOCKET_ERROR)
@@ -717,10 +712,7 @@ namespace ec
 				return;
 			}
 #endif
-			char        sip[32] = { 0 };
-			//snprintf(sip, sizeof(sip), "ip:%s\n", inet_ntoa(addrClient.sin_addr));
-			//sip[sizeof(sip) - 1] = 0;
-
+			char        sip[8] = { 0 };
 			netio_setkeepalive(sAccept, _bkeepalivefast);
 			if (!_busebnagle)
 				netio_tcpnodelay(sAccept);
