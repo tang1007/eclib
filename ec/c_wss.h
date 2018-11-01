@@ -416,32 +416,32 @@ namespace ec
 	class cHttpsServer : public cTlsServer
 	{
 	public:
-		cHttpsServer() {};
+		cHttpsServer(cLog* plog):_plog(plog){};
 		virtual ~cHttpsServer() {};
 	public:
 		cHttpCfg        _cfg;    //!<配置
 		cHttpClientMap	_clients;//!<连接客户端
-		cLog		    _log;	 //!<日志
+		cLog*		    _plog;	 //!<日志
 	protected:
 
 		virtual void    OnConnected(unsigned int  ucid, const char* sip)
 		{
 			cTlsServer::OnConnected(ucid, sip);
 			if(_cfg._blogdetail_wss)
-				_log.AddLog("MSG:ucid %u TCP connected from IP:%s!", ucid, sip);
+				_plog->AddLog("MSG:ucid %u TCP connected from IP:%s!", ucid, sip);
 			_clients.Add(ucid, sip);
 		};
 		virtual void	OnRemovedUCID(unsigned int ucid)
 		{
 			if (_clients.Del(ucid) && _cfg._blogdetail_wss)
-				_log.AddLog("MSG:ucid %u disconnected!", ucid);
+				_plog->AddLog("MSG:ucid %u disconnected!", ucid);
 			cTlsServer::OnRemovedUCID(ucid);
 		};
 		virtual void    CheckNotLogin() {};
 
 		virtual ec::cTcpSvrWorkThread* CreateWorkThread()
 		{
-			cHttpsWorkThread* pthread = new cHttpsWorkThread(&_sss, &_clients, &_cfg, &_log);
+			cHttpsWorkThread* pthread = new cHttpsWorkThread(&_sss, &_clients, &_cfg, _plog);
 			return pthread;
 		}
 	public:
@@ -449,15 +449,12 @@ namespace ec
 		{
 			if (!_cfg.ReadIniFile(scfgfile) || !InitCert(_cfg._ca_server, _cfg._ca_root, _cfg._private_key))
 				return false;
-			if (!_log.Start(_cfg._slogpath_wss))
-				return false;
 			return Start(_cfg._wport_wss, uThreads, uMaxConnect);
 		}
 		void StopServer()
 		{
 			Stop();
-			_log.AddLog("MSG:HTTPS server stop success!");
-			_log.Stop();
+			_plog->AddLog("MSG:HTTPS server stop success!");
 		}
 	};
 }//ec
