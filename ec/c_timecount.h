@@ -1,7 +1,8 @@
 
 /*!
 \file timecount.h
-\author	kipway@outlook.com
+\author	jiangyong
+\email	kipway@outlook.com
 \update 2018.10.31
 
 InterProcess Communication with socket AF_UNIX(Linux), AF_INET(windows)
