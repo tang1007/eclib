@@ -1,7 +1,8 @@
 /*
 \file c_time.h
-\author	kipway@outlook.com
-\update 2018.10.31
+\author	jiangyong
+\email	kipway@outlook.com
+\update 2018.11.3
 
 InterProcess Communication with socket AF_UNIX(Linux), AF_INET(windows)
 
@@ -39,6 +40,10 @@ inline unsigned int GetTickCount()
 }
 #endif
 
+/*!
+\param pMicrosecond [out] microsecond,1000000 microseconds = 1 second
+\return seconds from 1970/01/01
+*/
 inline time_t nstime(int *pMicrosecond)
 {
 #ifdef _WIN32
@@ -49,7 +54,6 @@ inline time_t nstime(int *pMicrosecond)
 	ul.HighPart = ft.dwHighDateTime;
 	if (pMicrosecond)
 		*pMicrosecond = (int)((ul.QuadPart % 10000000LL) / 10);
-
 	return (time_t)(ul.QuadPart / 10000000LL) - 11644473600LL;
 #else
 	struct timeval tv;
@@ -62,6 +66,18 @@ inline time_t nstime(int *pMicrosecond)
 
 namespace ec
 {
+	/*!
+	\param lfiletime [in] 100 nanoseconds from 1601/01/01
+	\param pMicrosecond [out] microsecond,1000000 microseconds = 1 second
+	\return seconds from 1970/01/01
+	*/
+	inline int64_t ftime2timet(int64_t lfiletime, int *pMicrosecond)//
+	{
+		if (pMicrosecond)
+			*pMicrosecond = (int)((lfiletime % 10000000LL) / 10);
+		return (lfiletime / 10000000LL) - 11644473600LL;
+	}
+
 	class cTime
 	{
 	public:
