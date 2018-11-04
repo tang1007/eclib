@@ -2,7 +2,7 @@
 \file c11_map.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.6.21
+\update 2018.11.2
 
 eclib class map with c++11. fast noexcept unordered hashmap with safety iterator
 
@@ -69,6 +69,7 @@ namespace ec
 		size_type	_usize;
 	private:
 		ec::memory* _pmem;
+		std::mutex* _pmutex;
 		inline t_node* new_node() {
 			t_node* pnode = nullptr;
 			if (_pmem)
@@ -88,7 +89,8 @@ namespace ec
 				free(p);
 		}
 	public:
-		map(unsigned int uhashsize = 1024, ec::memory* pmem = nullptr) : _ppv(nullptr), _uhashsize(uhashsize), _usize(0), _pmem(pmem)
+		map(unsigned int uhashsize = 1024, ec::memory* pmem = nullptr, std::mutex* pmutex = nullptr) 
+			: _ppv(nullptr), _uhashsize(uhashsize), _usize(0), _pmem(pmem), _pmutex(pmutex)
 		{
 			_ppv = new t_node*[_uhashsize];
 			if (nullptr == _ppv)
@@ -110,8 +112,9 @@ namespace ec
 		{
 			return !_ppv || !_usize;
 		}
-		iterator begin() noexcept
+		iterator begin() noexcept //Multi-thread safe if _pmutex not null
 		{
+			unique_lock lck(_pmutex);
 			iterator ir = 0;
 			if (nullptr == _ppv || !_usize)
 				return ~ir;
@@ -129,8 +132,9 @@ namespace ec
 		{
 			return ~0;
 		}
-		bool set(key_type key, value_type& Value) noexcept
+		bool set(key_type key, value_type& Value) noexcept //Multi-thread safe if _pmutex not null
 		{
+			unique_lock lck(_pmutex);
 			if (nullptr == _ppv)
 			{
 				_ppv = new t_node*[_uhashsize];
@@ -158,8 +162,9 @@ namespace ec
 			_usize++;
 			return true;
 		};
-		bool set(key_type key, value_type&& Value) noexcept
+		bool set(key_type key, value_type&& Value) noexcept //Multi-thread safe if _pmutex not null
 		{
+			unique_lock lck(_pmutex);
 			if (nullptr == _ppv)
 			{
 				_ppv = new t_node*[_uhashsize];
@@ -201,14 +206,16 @@ namespace ec
 		}
 		bool get(key_type key, value_type& Value) noexcept
 		{
+			unique_lock lck(_pmutex);
 			value_type* pv = get(key);
 			if (nullptr == pv)
 				return false;
 			Value = *pv;
 			return true;
 		}
-		void clear() noexcept
+		void clear() noexcept //Multi-thread safe if _pmutex not null
 		{
+			unique_lock lck(_pmutex);
 			if (!_ppv)
 				return;
 			if (_usize)
@@ -230,8 +237,9 @@ namespace ec
 			_ppv = nullptr;
 			_usize = 0;
 		};
-		bool erase(key_type key) noexcept
+		bool erase(key_type key) noexcept //Multi-thread safe if _pmutex not null
 		{
+			unique_lock lck(_pmutex);
 			if (nullptr == _ppv || !_usize)
 				return false;
 			size_type upos = _Hasher()(key) % _uhashsize;
@@ -288,23 +296,31 @@ namespace ec
 			pv = next(i);
 			return pv != nullptr;
 		}
-		bool next(iterator& i, value_type &rValue) noexcept
+		bool next(iterator& i, value_type &rValue) noexcept //Multi-thread safe if _pmutex not null
 		{
+			if (_pmutex)
+				_pmutex->lock();
 			value_type* pv = nullptr;
 			bool bret = next(i, pv);
 			if (bret)
 				rValue = *pv;
+			if (_pmutex)
+				_pmutex->unlock();
 			return bret;
 		};
-		void for_each(std::function<void(value_type& val)> fun) noexcept
-		{
+		void for_each(std::function<void(value_type& val)> fun) noexcept //Multi-thread safe if _pmutex not null
+		{			
 			iterator i = begin();
+			if (_pmutex)
+				_pmutex->lock();
 			value_type* pv = next(i);
 			while (pv)
 			{
 				fun(*pv);
 				pv = next(i);
 			}
+			if (_pmutex)
+				_pmutex->unlock();
 		}
 	private:
 		iterator _nexti(unsigned int ih, unsigned int il) noexcept
