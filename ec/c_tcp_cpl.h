@@ -390,6 +390,22 @@ namespace ec
 			}
 			return pa->GetSize();
 		}
+		void get_timeout(time_t ltime, ec::vector<uint32_t> * pin, ec::vector<uint32_t> * pout) {
+			
+			pout->clear();
+			uint32_t *p,ump;
+			T_CONITEM* pi = 0;
+			size_t i,n = pin->size();
+			p = pin->data();
+			for (i = 0; i < n; i++) {				
+				ump = p[i] % CPL_SOCKET_GROUPS;
+				_Locks[ump].Lock();
+				pi = _maps[ump].Lookup(p[i]);
+				if (pi && ltime - pi->llLoginTime > 60 )
+					pout->add(p[i]);				
+				_Locks[ump].Unlock();
+			}			
+		}
 	};
 
 	/*!
