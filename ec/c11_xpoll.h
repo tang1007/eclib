@@ -169,6 +169,7 @@ namespace ec {
 		uint32_t usendsize;//current send bytes
 		uint32_t utail; //add position, point empty
 		time_t	 lasterr; //last time send failed
+		time_t   timeconnect; // TCP connect time
 		char     sinfo[64];// '\n' seperate, now just has "ip:192.168.1.41\n"
 		struct t_pkg {
 			uint32_t size; //message bytes size
@@ -211,14 +212,14 @@ namespace ec {
 	class xpoll : public cThread
 	{
 	private:
-		std::mutex _cpevtlock;//lock for _cpevt
+		ec::spinlock _cpevtlock;//lock for _cpevt
 		ec::cEvent _evtiocp, _evtcanadd; // for _cpevt
 		ec::fifo<t_xpoll_event> _cpevt;//completely event
 
-		std::mutex _memread_lock;// lock for _memread
+		ec::spinlock _memread_lock;// lock for _memread
 		ec::memory _memread;// memory for read
 
-		std::mutex _maplock;//lock for _map
+		ec::spinlock _maplock;//lock for _map
 		ec::memory _memmap;// memory for _map 
 		bool _fdchanged;   //fds changed lock with _map
 		ec::map<uint32_t, t_xpoll_item> _map;
@@ -305,6 +306,7 @@ namespace ec {
 			t.ucid = ucid;
 			t.fd = fd;
 			t.uflag = 1; //set read event not done,can't read continue
+			t.timeconnect = ::time(0);
 			_maplock.lock();
 			if (!_map.set(ucid, t)) {
 				_maplock.unlock();
@@ -313,7 +315,7 @@ namespace ec {
 			}
 			_fdchanged = true;
 			_udpevt.set_event();
-			_maplock.unlock();
+			_maplock.unlock();			
 			return true;
 		}
 		inline void remove(uint32_t ucid) // remove from pool
@@ -322,7 +324,7 @@ namespace ec {
 		}
 		int post_msg(uint32_t ucid, void *pd, size_t size)//post message,return -1:error  0:full ; 1:one message post
 		{
-			ec::unique_lock lck(&_maplock);
+			ec::unique_spinlock lck(&_maplock);
 			t_xpoll_item* pi = _map.get(ucid);
 			if (!pi)
 				return -1;
@@ -336,7 +338,7 @@ namespace ec {
 		}
 		int post_msg(uint32_t ucid, vector<uint8_t> *pvd)//post message,return -1:error  0:full ; 1:one message post
 		{
-			ec::unique_lock lck(&_maplock);
+			ec::unique_spinlock lck(&_maplock);
 			t_xpoll_item* pi = _map.get(ucid);
 			if (!pi)
 				return -1;
@@ -350,7 +352,7 @@ namespace ec {
 		}
 		int sendnodone(uint32_t ucid)
 		{
-			ec::unique_lock lck(&_maplock);
+			ec::unique_spinlock lck(&_maplock);
 			t_xpoll_item* pi = _map.get(ucid);
 			if (!pi)
 				return -1;
@@ -378,7 +380,7 @@ namespace ec {
 			_maplock.lock();
 			t_xpoll_item* p = _map.get(pi->ucid);
 			if (p)
-				p->uflag = 0; //set read done 
+				p->uflag &= ~(0x01); //set read done 
 			_maplock.unlock();
 			_memread.mem_free(pi->pdata);//recycle read memory			
 		}
@@ -386,10 +388,42 @@ namespace ec {
 		{
 			return !_cpevt.empty();
 		}
+
+		void set_flag(uint32_t ucid, int nbit, bool bset) {
+			if (nbit <= 0 || nbit > 31)
+				return;
+			_maplock.lock();
+			t_xpoll_item* p = _map.get(ucid);
+			if (p) {
+				if (bset)
+					p->uflag |=  0x01 << nbit;
+				else
+					p->uflag &= ~(0x01 << nbit);
+			}
+			_maplock.unlock();
+		}
+
+		void get_ucid_byflag(time_t ltime, int nbit, int ntimeoversec,ec::vector<uint32_t> *pout)
+		{
+			pout->clear();
+			if (nbit <= 0 || nbit > 31)
+				return;
+			_maplock.lock();
+			t_xpoll_item* p;
+			uint64_t i = 0u;
+			while (_map.next(i, p)) {
+				if (p->uflag & (0x01 << nbit))
+					continue;
+				if (ltime - p->timeconnect < ntimeoversec)
+					continue;
+				pout->add(p->ucid);
+			}
+			_maplock.unlock();
+		}
 	private:
 		void make_pollfd()
 		{
-			ec::unique_lock lck(&_maplock);
+			ec::unique_spinlock lck(&_maplock);
 			if (!_fdchanged) // no change
 				return;
 			_pollfd.clear();
@@ -453,7 +487,7 @@ namespace ec {
 
 		bool get_send(uint32_t ucid, t_xpoll_send* ps)
 		{
-			ec::unique_lock lck(&_maplock);
+			ec::unique_spinlock lck(&_maplock);
 			t_xpoll_item* p = nullptr;
 			p = _map.get(ucid);
 			if (!p)
@@ -520,10 +554,11 @@ namespace ec {
 			if (INVALID_SOCKET != pi->fd) {
 #ifdef _WIN32
 				shutdown(pi->fd, SD_BOTH);
+				::closesocket(pi->fd);
 #else
 				shutdown(pi->fd, SHUT_WR);
+				::close(pi->fd);
 #endif
-				::closesocket(pi->fd);
 				pi->fd = INVALID_SOCKET;
 				add_close_event(ucid, status);
 			}
@@ -605,7 +640,7 @@ namespace ec {
 		}
 		void set_read_data_flag(uint32_t ucid, bool bhasdata)
 		{
-			ec::unique_lock lck(&_maplock);
+			ec::unique_spinlock lck(&_maplock);
 			t_xpoll_item* p = _map.get(ucid);
 			if (!p || (p->uflag & 0x01)) {
 				_maplock.unlock();
@@ -614,7 +649,7 @@ namespace ec {
 			if (bhasdata)
 				p->uflag |= 0x01; // set bit 0				
 			else
-				p->uflag ^= ~(0x01);// clear bit0				
+				p->uflag &= ~(0x01);// clear bit0				
 		}
 #ifdef _WIN32
 		void do_read(uint32_t ucid, SOCKET fd)
