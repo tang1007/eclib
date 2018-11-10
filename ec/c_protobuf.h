@@ -1,11 +1,11 @@
 ﻿/*!
 \file c_protobuf.h
 \author kipway@outlook.com
-\update 2018.1.29 
+\update 2018.11.9
 
 eclib class base_protobuf ,parse google protocol buffer
 
-not support start_group and end_group 
+not support start_group and end_group
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib
@@ -34,9 +34,9 @@ limitations under the License.
 #define pb_end_group  4   //deprecated not support
 #define pb_fixed32 5  // 32-bit
 namespace ec
-{	
+{
 	/*!
-	\brief encode and decode 
+	\brief encode and decode
 	see https://developers.google.com/protocol-buffers/docs/encoding
 	*/
 	class base_protobuf //base class for encode and decode protobuf
@@ -59,11 +59,11 @@ namespace ec
 			return (int)((v >> 1) ^ (-(int64_t)(v & 1)));
 		}
 		template<class _Tp>
-		inline bool get_varint(const uint8_t* &pd, size_t &len, _Tp &out) const  //get Varint (Base 128 Varints)
+		inline bool get_varint(const uint8_t* &pd, int &len, _Tp &out) const  //get Varint (Base 128 Varints)
 		{
 			int nbit = 0;
 			out = 0;
-			do{
+			do {
 				out |= (*pd & 0x7F) << nbit;
 				nbit += 7;
 				pd++;
@@ -76,7 +76,7 @@ namespace ec
 		{
 			int nbit = 0;
 			uint8_t out = 0;
-			do{
+			do {
 				out = (v >> nbit) & 0x7F;
 				nbit += 7;
 				if (v >> nbit) {
@@ -91,7 +91,7 @@ namespace ec
 			return nbit <= 8 * sizeof(_Tp);
 		}
 		template<class _Tp>
-		inline bool get_fixed(const uint8_t* &pd, size_t &len, _Tp &out) const  //get 32-bit and 64-bit (fixed32,sfixed32,fixed64,sfixed64,float,double)
+		inline bool get_fixed(const uint8_t* &pd, int &len, _Tp &out) const  //get 32-bit and 64-bit (fixed32,sfixed32,fixed64,sfixed64,float,double)
 		{
 			if (len < sizeof(_Tp) || (sizeof(_Tp) != 4 && sizeof(_Tp) != 8))
 				return false;
@@ -108,7 +108,7 @@ namespace ec
 			pout->add((uint8_t*)&v, sizeof(_Tp));
 			return true;
 		}
-		inline bool get_key(const uint8_t* &pd, size_t &len, uint32_t &field_number, uint32_t &wire_type) const //get field_number and  wire_type
+		inline bool get_key(const uint8_t* &pd, int &len, uint32_t &field_number, uint32_t &wire_type) const //get field_number and  wire_type
 		{
 			uint32_t key;
 			if (!get_varint(pd, len, key))
@@ -117,25 +117,25 @@ namespace ec
 			field_number = key >> 3;
 			return true;
 		}
-		inline bool get_length_delimited(const uint8_t* &pd, size_t &len, ec::vector<uint8_t>* pout) const //get string, bytes
+		inline bool get_length_delimited(const uint8_t* &pd, int &len, ec::vector<uint8_t>* pout) const //get string, bytes
 		{
 			pout->clear();
 			uint32_t ul = 0;
 			if (!get_varint(pd, len, ul))
 				return false;
-			if (len < ul)
+			if (len < (int)ul)
 				return false;
 			pout->add(pd, ul);
 			pd += ul;
 			len -= ul;
 			return true;
 		}
-		inline bool get_length_delimited(const uint8_t* &pd, size_t &len, void* pout, size_t &outlen) const //get string, bytes
+		inline bool get_length_delimited(const uint8_t* &pd, int &len, void* pout, size_t &outlen) const //get string, bytes
 		{
 			uint32_t ul = 0;
 			if (!get_varint(pd, len, ul))
 				return false;
-			if (len < ul || outlen < ul)
+			if (len < (int)ul || outlen < ul)
 				return false;
 			memcpy(pout, pd, ul);
 			pd += ul;
@@ -143,12 +143,12 @@ namespace ec
 			outlen = ul;
 			return true;
 		}
-		inline bool get_length_delimited(const uint8_t* &pd, size_t &len, const uint8_t** pout, size_t &outlen) const //get string, bytes,no copy
+		inline bool get_length_delimited(const uint8_t* &pd, int &len, const uint8_t** pout, size_t &outlen) const //get string, bytes,no copy
 		{
 			uint32_t ul = 0;
 			if (!get_varint(pd, len, ul))
 				return false;
-			if (len < ul)
+			if (len < (int)ul)
 				return false;
 			*pout = pd;
 			pd += ul;
@@ -157,16 +157,16 @@ namespace ec
 			return true;
 		}
 
-		inline bool get_string(const uint8_t* &pd, size_t &len, char* pout, size_t outlen) const 
+		inline bool get_string(const uint8_t* &pd, int &len, char* pout, size_t outlen) const
 		{
 			uint32_t ul = 0;
 			size_t lv;
 			if (!get_varint(pd, len, ul))
 				return false;
 			if (outlen <= ul) // Truncated
-				lv = outlen - 1; 
+				lv = outlen - 1;
 			else
-				lv = ul;			
+				lv = ul;
 			memcpy(pout, pd, lv);
 			pout[lv] = '\0';
 			pd += ul;
@@ -174,7 +174,7 @@ namespace ec
 			outlen = ul;
 			return true;
 		}
-		inline bool jump_over(const uint8_t* &pd, size_t &len, uint32_t wire_type) const //jump over unkown field_number
+		inline bool jump_over(const uint8_t* &pd, int &len, uint32_t wire_type) const //jump over unkown field_number
 		{
 			switch (wire_type)
 			{
@@ -189,7 +189,7 @@ namespace ec
 				if (len < 8)
 					return false;
 				pd += 8;
-				len -= 8;				
+				len -= 8;
 				break;
 			}
 			case 2: //Length - delimited
@@ -197,10 +197,10 @@ namespace ec
 				size_t datalen;
 				if (!get_varint(pd, len, datalen))
 					return false;
-				if (len < datalen)
+				if (len < (int)datalen)
 					return false;
 				pd += datalen;
-				len -= datalen;				
+				len -= (int)datalen;
 				break;
 			}
 			case 5: //32 bit
@@ -208,7 +208,7 @@ namespace ec
 				if (len < 4)
 					return false;
 				pd += 4;
-				len -= 4;				
+				len -= 4;
 				break;
 			}
 			default:
@@ -229,7 +229,7 @@ namespace ec
 			return out_varint(v, pout);
 		}
 
-		template<class _Tp,size_t _N>
+		template<class _Tp, size_t _N>
 		bool out_varint(_Tp v, ec::Array<uint8_t, _N>* pout) const //out Varint (Base 128 Varints)
 		{
 			int nbit = 0;
@@ -248,9 +248,9 @@ namespace ec
 			} while (nbit < 8 * sizeof(_Tp));
 			return nbit <= 8 * sizeof(_Tp);
 		}
-		
+
 		template<class _Tp, size_t _N>
-		inline bool out_fixed(_Tp v, ec::Array<uint8_t,_N>* pout) const  //out 32-bit and 64-bit (fixed32,sfixed32,fixed64,sfixed64,float,double)
+		inline bool out_fixed(_Tp v, ec::Array<uint8_t, _N>* pout) const  //out 32-bit and 64-bit (fixed32,sfixed32,fixed64,sfixed64,float,double)
 		{
 			if ((sizeof(_Tp) != 4 && sizeof(_Tp) != 8))
 				return false;
@@ -258,7 +258,7 @@ namespace ec
 		}
 
 		template<size_t _N>
-		inline bool out_length_delimited(const uint8_t* pd, size_t len, ec::Array<uint8_t,_N>* pout) const // out string, bytes
+		inline bool out_length_delimited(const uint8_t* pd, size_t len, ec::Array<uint8_t, _N>* pout) const // out string, bytes
 		{
 			if (!out_varint(len, pout))
 				return false;
@@ -266,7 +266,7 @@ namespace ec
 		}
 
 		template<size_t _N>
-		inline bool out_key(uint32_t field_number, uint32_t wire_type, ec::Array<uint8_t,_N>* pout) const // out field_number and  wire_type
+		inline bool out_key(uint32_t field_number, uint32_t wire_type, ec::Array<uint8_t, _N>* pout) const // out field_number and  wire_type
 		{
 			uint32_t v = (field_number << 3) | (wire_type & 0x07);
 			return out_varint(v, pout);
@@ -303,27 +303,27 @@ namespace ec
 			memcpy(dst, src, sz);
 			set_flag(id);
 		}
-		void set_cls(int id, ec::vector<uint8_t> *pcls, const void* src,size_t sizesrc)
+		void set_cls(int id, ec::vector<uint8_t> *pcls, const void* src, size_t sizesrc)
 		{
 			pcls->clear();
 			pcls->add((uint8_t*)src, sizesrc);
 			set_flag(id);
 		}
-		bool p_bytes(int id, uint32_t wire_type, const uint8_t* &pd, size_t &len, void* pout, size_t outlen)
+		bool p_bytes(int id, uint32_t wire_type, const uint8_t* &pd, int &len, void* pout, size_t outlen)
 		{
 			if (wire_type != pb_length_delimited || !get_length_delimited(pd, len, pout, outlen))
 				return false;
 			set_flag(id);
 			return true;
 		}
-		bool p_str(int id, uint32_t wire_type, const uint8_t* &pd, size_t &len, char* pout, size_t outlen)
+		bool p_str(int id, uint32_t wire_type, const uint8_t* &pd, int &len, char* pout, size_t outlen)
 		{
 			if (wire_type != pb_length_delimited || !get_string(pd, len, pout, outlen))
 				return false;
 			set_flag(id);
 			return true;
 		}
-		bool p_cls(int id, uint32_t wire_type, const uint8_t* &pd, size_t &len, ec::vector<uint8_t>* pout)
+		bool p_cls(int id, uint32_t wire_type, const uint8_t* &pd, int &len, ec::vector<uint8_t>* pout)
 		{
 			if (wire_type != pb_length_delimited || !get_length_delimited(pd, len, pout))
 				return false;
@@ -331,7 +331,7 @@ namespace ec
 			return true;
 		}
 		template< size_t _N>
-		bool p_cls(int id, uint32_t wire_type, const uint8_t* &pd, size_t &len, ec::Array<uint8_t, _N>* pout)
+		bool p_cls(int id, uint32_t wire_type, const uint8_t* &pd, int &len, ec::Array<uint8_t, _N>* pout)
 		{
 			const uint8_t* p;
 			size_t sz = 0;
@@ -343,7 +343,7 @@ namespace ec
 			return true;
 		}
 		template<class _Tp>
-		bool p_var(int id, uint32_t wire_type, const uint8_t* &pd, size_t &len, _Tp &out, bool zigzag = false)
+		bool p_var(int id, uint32_t wire_type, const uint8_t* &pd, int &len, _Tp &out, bool zigzag = false)
 		{
 			if (wire_type != pb_varint)
 				return false;
@@ -447,4 +447,160 @@ namespace ec
 	protected:
 		uint32_t _uflag;
 	};
+
+	class msg_protoc3 :public base_protobuf
+	{
+	public:
+		msg_protoc3() {
+		}
+		inline bool p_bytes(uint32_t wire_type, const uint8_t* &pd, int &len, void* pout, size_t outlen) {
+			return pb_length_delimited == wire_type && get_length_delimited(pd, len, pout, outlen);
+		}
+		inline bool p_str(uint32_t wire_type, const uint8_t* &pd, int &len, char* pout, size_t outlen) {
+			return pb_length_delimited == wire_type && get_string(pd, len, pout, outlen);
+		}
+		inline bool p_cls(uint32_t wire_type, const uint8_t* &pd, int &len, ec::vector<uint8_t>* pout) {
+			return pb_length_delimited == wire_type && get_length_delimited(pd, len, pout);
+		}
+		template< size_t _N>
+		bool p_cls(uint32_t wire_type, const uint8_t* &pd, int &len, ec::Array<uint8_t, _N>* pout) {
+			const uint8_t* p;
+			size_t sz = 0;
+			if (pb_length_delimited != wire_type || !get_length_delimited(pd, len, &p, sz))
+				return false;
+			if (!pout->add(p, sz))
+				return false;
+			return true;
+		}
+		template<class _Tp>
+		bool p_var(uint32_t wire_type, const uint8_t* &pd, int &len, _Tp &out, bool zigzag = false) {
+			if (pb_varint != wire_type)
+				return false;
+			if (sizeof(_Tp) == 4) {
+				uint32_t v;
+				if (!get_varint(pd, len, v))
+					return false;
+				if (zigzag)
+					out = (_Tp)de_zigzag32(v);
+				else
+					out = (_Tp)v;
+			}
+			else {
+				uint64_t v;
+				if (!get_varint(pd, len, v))
+					return false;
+				if (zigzag)
+					out = (_Tp)de_zigzag64(v);
+				else
+					out = (_Tp)v;
+			}
+			return true;
+		}
+		template<class _Tp>
+		bool out_var(ec::vector<uint8_t>* po, int id, _Tp v, bool zigzag = false) {
+			if (sizeof(_Tp) == 4) {
+				if (zigzag) {
+					if (!out_key(id, pb_varint, po) || !out_varint((uint32_t)(en_zigzag32(v)), po))
+						return false;
+				}
+				else {
+					if (!out_key(id, pb_varint, po) || !out_varint((uint32_t)v, po))
+						return false;
+				}
+			}
+			else {
+				if (zigzag) {
+					if (!out_key(id, pb_varint, po) || !out_varint((uint64_t)(en_zigzag64(v)), po))
+						return false;
+				}
+				else {
+					if (!out_key(id, pb_varint, po) || !out_varint((uint64_t)v, po))
+						return false;
+				}
+			}
+			return true;
+		}
+		bool out_str(ec::vector<uint8_t>* po, int id, const char* s) {
+			return out_key(id, pb_length_delimited, po) && out_length_delimited((uint8_t*)s, strlen(s), po);
+		}
+		bool out_cls(ec::vector<uint8_t>* po, int id, const void* pcls, size_t size) {
+			return out_key(id, pb_length_delimited, po) && out_length_delimited((uint8_t*)pcls, size, po);
+		}
+		template<class _Tp, size_t _N>
+		bool out_var(ec::Array<uint8_t, _N>* po, int id, _Tp v, bool zigzag = false) {
+			if (sizeof(_Tp) == 4) {
+				if (zigzag) {
+					if (!out_key(id, pb_varint, po) || !out_varint((uint32_t)(en_zigzag32(v)), po))
+						return false;
+				}
+				else {
+					if (!out_key(id, pb_varint, po) || !out_varint((uint32_t)v, po))
+						return false;
+				}
+			}
+			else {
+				if (zigzag) {
+					if (!out_key(id, pb_varint, po) || !out_varint((uint64_t)(en_zigzag64(v)), po))
+						return false;
+				}
+				else {
+					if (!out_key(id, pb_varint, po) || !out_varint((uint64_t)v, po))
+						return false;
+				}
+			}
+			return true;
+		}
+		template< size_t _N>
+		bool out_str(ec::Array<uint8_t, _N>* po, int id, const char* s) {
+			return out_key(id, pb_length_delimited, po) && out_length_delimited((uint8_t*)s, strlen(s), po);
+		}
+		template<size_t _N>
+		bool out_cls(ec::Array<uint8_t, _N>* po, int id, const void* pcls, size_t size) {
+			return out_key(id, pb_length_delimited, po) && out_length_delimited((uint8_t*)pcls, size, po);
+		}
+	};
+
+#define P3_STR(FID,STR) case FID: \
+	if (!p_str(wire_type, pd, len, STR, sizeof(STR))) \
+		return false; \
+	break
+
+#define P3_VAR(FID,VAR) case FID: \
+		if (!p_var(wire_type, pd, len, VAR, false)) \
+			return false; \
+		break
+
+#define P3_VAR_ZIG(FID,VAR) case FID: \
+		if (!p_var(wire_type, pd, len, VAR, true)) \
+			return false; \
+		break
+#define P3_BYTES(FID,STR) case FID: \
+	if (!p_bytes(wire_type, pd, len, STR, sizeof(STR))) \
+		return false; \
+	break
+
+
+
+#define P2_STR(FID,STR) case FID: \
+	if (!p_str(FID, wire_type, pd, len, STR, sizeof(STR))) \
+		return false; \
+	break
+
+#define P2_VAR(FID,VAR) case FID: \
+		if (!p_var(FID, wire_type, pd, len, VAR, false)) \
+			return false; \
+		break
+
+#define P2_VAR_ZIG(FID,VAR) case FID: \
+		if (!p_var(FID, wire_type, pd, len, VAR, true)) \
+			return false; \
+		break
+#define P2_BYTES(FID,STR) case FID: \
+	if (!p_bytes(FID, wire_type, pd, len, STR, sizeof(STR))) \
+		return false; \
+	break
+#define P2_CLS(FID,PTRVECTOR) case FID: \
+	if (!p_cls(FID, wire_type, pd, len, PTRVECTOR)) \
+		return false; \
+	break
 }
