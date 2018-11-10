@@ -2,7 +2,7 @@
 \file c11_event.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.3.11
+\update 2018.11.7
 
 eclib class cEvent  with c++11. Adapt for c_event.h 
 
@@ -32,16 +32,18 @@ namespace ec {
 		{
 		}
 		bool SetEvent()
-		{
-			std::unique_lock<std::mutex> lck(_mtx);
+		{			
+			_mtx.lock();
 			_nready = true;
+			_mtx.unlock();
 			_cv.notify_one();
 			return true;
 		};
 		bool ResetEvent()
-		{
-			std::unique_lock<std::mutex> lck(_mtx);
+		{			
+			_mtx.lock();
 			_nready = false;
+			_mtx.unlock();
 			return true;
 		}
 		bool Wait(int milliseconds)
