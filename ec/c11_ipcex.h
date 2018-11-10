@@ -85,7 +85,7 @@ namespace ec
 		}
 		bool ipc_post(const void* pdata, size_t bytesize, int timeovermsec = 100) // post send data
 		{
-			int nerr = post_msg(pdata, bytesize);
+			int nerr = post_msg_i(pdata, bytesize);
 			if (nerr < 0)
 				return false;
 			int nt = timeovermsec / 2, i = 0;;
@@ -156,7 +156,7 @@ namespace ec
 		}
 	private:
 		udpevt _udpevt;
-		std::mutex _cpevtlock;//lock for _cpevt
+		ec::spinlock _cpevtlock;//lock for _cpevt
 		ec::fifo<t_xpoll_event> _cpevt;//completely event
 		
 		uint16_t _port;
@@ -164,13 +164,13 @@ namespace ec
 		std::atomic_bool _bconnect;
 		t_xpoll_item _xitem;
 		uint32_t _ucid;
-		std::mutex _slock;//lock for socket
+		ec::spinlock _slock;//lock for socket
 
 		int post_msg(const void *pd, size_t size) //return  -1:error; 0:full ; >0: post bytes
 		{
 			if (!_bconnect)
 				return -1;
-			ec::unique_lock lck(&_slock);
+			ec::unique_spinlock lck(&_slock);
 			t_xpoll_item* pi = &_xitem;
 			if ((pi->utail + 1) % XPOLL_SEND_PKG_NUM == pi->uhead) //full
 				return 0;
@@ -187,7 +187,7 @@ namespace ec
 		{
 			if (!_bconnect)
 				return -1;
-			ec::unique_lock lck(&_slock);
+			ec::unique_spinlock lck(&_slock);
 			t_xpoll_item* pi = &_xitem;
 			if ((pi->utail + 1) % XPOLL_SEND_PKG_NUM == pi->uhead) //full
 				return 0;
@@ -197,6 +197,40 @@ namespace ec
 			pi->utail = (pi->utail + 1) % XPOLL_SEND_PKG_NUM;
 			_udpevt.set_event();
 			return (int)nret;
+		}
+
+		//如果空闲立即发送
+		int post_msg_i(const void *pd, size_t size) //return  -1:error; 0:full ; >0: post bytes
+		{
+			if (!_bconnect)
+				return -1;
+			bool bsend = false;
+			int nsize = 0;			
+			
+			while (1) {
+				ec::unique_spinlock lck(&_slock);
+				t_xpoll_item* pi = &_xitem;
+				if (pi->uhead == pi->utail)  //空，立即发送
+					bsend = true;
+				if ((pi->utail + 1) % XPOLL_SEND_PKG_NUM == pi->uhead) //full
+					break;
+				pi->pkg[pi->utail].size = (uint32_t)size;
+				pi->pkg[pi->utail].pd = (uint8_t *)_pmem->mem_malloc(size); //(uint8_t*)pd;
+				if (!pi->pkg[pi->utail].pd) {
+					nsize = -1;
+				}
+				memcpy(pi->pkg[pi->utail].pd, pd, size);
+				pi->utail = (pi->utail + 1) % XPOLL_SEND_PKG_NUM;
+				nsize = nsize;	
+				break;
+			}
+			if (bsend) {
+				t_xpoll_send ts;
+				if (get_send(&ts))
+					sendts(&ts);
+			}
+			_udpevt.set_event();
+			return (int)size;
 		}
 	protected:
 		void _disconnect(int status) {
@@ -283,7 +317,7 @@ namespace ec
 		};
 	private:
 		bool isempty() {
-			ec::unique_lock lck(&_slock);
+			ec::unique_spinlock lck(&_slock);
 			return _xitem.uhead == _xitem.utail;
 		}
 		void add_event(uint32_t ucid, uint8_t opt, uint8_t st, void *pdata, size_t datasize)
@@ -299,7 +333,7 @@ namespace ec
 		}
 		bool get_send(t_xpoll_send* ps)
 		{
-			ec::unique_lock lck(&_slock);
+			ec::unique_spinlock lck(&_slock);
 			t_xpoll_item* p = &_xitem;
 			if (p->uhead != p->utail) //not empty
 			{
