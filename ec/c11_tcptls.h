@@ -39,6 +39,7 @@ limitations under the License.
 #include "c11_tls12.h"
 #include "c11_tcp.h"
 
+#define XPOLL_HANDSHAKE_BIT  1
 namespace ec {
 
 	class args_tlsthread {
@@ -109,7 +110,7 @@ namespace ec {
 	public:
 		bool tls_post(uint32_t ucid, const void* pdata, size_t size, int waitmsec = 100)
 		{
-			ec::unique_lock lck(_psss->getcs());
+			ec::unique_spinlock lck(_psss->getcs());
 			vector<uint8_t> pkg(128 * (size / TLS_CBCBLKSIZE) + size + 256 - size % 128, base_::_pmem);
 			if (!_psss->mkr_appdata(ucid, &pkg, pdata, size))
 				return false;
@@ -120,6 +121,8 @@ namespace ec {
 	protected:
 		void onconnect(uint32_t ucid, const char* sip)//connect event
 		{
+			if (base_::_plog)
+				base_::_plog->add(CLOG_DEFAULT_MSG, "ucid %u TCP connected server port %u from %s", ucid, base_::_srvport, sip);
 			void *p = _psss->getclsmem()->mem_malloc(sizeof(tls_session_srv));
 			tls_session_srv* ps = new(p) tls_session_srv(ucid, _pca->_pcer.data(), _pca->_pcer.size(),
 				_pca->_prootcer.data(), _pca->_prootcer.size(), &_pca->_csRsa, _pca->_pRsaPrivate, base_::_pmem,
@@ -150,6 +153,7 @@ namespace ec {
 			else if (TLS_SESSION_HKOK == nst) {
 				if (pkg.size())
 					base_::tcp_post(ucid, &pkg);
+				base_::_ppoll->set_flag(ucid, XPOLL_HANDSHAKE_BIT, true);
 				static_cast<_CLS*>(this)->onhandshake(ucid);
 			}
 			else if (TLS_SESSION_APPDATA == nst) {
