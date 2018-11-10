@@ -3,7 +3,7 @@
 \brief parse json from string or file
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.9.4
+\update 2018.11.10
 
 eclibe parse json for windows & linux
 
@@ -311,6 +311,8 @@ namespace ec {
 					}
 					if (pf && nf && pv && nv)
 					{
+						if (nf > 40)
+							return false;
 						if (exist(pf, nf))
 							return false; //有重复key
 						t_i t;
