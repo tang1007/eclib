@@ -198,7 +198,7 @@ namespace ec
 		char _scurlogfile[512];
 		int	 _nFileNo;
 
-		std::mutex	_cs;
+		spinlock	_cs;
 		cEvent _evt;
 		time_t _lastlogtime;
 		cfg _cfg;
@@ -249,7 +249,7 @@ namespace ec
 		{
 			if (level > _cfg._outleval)
 				return;
-			unique_lock lock(&_cs);
+			unique_spinlock lock(&_cs);
 			int ns = 0;			
 			cTime ctm(nstime(&ns));
 			unsigned int udate = ((unsigned int)ctm._year) << 16 | ((unsigned int)ctm._mon) << 8 | (unsigned int)ctm._day;
@@ -285,7 +285,7 @@ namespace ec
 		{
 			if (level > _cfg._outleval)
 				return;
-			unique_lock lock(&_cs);
+			unique_spinlock lock(&_cs);
 			va_list arg_ptr;
 			va_start(arg_ptr, format);
 			int nbytes = vsnprintf(_slog, MAX_LOG_SIZE, format, arg_ptr);
@@ -344,7 +344,7 @@ namespace ec
 		{
 			if (level > _cfg._outleval)
 				return;
-			unique_lock lock(&_cs);			
+			unique_spinlock lock(&_cs);			
 			cTime ctm(time(NULL));
 
 			unsigned int udate = ((unsigned int)ctm._year) << 16 | ((unsigned int)ctm._mon) << 8 | (unsigned int)ctm._day;
@@ -530,7 +530,7 @@ namespace ec
 	public:
 		bool	SaveLog()
 		{
-			unique_lock lock(&_cs);
+			unique_spinlock lock(&_cs);
 			if (!_buf.size())
 				return true;
 			return Write2Disk();			
