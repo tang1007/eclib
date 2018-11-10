@@ -91,7 +91,7 @@ namespace tls
 #define TLSVER_MAJOR        3
 #define TLSVER_NINOR        3
 
-#define TLS_CBCBLKSIZE  16303 // (16384-16-32-1-32)
+#define TLS_CBCBLKSIZE  16292   // (16384-16-32-32 - 8)
 
 #define TLS_SESSION_NONE    (-2) 
 #define TLS_SESSION_ERR		(-1) //´íÎó
@@ -354,7 +354,7 @@ namespace ec
             s[2] = TLSVER_NINOR;
             while (pos < size)
             {
-                ss = tls_rec_fragment_len;
+                ss = TLS_CBCBLKSIZE;
                 if (pos + ss > size)
                     ss = size - pos;
                 s[3] = (uint8)((ss >> 8) & 0xFF);
@@ -601,7 +601,7 @@ namespace ec
                 ulen = p[3];
                 ulen = (ulen << 8) + p[4];
                 if (uct < (uint8)tls::rec_change_cipher_spec || uct >(uint8)tls::rec_application_data ||
-                    _pkgtcp[1] != TLSVER_MAJOR || ulen > tls_rec_fragment_len + 2048)
+                    _pkgtcp[1] != TLSVER_MAJOR || ulen > tls_rec_fragment_len)
                 {
                     if (_pkgtcp[1] != TLSVER_MAJOR)
                     {
@@ -1010,6 +1010,8 @@ namespace ec
                 uint32 ulen = p[1];
                 ulen = (ulen << 8) + p[2];
                 ulen = (ulen << 8) + p[3];
+				if (ulen > 1024 * 16)
+					return -1;
                 if ((int)ulen + 4 > nl)
                     break;
                 switch (p[0])
@@ -1079,6 +1081,9 @@ namespace ec
         virtual ~cTlsSession_srv()
         {
         }
+		inline bool is_handshake_ok() {
+			return _bhandshake_finished;
+		}
     protected:
         bool  _bhandshake_finished;
         cCritical* _pRsaLck;
@@ -1178,7 +1183,7 @@ namespace ec
             ulen = (ulen << 8) + puc[2];
             ulen = (ulen << 8) + puc[3];
 
-            if (size != ulen + 4 || size < 12 + 32)
+            if (size != ulen + 4 || size < 12 + 32 || ulen > 1024)
             {
                 Alert(2, 10, OnData, pParam);//unexpected_message(10)
                 return false;
@@ -1388,6 +1393,8 @@ namespace ec
                 uint32 ulen = p[1];
                 ulen = (ulen << 8) + p[2];
                 ulen = (ulen << 8) + p[3];
+				if (ulen > 8192)
+					return -1;
                 if ((int)ulen + 4 > nl)
                     break;
                 switch (p[0])
@@ -1739,6 +1746,20 @@ namespace ec
 		cCritical *getcs(unsigned int ucid) {
 			return _css[ucid%_ugroups];
 		}
+		void get_nohandshake_ucids(ec::vector<uint32_t> *pout) {
+			pout->clear();
+			uint32_t i;
+			t_tlsse* p;
+			for (i = 0; i < _ugroups; i++) {
+				cSafeLock lck(_css[i]);
+				int npos = 0, nlist = 0;
+				while (_maps[i]->GetNext(npos, nlist, p)) {
+					if (!p->Pss->is_handshake_ok()) 
+						pout->add(p->ucid);					
+				}
+			}
+
+		}
     };
 
     class cTlsSrvThread : public cTcpSvrWorkThread
@@ -1769,14 +1790,16 @@ namespace ec
         virtual bool	OnReadBytes(unsigned int ucid, const void* pdata, unsigned int usize) //return false will disconnect
         {
             _tlsdata.ClearData();
+			_threadstcode = 1001;
             int nr = _psss->OnTcpRead(ucid, pdata, usize, OnData, this);
             if (nr < 0)
                 return false;
             else if (_tlsdata.GetSize())
             {
+				_threadstcode = 1002;
                 if (!OnAppData(ucid, _tlsdata.GetBuf(), (unsigned int)_tlsdata.GetSize()))
                     return false;
-                _tlsdata.ClearData();
+                _tlsdata.ClearData();				
             }
             return true;
 
@@ -1836,6 +1859,7 @@ namespace ec
             _pRsaPrivate = 0;
             _pevppk = 0;
             _px509 = 0;
+			_lastchktime = ::time(0);
         }
         virtual ~cTlsServer()
         {
@@ -1866,6 +1890,7 @@ namespace ec
 
         cTlsSession_srvMap _sss;
 		cCritical _csRsa;
+		time_t _lastchktime;
     public:
         bool InitCert(const char* filecert, const char* filerootcert, const char* fileprivatekey)
         {
@@ -1945,6 +1970,17 @@ namespace ec
         };
         virtual void    CheckNotLogin() //chech not login 
         {
+			time_t t = ::time(0);
+			if (t == _lastchktime)
+				return;
+			_lastchktime = t;
+			ec::vector<uint32_t> ids(1024 * 8, true);
+			_sss.get_nohandshake_ucids(&ids);
+			ec::vector<uint32_t> delids(1024, true);
+			m_ConPool.get_timeout(t, &ids, &delids);
+			delids.for_each([&](uint32_t &v){
+				m_ConPool.DelAndCloseSocket(v);
+			});
         }
     };
 };
