@@ -152,13 +152,14 @@ namespace ec
 		std::atomic_int _nlogin;
 		ipcpkg  _pkg;
 		ec::vector<uint8_t> _msgr;
-		std::mutex _cs;
+		ec::spinlock _cs;
 	protected:
 		virtual	void dojob() {
 			int nr;
 			uint8_t buf[1024 * 32];
 			while (!_bKilling)//accept,only one connection
 			{
+				_watchdog = 0;
 				_pkg.clear();
 				_nlogin = 0;
 				_sclient = acp();
@@ -168,6 +169,7 @@ namespace ec
 				SetSocketKeepAlive(_sclient, true);
 				while (!_bKilling)//read
 				{
+					_watchdog = 0;
 					nr = tcp_read(_sclient, buf, (int)sizeof(buf), 100);
 					if (SOCKET_ERROR == nr)
 					{
@@ -353,7 +355,7 @@ namespace ec
 		}
 		int send(const void* pd, size_t size) //return send bytes numbers; <0:error
 		{
-			ec::unique_lock lck(&_cs);
+			ec::unique_spinlock lck(&_cs);
 			if (!_nlogin)
 				return ECIPC_ST_SEND_NOTLOGIN;
 			return _pkg.send(_sclient, pd, size);
@@ -387,7 +389,7 @@ namespace ec
 		}
 		int send(const void* pd, size_t size) //return send bytes numbers; <0:error
 		{
-			ec::unique_lock lck(&_cs);
+			ec::unique_spinlock lck(&_cs);
 			if (!_nlogin)
 				return ECIPC_ST_SEND_NOTLOGIN;
 			return _pkg.send(_sclient, pd, size);
@@ -475,7 +477,7 @@ namespace ec
 		std::atomic_int _nlogin;
 		ipcpkg  _pkg;
 		ec::vector<uint8_t> _msgr;
-		std::mutex _cs;
+		ec::spinlock _cs;
 	protected:
 		virtual bool OnMsg() = 0; //Processes messages in _msgr, returning true if successful, false will disconnect
 		void closeclient()
