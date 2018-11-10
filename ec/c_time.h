@@ -30,6 +30,7 @@ limitations under the License.
 #include <sys/time.h>
 #endif
 #include <time.h>
+#include <stdint.h>
 #include "c_str.h"
 #ifndef _WIN32
 inline unsigned int GetTickCount()
@@ -71,7 +72,7 @@ namespace ec
 	\param pMicrosecond [out] microsecond,1000000 microseconds = 1 second
 	\return seconds from 1970/01/01
 	*/
-	inline int64_t ftime2timet(int64_t lfiletime, int *pMicrosecond)//
+	inline int64_t ftime2timet(int64_t lfiletime, int *pMicrosecond)
 	{
 		if (pMicrosecond)
 			*pMicrosecond = (int)((lfiletime % 10000000LL) / 10);
