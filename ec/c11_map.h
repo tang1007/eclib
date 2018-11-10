@@ -69,7 +69,7 @@ namespace ec
 		size_type	_usize;
 	private:
 		ec::memory* _pmem;
-		std::mutex* _pmutex;
+		spinlock* _pmutex;
 		inline t_node* new_node() {
 			t_node* pnode = nullptr;
 			if (_pmem)
@@ -89,7 +89,7 @@ namespace ec
 				free(p);
 		}
 	public:
-		map(unsigned int uhashsize = 1024, ec::memory* pmem = nullptr, std::mutex* pmutex = nullptr) 
+		map(unsigned int uhashsize = 1024, ec::memory* pmem = nullptr, spinlock* pmutex = nullptr)
 			: _ppv(nullptr), _uhashsize(uhashsize), _usize(0), _pmem(pmem), _pmutex(pmutex)
 		{
 			_ppv = new t_node*[_uhashsize];
@@ -114,7 +114,7 @@ namespace ec
 		}
 		iterator begin() noexcept //Multi-thread safe if _pmutex not null
 		{
-			unique_lock lck(_pmutex);
+			unique_spinlock lck(_pmutex);
 			iterator ir = 0;
 			if (nullptr == _ppv || !_usize)
 				return ~ir;
@@ -134,7 +134,7 @@ namespace ec
 		}
 		bool set(key_type key, value_type& Value) noexcept //Multi-thread safe if _pmutex not null
 		{
-			unique_lock lck(_pmutex);
+			unique_spinlock lck(_pmutex);
 			if (nullptr == _ppv)
 			{
 				_ppv = new t_node*[_uhashsize];
@@ -164,7 +164,7 @@ namespace ec
 		};
 		bool set(key_type key, value_type&& Value) noexcept //Multi-thread safe if _pmutex not null
 		{
-			unique_lock lck(_pmutex);
+			unique_spinlock lck(_pmutex);
 			if (nullptr == _ppv)
 			{
 				_ppv = new t_node*[_uhashsize];
@@ -204,9 +204,9 @@ namespace ec
 			}
 			return nullptr;
 		}
-		bool get(key_type key, value_type& Value) noexcept
+		bool get(key_type key, value_type& Value) noexcept //Multi-thread safe if _pmutex not null
 		{
-			unique_lock lck(_pmutex);
+			unique_spinlock lck(_pmutex);
 			value_type* pv = get(key);
 			if (nullptr == pv)
 				return false;
@@ -215,7 +215,7 @@ namespace ec
 		}
 		void clear() noexcept //Multi-thread safe if _pmutex not null
 		{
-			unique_lock lck(_pmutex);
+			unique_spinlock lck(_pmutex);
 			if (!_ppv)
 				return;
 			if (_usize)
@@ -239,7 +239,7 @@ namespace ec
 		};
 		bool erase(key_type key) noexcept //Multi-thread safe if _pmutex not null
 		{
-			unique_lock lck(_pmutex);
+			unique_spinlock lck(_pmutex);
 			if (nullptr == _ppv || !_usize)
 				return false;
 			size_type upos = _Hasher()(key) % _uhashsize;
