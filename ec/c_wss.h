@@ -369,14 +369,17 @@ namespace ec
 		{
 			bool bret = true;
 			int nr = _pclis->OnReadData(ucid, (const char*)pdata, usize, &_httppkg);//解析数据，结构存放在_httppkg中
+			_threadstcode = 2001;
 			while (nr == he_ok)
 			{
 				if (_httppkg._nprotocol == PROTOCOL_HTTP)
 				{
+					_threadstcode = 2002;
 					bret = DoHttpRequest(ucid);
 				}
 				else if (_httppkg._nprotocol == PROTOCOL_WS)
 				{
+					_threadstcode = 2003;
 					if (_httppkg._opcode <= WS_OP_BIN)
 						bret = OnWebSocketData(ucid, _httppkg._fin, _httppkg._opcode, _httppkg._body.GetBuf(), _httppkg._body.GetSize());
 					else if (_httppkg._opcode == WS_OP_CLOSE)
@@ -395,6 +398,7 @@ namespace ec
 					}
 					_httppkg.Resetwscomp();
 				}
+				_threadstcode = 2004;
 				nr = _pclis->DoNextData(ucid, &_httppkg);
 			}
 			if (nr == he_failed)
