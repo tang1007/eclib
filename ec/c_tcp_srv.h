@@ -276,7 +276,7 @@ namespace ec
     class cTcpSvrWorkThread : public cThread
     {
     public:
-        cTcpSvrWorkThread() {
+        cTcpSvrWorkThread(){
             _nthreadno = -1;
             _wport = 0;
             m_pConPool = NULL;
@@ -294,6 +294,7 @@ namespace ec
         virtual ~cTcpSvrWorkThread() {
             Stop();
         };
+		
     protected:
         unsigned short	_wport;
         int             _nthreadno;
@@ -415,6 +416,7 @@ namespace ec
 #ifdef _WIN32
         virtual	void dojob()
         {
+			_watchdog = 0;
             int				nErrCode = 0;
             unsigned long	BytesTransferred, dwRecv, dwFlags = 0;
             unsigned int	ucid, opt;
@@ -508,6 +510,7 @@ namespace ec
 #else
         virtual	void dojob()
         {
+			_watchdog = 0;
 			int nerr;
             unsigned int ucid;
             if (!_pEpollEvents->Get(_eplevt))
@@ -590,7 +593,27 @@ namespace ec
                 m_pThread[i] = NULL;
         };
         virtual ~cTcpServer() {};
-
+		void watchdog_add() {
+			unsigned int i;
+			for (i = 0; i < m_uThreads; i++) {
+				if (m_pThread[i])
+					m_pThread[i]->_watchdog++;
+			}
+		}
+		int watchdog_get(uint32_t ucounts[], int32_t st[], uint32_t usize) {
+			uint32_t i;
+			for (i = 0; i < m_uThreads && i < usize; i++) {
+				if (m_pThread[i]) {
+					ucounts[i] = m_pThread[i]->_watchdog;
+					st[i] = m_pThread[i]->_threadstcode;
+				}
+				else {
+					ucounts[i] = 0;
+					st[i] = 0;
+				}
+			}
+			return (int)i;
+		}
     protected:
         unsigned short		m_wport;
         unsigned int		m_uThreads;
