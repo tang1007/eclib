@@ -630,6 +630,7 @@ namespace ec {
 		AioRpcSrvThread(xpoll* ppoll, cLog* plog, memory* pmem, int threadno, uint16_t srvport) :
 			base_(ppoll, plog, pmem, threadno, srvport)
 		{
+			_timelastcheck = ::time(0);
 		}
 		inline void InitRpcArgs(args_rpc* pargs) {
 			_pssmap = pargs->_pssmap;
@@ -648,6 +649,18 @@ namespace ec {
 		}
 	protected:
 		cRpcClientMap * _pssmap;
+		time_t _timelastcheck;
+		virtual	void CheckNotLogin() {
+			time_t ltime = ::time(0);
+			if (ltime == _timelastcheck)
+				return;
+			_timelastcheck = ltime;
+			ec::vector<uint32_t> ids(1024 * 2, true);
+			base_::_ppoll->get_ucid_byflag(ltime, XPOLL_HANDSHAKE_BIT, 60, &ids);
+			size_t i, n = ids.size();
+			for (i = 0; i < n; i++)
+				base_::_ppoll->remove(ids[i]);
+		}
 	private:
 		bool SendRpcMsg(uint32_t ucid, const void* pd, size_t size, RPCMSGTYPE msgtype, RPCCOMPRESS compress,
 			uint32_t seqno, const uint8_t* pmask, int timeovermsec = 100)
@@ -768,6 +781,7 @@ namespace ec {
 					return RetShMsg(ucid, sret, seqno, true);
 				}
 				_pssmap->SetUsrStatus(ucid, rpcusr_pass);
+				base_::_ppoll->set_flag(ucid, XPOLL_HANDSHAKE_BIT, true);
 				return RetShMsg(ucid, "onsha1,0", seqno);//success
 			}
 			return RetShMsg(ucid, "msgsh,-1,msg format error!", seqno, true);
