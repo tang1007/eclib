@@ -33,7 +33,7 @@ namespace ec {
 		memory(size_t sblksize, size_t sblknum,
 			size_t mblksize = 0, size_t mblknum = 0,
 			size_t lblksize = 0, size_t lblknum = 0,
-			std::mutex* pmutex = nullptr
+			spinlock* pmutex = nullptr
 		) : _ps(nullptr), _pm(nullptr), _pl(nullptr), _pmutex(pmutex), _stks(sblknum), _stkm(mblknum), _stkl(lblknum)
 		{
 			_sz_s = sblksize;// small memory blocks,Pre-allocation
@@ -67,14 +67,14 @@ namespace ec {
 		}
 		void *mem_malloc(size_t size)
 		{
-			unique_lock lck(_pmutex);
+			unique_spinlock lck(_pmutex);
 			return _malloc(size);
 		}
 		void mem_free(void *pmem)
 		{
 			if (!pmem)
 				return;
-			unique_lock lck(_pmutex);
+			unique_spinlock lck(_pmutex);
 			size_t pa = (size_t)pmem;
 			if (_ps && pa >= (size_t)_ps  && pa < (size_t)_ps + _sz_s * _blk_s)
 				_stks.push(pmem);
@@ -90,7 +90,7 @@ namespace ec {
 
 		void *malloc(size_t size, size_t &outsize)
 		{
-			unique_lock lck(_pmutex);
+			unique_spinlock lck(_pmutex);
 			void* pr = nullptr;
 			if (size <= _sz_s) {
 				if (_stks.pop(pr)) {
@@ -140,7 +140,7 @@ namespace ec {
 				return nullptr;
 			}
 			if (1) {
-				unique_lock lck(_pmutex);
+				unique_spinlock lck(_pmutex);
 				size_t pa = (size_t)pmem;
 				if (_ps && pa >= (size_t)_ps  && pa < (size_t)_ps + _sz_s * _blk_s) {
 					if (size <= _sz_s)
@@ -201,7 +201,7 @@ namespace ec {
 		}
 	private:
 		void *_ps, *_pm, *_pl;
-		std::mutex* _pmutex;
+		spinlock* _pmutex;
 		size_t _sz_s, _sz_m, _sz_l;  //blocks size
 		size_t _blk_s, _blk_m, _blk_l; // blocks number
 		ec::stack<void*> _stks;     // small memory blocks
