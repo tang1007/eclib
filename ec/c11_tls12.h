@@ -208,10 +208,10 @@ namespace ec
 		{
 			size_t maclen = 32;
 			if (_cipher_suite == TLS_RSA_WITH_AES_128_CBC_SHA || _cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA)
-				maclen = 20;			
-			if (len <  53) // 5 + pading16(IV + maclen + datasize)
+				maclen = 20;
+			if (len < 53) // 5 + pading16(IV + maclen + datasize)
 				return false;
-			
+
 			int i;
 			unsigned char sout[1024 * 20], iv[AES_BLOCK_SIZE], *pkey = _key_sw, *pkmac = _key_swmac;
 			AES_KEY aes_d;
@@ -232,7 +232,7 @@ namespace ec
 			unsigned int ufsize = sout[len - 5 - AES_BLOCK_SIZE - 1];//verify data MAC
 			if (ufsize > 15)
 				return false;
-			
+
 			size_t datasize = len - 5 - AES_BLOCK_SIZE - 1 - ufsize - maclen;
 			if (datasize > tls_rec_fragment_len)
 				return false;
@@ -350,7 +350,7 @@ namespace ec
 
 		bool mk_nocipher(vector<uint8_t> *pout, int nprotocol, const void* pd, size_t size)
 		{
-			uint8_t s[tls_rec_fragment_len + 2048];
+			uint8_t s[TLS_CBCBLKSIZE + 2048];
 			const uint8_t *puc = (const uint8_t *)pd;
 			size_t pos = 0, ss;
 
@@ -359,7 +359,7 @@ namespace ec
 			s[2] = TLSVER_NINOR;
 			while (pos < size)
 			{
-				ss = tls_rec_fragment_len;
+				ss = TLS_CBCBLKSIZE;
 				if (pos + ss > size)
 					ss = size - pos;
 				s[3] = (uint8_t)((ss >> 8) & 0xFF);
@@ -596,16 +596,16 @@ namespace ec
 			uint8_t *p = _pkgtcp.data(), uct, tmp[tls_rec_fragment_len + 2048];
 			uint16_t ulen;
 			int nl = (int)_pkgtcp.size(), nret = TLS_SESSION_NONE, ndl = 0;
-			while (nl >= 5)
+			while (nl >= 5)// type(1byte) version(2byte) length(2byte);
 			{
 				uct = *p;
 				ulen = p[3];
 				ulen = (ulen << 8) + p[4];
 				if (uct < (uint8_t)tls::rec_change_cipher_spec || uct >(uint8_t)tls::rec_application_data ||
-					_pkgtcp[1] != TLSVER_MAJOR || ulen > tls_rec_fragment_len + 2048)
+					_pkgtcp[1] != TLSVER_MAJOR || ulen > tls_rec_fragment_len)
 				{
 					if (_plog)
-						_plog->add(CLOG_DEFAULT_DBG, "ucid %u protocol error!", _ucid);					
+						_plog->add(CLOG_DEFAULT_DBG, "ucid %u protocol error!", _ucid);
 					if (!_breadcipher)
 						Alert(2, 70, pout);//protocol_version(70)
 					return TLS_SESSION_ERR;
@@ -613,31 +613,23 @@ namespace ec
 				if (ulen + 5 > nl)
 					break;
 				if (_breadcipher)
-				{					
+				{
 					if (decrypt_record(p, ulen + 5, tmp, &ndl))
-					{						
+					{
 						nret = dorecord(tmp, ndl, pout);
 						if (nret == TLS_SESSION_ERR)
 							return nret;
 					}
-					else{
-						if (uct == (uint8_t)tls::rec_handshake && ulen == 2) { //Alert
-							nret = dorecord(p, (int)ulen + 5, pout);
-							if (nret == TLS_SESSION_ERR)
-								return nret;
+					else {
+						if (_plog) {
+							_plog->add(CLOG_DEFAULT_DBG, "ucid %u Alert decode_error(50):record size %u", _ucid, ulen + 5);
+							_plog->addbin(CLOG_DEFAULT_DBG, p, ulen > 128 ? 128 : ulen);
 						}
-						else {
-							if (_plog) {
-								_plog->add(CLOG_DEFAULT_DBG, "ucid %u Alert decode_error(50):record size %u", _ucid, ulen + 5);
-								_plog->addbin(CLOG_DEFAULT_DBG, p, ulen > 128 ? 128 : ulen);
-							}
-							//Alert(2, 50, pout);//decode_error(50)						
-							return TLS_SESSION_ERR;
-						}
-					}					
+						return TLS_SESSION_ERR;
+					}
 				}
 				else
-				{					
+				{
 					nret = dorecord(p, (int)ulen + 5, pout);
 					if (nret == TLS_SESSION_ERR)
 						return nret;
@@ -760,13 +752,15 @@ namespace ec
 			return make_package(po, tls::rec_handshake, _cli_key_exchange.data(), _cli_key_exchange.size());
 		}
 
-		void OnServerHello(unsigned char* phandshakemsg, size_t size)
+		bool OnServerHello(unsigned char* phandshakemsg, size_t size)
 		{
+			if (size > _srv_hello.capacity())
+				return false;
 			_srv_hello.clear();
 			_srv_hello.add(phandshakemsg, size);
 
-			if (!_srv_hello.size())
-				return;
+			if (_srv_hello.size() < 40u)
+				return false;
 			unsigned char* puc = _srv_hello.data();
 			uint32_t ulen = puc[1];
 			ulen = (ulen << 8) + puc[2];
@@ -779,8 +773,12 @@ namespace ec
 			int n = *puc++;
 			puc += n;
 
+			if (n + 40 > (int)_srv_hello.size())
+				return false;
+
 			_cipher_suite = *puc++;
 			_cipher_suite = (_cipher_suite << 8) | *puc++;
+			return true;
 		}
 
 		bool OnServerCertificate(unsigned char* phandshakemsg, size_t size)
@@ -920,12 +918,18 @@ namespace ec
 				uint32_t ulen = p[1];
 				ulen = (ulen << 8) + p[2];
 				ulen = (ulen << 8) + p[3];
+				if (ulen > 1024 * 16)
+					return TLS_SESSION_ERR;
 				if ((int)ulen + 4 > nl)
 					break;
 				switch (p[0])
 				{
 				case tls::hsk_server_hello:
-					OnServerHello(p, ulen + 4);
+					if (!OnServerHello(p, ulen + 4)) {
+						if (_plog)
+							_plog->add(CLOG_DEFAULT_DBG, "sever hello package error, size=%u", ulen + 4);
+						return TLS_SESSION_ERR;
+					}
 					break;
 				case tls::hsk_certificate:
 					if (!OnServerCertificate(p, ulen + 4))
@@ -1081,6 +1085,8 @@ namespace ec
 
 		bool OnClientHello(uint8_t* phandshakemsg, size_t size, vector<uint8_t>* po)
 		{
+			if (size > _client_hello.capacity())
+				return false;
 			_client_hello.clear();
 			_client_hello.add(phandshakemsg, size);
 
@@ -1146,6 +1152,8 @@ namespace ec
 
 		bool OnClientKeyExchange(const uint8_t* pmsg, size_t sizemsg, vector<uint8_t>* po)
 		{
+			if (sizemsg > _cli_key_exchange.capacity())
+				return false;
 			_cli_key_exchange.clear();
 			_cli_key_exchange.add(pmsg, sizemsg);
 
@@ -1284,6 +1292,11 @@ namespace ec
 				uint32_t ulen = p[1];
 				ulen = (ulen << 8) + p[2];
 				ulen = (ulen << 8) + p[3];
+				if (ulen > 8192) {
+					if (_plog)
+						_plog->add(CLOG_DEFAULT_ERR, "srvtls ucid %u read handshake message datasize error size=%u", _ucid, ulen);
+					return TLS_SESSION_ERR;
+				}
 				if ((int)ulen + 4 > nl)
 					break;
 				switch (p[0])
@@ -1384,17 +1397,17 @@ namespace ec
 	protected:
 		unsigned int _ugroups;
 		map<uint32_t, t_tls_session> _map;
-		std::mutex _cs;
+		ec::spinlock _cs;
 	private:
-		std::mutex _mem_lock;// lock for _memmap
+		ec::spinlock _mem_lock;// lock for _memmap
 		ec::memory _memmap;// memory for send
 
-		std::mutex _cscls;// lock for _mem
+		ec::spinlock _cscls;// lock for _mem
 		ec::memory _memcls;// memory for tls_session_srv		
 	public:
 		void Add(uint32_t ucid, tls_session_srv* ps)
 		{
-			unique_lock lck(&_cs);
+			unique_spinlock lck(&_cs);
 			t_tls_session v;
 			v.pmem = &_memcls;
 			v.Pss = ps;
@@ -1402,13 +1415,13 @@ namespace ec
 		}
 		void Del(uint32_t ucid)
 		{
-			unique_lock lck(&_cs);
+			unique_spinlock lck(&_cs);
 			_map.erase(ucid);
 		}
 
 		int OnTcpRead(uint32_t ucid, const void* pd, size_t dsize, vector<uint8_t>* pout)
 		{
-			unique_lock lck(&_cs);
+			unique_spinlock lck(&_cs);
 			t_tls_session* pv = _map.get(ucid);
 			if (pv)
 				return pv->Pss->OnTcpRead(pd, dsize, pout);
@@ -1416,13 +1429,13 @@ namespace ec
 			return TLS_SESSION_NONE;
 		}
 		bool mkr_appdata(uint32_t ucid, ec::vector<uint8_t>*po, const void* pd, size_t len)
-		{			
+		{
 			t_tls_session* pv = _map.get(ucid);
 			if (pv)
 				return pv->Pss->MakeAppRecord(po, pd, len);
 			return false;
 		}
-		inline std::mutex* getcs() {
+		inline ec::spinlock* getcs() {
 			return &_cs;
 		}
 	};
