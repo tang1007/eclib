@@ -32,13 +32,16 @@ namespace ec
 	class cThread
 	{
 	public:
-		cThread():_bRuning(0),_bKilling(0)
+		cThread() :_watchdog(0), _threadstcode(0), _bRuning(0), _bKilling(0)
 		{
 		}
 		virtual ~cThread() {
 			StopThread();
 		}
+		std::atomic_uint _watchdog;
+		int _threadstcode; // thread status code
 	protected:
+
 		std::atomic_int	_bRuning;
 		std::atomic_int	_bKilling;
 
@@ -114,11 +117,13 @@ namespace ec
 	class cThread
 	{
 	public:
-		cThread() :_bRuning(0), _bKilling(0) {
+		cThread() : _watchdog(0), _threadstcode(0), _bRuning(0), _bKilling(0) {
 		};
 		virtual ~cThread() {
 			StopThread();
 		}
+		std::atomic_uint _watchdog;
+		int _threadstcode; // thread status code
 	protected:
 		std::atomic_int	_bRuning;
 		std::atomic_int	_bKilling;
