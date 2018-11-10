@@ -111,7 +111,7 @@ namespace ec
 			else if (nr > 0)
 				return true;
 			t_xpoll_send ts;
-			while (get_send(&ts)) { //send first					
+			while (get_send(&ts)) { //send first
 				if (sendts(&ts) < 0) // error
 					return false;
 				nr = post_msg(pd, size);
@@ -130,7 +130,7 @@ namespace ec
 			else if (nr > 0)
 				return true;
 			t_xpoll_send ts;
-			while (get_send(&ts)) { //send first					
+			while (get_send(&ts)) { //send first
 				if (sendts(&ts) < 0) // error
 					return false;
 				nr = post_msg(pvd);
@@ -143,7 +143,7 @@ namespace ec
 		}
 	private:
 		udpevt _udpevt;
-		std::mutex _cpevtlock;//lock for _cpevt
+		ec::spinlock _cpevtlock;//lock for _cpevt
 		ec::fifo<t_xpoll_event> _cpevt;//completely event
 
 		char _sip[32];
@@ -152,13 +152,13 @@ namespace ec
 		std::atomic_bool _bconnect;
 		t_xpoll_item _xitem;
 		uint32_t _ucid;
-		std::mutex _slock;//lock for socket
+		spinlock _slock;//lock for socket
 
 		int post_msg(const void *pd, size_t size) //return  -1:error; 0:full ; >0: post bytes
 		{
 			if (!_bconnect)
 				return -1;
-			ec::unique_lock lck(&_slock);
+			ec::unique_spinlock lck(&_slock);
 			t_xpoll_item* pi = &_xitem;
 			if ((pi->utail + 1) % XPOLL_SEND_PKG_NUM == pi->uhead) //full
 				return 0;
@@ -175,7 +175,7 @@ namespace ec
 		{
 			if (!_bconnect)
 				return -1;
-			ec::unique_lock lck(&_slock);
+			ec::unique_spinlock lck(&_slock);
 			t_xpoll_item* pi = &_xitem;
 			if ((pi->utail + 1) % XPOLL_SEND_PKG_NUM == pi->uhead) //full
 				return 0;
@@ -267,7 +267,7 @@ namespace ec
 		};
 	private:
 		bool isempty() {
-			ec::unique_lock lck(&_slock);
+			ec::unique_spinlock lck(&_slock);
 			return _xitem.uhead == _xitem.utail;
 		}
 		void add_event(uint32_t ucid, uint8_t opt, uint8_t st, void *pdata, size_t datasize)
@@ -283,7 +283,7 @@ namespace ec
 		}
 		bool get_send(t_xpoll_send* ps)
 		{
-			ec::unique_lock lck(&_slock);
+			ec::unique_spinlock lck(&_slock);
 			t_xpoll_item* p = &_xitem;
 			if (p->uhead != p->utail) //not empty
 			{
@@ -306,7 +306,7 @@ namespace ec
 			}
 			if (ns > 1024 * 64)
 				ns = 1024 * 64;
-#ifdef _WIN32            
+#ifdef _WIN32
 			nret = ::send(ps->fd, (char*)ps->pd + ps->usendsize, ns, 0);
 			if (-1 == nret) {
 				int nerr = WSAGetLastError();
@@ -387,7 +387,7 @@ namespace ec
 #else
 			int nr = ::recv(fd, rbuf, (int)sizeof(rbuf), MSG_DONTWAIT);
 #endif
-			if (nr == 0) {//close gracefully			
+			if (nr == 0) {//close gracefully
 				_disconnect(XPOLL_EVT_ST_CLOSE);
 				return;
 			}
@@ -400,7 +400,7 @@ namespace ec
 					_disconnect(XPOLL_EVT_ST_ERR);
 
 			}
-			else { //read event				
+			else { //read event
 				static_cast<_CLS*>(this)->onrecv(rbuf, nr);
 			}
 		}
@@ -410,7 +410,7 @@ namespace ec
 			memset(&evt, 0, sizeof(evt));
 			while (_cpevt.get(evt)) {
 				if (evt.pdata)
-					_pmem->mem_free(evt.pdata);//free memory				
+					_pmem->mem_free(evt.pdata);//free memory
 			}
 		}
 	};
@@ -483,8 +483,15 @@ namespace ec
 		int _threadno;
 		uint16_t _srvport;
 	protected:
+		virtual	void CheckNotLogin() {
+		}
 		virtual	void dojob() {
+			_watchdog = 0;
+			if (!_threadno) {
+				CheckNotLogin();
+			}
 			t_xpoll_event evt;
+			memset(&evt,0,sizeof(evt));
 			if (!_ppoll->get_event(&evt))
 				return;
 			if (XPOLL_EVT_OPT_READ == evt.opt) {
@@ -521,6 +528,19 @@ namespace ec
 		}
 		inline int getsendnodone(uint32_t ucid) { // get send not done pkg number
 			return _poll.sendnodone(ucid);
+		}
+		void watchdog_add() {
+			unsigned int i;
+			for (i = 0; i < _workers.size(); i++)
+				_workers[i]->_watchdog++;
+		}
+		int watchdog_get(uint32_t ucounts[], int32_t st[], uint32_t usize) {
+			uint32_t i;
+			for (i = 0; i < _workers.size() && i < usize; i++) {
+				ucounts[i] = _workers[i]->_watchdog;
+				st[i] = _workers[i]->_threadstcode;
+			}
+			return (int)i;
 		}
 	protected:
 		inline void InitArgs(_THREAD* pthread) {
@@ -636,6 +656,15 @@ namespace ec
 				netaddr.sin_addr.s_addr = inet_addr(sip);
 			netaddr.sin_port = htons(wport);
 
+
+			int opt = 1;
+#ifdef _WIN32
+			setsockopt(sl, SOL_SOCKET, SO_REUSEADDR,
+				(const char *)&opt, sizeof(opt));
+#else
+			setsockopt(sl, SOL_SOCKET, SO_REUSEADDR,
+				(const void *)&opt, sizeof(opt));
+#endif
 			if (bind(sl, (const sockaddr *)&netaddr, sizeof(netaddr)) == SOCKET_ERROR)
 			{
 				::closesocket(sl);
