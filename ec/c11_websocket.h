@@ -926,12 +926,12 @@ namespace ec
 		}
 	private:
 		std::mutex _cs;
-		std::mutex _lockmem;
+		ec::spinlock _lockmem;
 		ec::memory _mem; //memory for map
 
 		map<unsigned int, t_httpclient> _map;
 
-		std::mutex _lockcls;
+		ec::spinlock _lockcls;
 		ec::memory _memcls; // memory for new cHttpClient
 	public:
 
