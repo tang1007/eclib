@@ -39,6 +39,7 @@ limitations under the License.
 #ifdef RPC_USE_ZLIB
 #	include "c_zlibs.h"  //ZLIB src
 #endif
+#define XPOLL_RPCLOGIN_BIT 1
 namespace ec {
 
 	enum RPCMSGTYPE //message type
@@ -656,7 +657,7 @@ namespace ec {
 				return;
 			_timelastcheck = ltime;
 			ec::vector<uint32_t> ids(1024 * 2, true);
-			base_::_ppoll->get_ucid_byflag(ltime, XPOLL_HANDSHAKE_BIT, 60, &ids);
+			base_::_ppoll->get_ucid_byflag(ltime, XPOLL_RPCLOGIN_BIT, 60, &ids);
 			size_t i, n = ids.size();
 			for (i = 0; i < n; i++)
 				base_::_ppoll->remove(ids[i]);
@@ -781,7 +782,7 @@ namespace ec {
 					return RetShMsg(ucid, sret, seqno, true);
 				}
 				_pssmap->SetUsrStatus(ucid, rpcusr_pass);
-				base_::_ppoll->set_flag(ucid, XPOLL_HANDSHAKE_BIT, true);
+				base_::_ppoll->set_flag(ucid, XPOLL_RPCLOGIN_BIT, true);
 				return RetShMsg(ucid, "onsha1,0", seqno);//success
 			}
 			return RetShMsg(ucid, "msgsh,-1,msg format error!", seqno, true);
