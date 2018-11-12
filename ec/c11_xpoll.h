@@ -54,6 +54,7 @@ typedef struct pollfd {
 #	include <sys/socket.h>
 #	include <sys/ioctl.h>
 #	include <sys/select.h>
+#	include <sys/eventfd.h>
 #	include <netinet/tcp.h>
 #	include <arpa/inet.h>
 #	include <string.h>
@@ -90,7 +91,7 @@ typedef struct pollfd {
 #	endif
 #endif
 namespace ec {
-	class udpevt // udp event used to stop poll/Wsapoll wait
+	class udpevt // udp event used to stop poll/Wsapoll wait, linux use eventfd
 	{
 	public:
 		udpevt() {
@@ -101,10 +102,16 @@ namespace ec {
 		}
 		bool open()
 		{
+#ifdef _WIN32
 			uint16_t port = (uint16_t)50000;
 			SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 			if (s == INVALID_SOCKET)
 				return false;
+			long ul = 1; // set none block
+			if (SOCKET_ERROR == ioctlsocket(s, FIONBIO, (unsigned long*)&ul)) {
+				::closesocket(s);
+				return false;
+			}
 			memset(&_sinaddr, 0, sizeof(_sinaddr));
 			_sinaddr.sin_family = AF_INET;
 			_sinaddr.sin_addr.s_addr = inet_addr("127.0.0.192");
@@ -120,6 +127,10 @@ namespace ec {
 			}
 			_fd = s;
 			return true;
+#else
+			_fd = eventfd(1, EFD_NONBLOCK);
+			return _fd >= 0;
+#endif 
 		}
 		void close()
 		{
@@ -132,18 +143,22 @@ namespace ec {
 		void set_event()
 		{
 			if (_fd != INVALID_SOCKET) {
-				char evt[4] = { 0 };
-				::sendto(_fd, evt, 1, 0, (struct sockaddr*)&_sinaddr, (socklen_t)sizeof(_sinaddr));//send to itself
+				uint64_t evt = 1;
+#ifdef _WIN32
+				::sendto(_fd, (char*)&evt, 8, 0, (struct sockaddr*)&_sinaddr, (socklen_t)sizeof(_sinaddr));//send to itself
+#else
+				::write(_fd, &evt, sizeof(uint64_t));
+#endif
 			}
 		}
 		void reset_event()
 		{
 			if (_fd != INVALID_SOCKET) {
-				char evt[4096];
+				uint64_t evt;
 #ifdef _WIN32
-				::recv(_fd, evt, (int)sizeof(evt), 0);
+				::recv(_fd, (char*)&evt, (int)sizeof(evt), 0);
 #else
-				::recv(_fd, evt, (int)sizeof(evt), MSG_DONTWAIT);
+				::read(_fd, &evt, (int)sizeof(evt));
 #endif
 			}
 		}
@@ -297,10 +312,7 @@ namespace ec {
 			_maplock.unlock();
 			void *pinfo = _memread.mem_malloc(XPOLL_READ_BLK_SIZE);
 			if (!pinfo)
-				return false;
-			str_ncpy((char*)pinfo, sinfo, XPOLL_READ_BLK_SIZE - 1);
-			add_event(ucid, XPOLL_EVT_OPT_READ, XPOLL_EVT_ST_CONNECT, pinfo, strlen((char*)pinfo) + 1);//add one connect event
-
+				return false;			
 			t_xpoll_item t; //add to map
 			memset(&t, 0, sizeof(t));
 			t.ucid = ucid;
@@ -309,13 +321,14 @@ namespace ec {
 			t.timeconnect = ::time(0);
 			_maplock.lock();
 			if (!_map.set(ucid, t)) {
-				_maplock.unlock();
-				add_event(ucid, XPOLL_EVT_OPT_READ, XPOLL_EVT_ST_ERR, 0, 0);
-				return true; // return true , delete with event
-			}
+				_maplock.unlock();				
+				return false; 
+			}			
+			_maplock.unlock();
+			str_ncpy((char*)pinfo, sinfo, XPOLL_READ_BLK_SIZE - 1);
+			add_event(ucid, XPOLL_EVT_OPT_READ, XPOLL_EVT_ST_CONNECT, pinfo, strlen((char*)pinfo) + 1);//add one connect event
 			_fdchanged = true;
 			_udpevt.set_event();
-			_maplock.unlock();			
 			return true;
 		}
 		inline void remove(uint32_t ucid) // remove from pool
