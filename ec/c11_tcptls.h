@@ -2,7 +2,7 @@
 \file c11_tcptls.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.7.31
+\update 2018.11.12
 
 eclib secret(TLS1.2 rfc5246) TCP  server and client template class
 
@@ -121,8 +121,6 @@ namespace ec {
 	protected:
 		void onconnect(uint32_t ucid, const char* sip)//connect event
 		{
-			if (base_::_plog)
-				base_::_plog->add(CLOG_DEFAULT_MSG, "ucid %u TCP connected server port %u from %s", ucid, base_::_srvport, sip);
 			void *p = _psss->getclsmem()->mem_malloc(sizeof(tls_session_srv));
 			tls_session_srv* ps = new(p) tls_session_srv(ucid, _pca->_pcer.data(), _pca->_pcer.size(),
 				_pca->_prootcer.data(), _pca->_prootcer.size(), &_pca->_csRsa, _pca->_pRsaPrivate, base_::_pmem,
