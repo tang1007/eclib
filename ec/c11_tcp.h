@@ -2,7 +2,7 @@
 \file c11_tcp.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.6.24
+\update 2018.11.13
 
 eclibe Asynchronous TCP template class for windows & linux
 
@@ -223,6 +223,7 @@ namespace ec
 				SOCKET s = netio_tcpconnect(_sip, _port, 4, true);
 				if (INVALID_SOCKET == s)
 					return;
+				_delaytks = 40; //4 seconds
 				netio_setkeepalive(s);
 				_ucid++;
 				while (!_ucid)
