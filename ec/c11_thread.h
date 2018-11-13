@@ -87,6 +87,7 @@ namespace ec
 			_bKilling = 0;
 			_bRuning = 1;
 			while (!_bKilling) {
+				_watchdog = 0;
 				if (!_pevt || _pevt->Wait(200)) {
 					if (!_pdojob)
 						dojob();
