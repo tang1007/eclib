@@ -601,13 +601,8 @@ namespace ec
                 ulen = p[3];
                 ulen = (ulen << 8) + p[4];
                 if (uct < (uint8)tls::rec_change_cipher_spec || uct >(uint8)tls::rec_application_data ||
-                    _pkgtcp[1] != TLSVER_MAJOR || ulen > tls_rec_fragment_len)
-                {
-                    if (_pkgtcp[1] != TLSVER_MAJOR)
-                    {
-                        ECTRACE("not support Ver %d.%d\n", _pkgtcp[1], _pkgtcp[2]);
-                       // Alert(2, 70, OnData, pParam);//protocol_version(70)
-                    }
+                    _pkgtcp[1] != TLSVER_MAJOR || ulen > tls_rec_fragment_len || _pkgtcp[2] > TLSVER_NINOR)
+                {                    
                     return -1;
                 }
                 if (ulen + 5 > nl)
