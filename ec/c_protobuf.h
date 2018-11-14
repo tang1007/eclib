@@ -65,11 +65,16 @@ namespace ec
 			out = 0;
 			do {
 				out |= (*pd & 0x7F) << nbit;
+				if (!(*pd & 0x80)) {
+					pd++;
+					len--;
+					return true;
+				}
 				nbit += 7;
 				pd++;
 				len--;
-			} while (*(pd - 1) & 0x80 && len > 0 && nbit < 8 * sizeof(_Tp));
-			return nbit <= (7 * (sizeof(_Tp) + 1));
+			} while (len > 0 && nbit < (sizeof(_Tp) * 8));
+			return false;
 		}
 		template<class _Tp>
 		bool out_varint(_Tp v, ec::vector<uint8_t>* pout) const //out Varint (Base 128 Varints)
@@ -87,8 +92,10 @@ namespace ec
 					pout->add(out);
 					break;
 				}
-			} while (nbit < 8 * sizeof(_Tp));
-			return nbit <= (7 * (sizeof(_Tp) + 1));
+			} while (nbit + 7 < (sizeof(_Tp) * 8));	
+			if (v >> nbit)
+				pout->add((uint8_t)(v >> nbit));
+			return true;
 		}
 		template<class _Tp>
 		inline bool get_fixed(const uint8_t* &pd, int &len, _Tp &out) const  //get 32-bit and 64-bit (fixed32,sfixed32,fixed64,sfixed64,float,double)
@@ -252,9 +259,11 @@ namespace ec
 				else {
 					pout->add(out);
 					break;
-				}
-			} while (nbit < 8 * sizeof(_Tp));
-			return nbit <= (7 * (sizeof(_Tp) + 1));
+				}				
+			} while (nbit + 7 < (sizeof(_Tp) * 8));
+			if (v >> nbit) 
+				pout->add((uint8_t)(v >> nbit));
+			return true;
 		}
 
 		template<class _Tp, size_t _N>
