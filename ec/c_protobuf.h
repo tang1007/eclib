@@ -1,7 +1,7 @@
 ﻿/*!
 \file c_protobuf.h
 \author kipway@outlook.com
-\update 2018.11.9
+\update 2018.11.14
 
 eclib class base_protobuf ,parse google protocol buffer
 
@@ -156,7 +156,15 @@ namespace ec
 			outlen = ul;
 			return true;
 		}
-
+		inline bool get_length_delimited(const uint8_t* &pd, int &len, const uint8_t** pout, size_t *poutlen) const //get string, bytes,no copy
+		{
+			size_t sz = 0;
+			if (get_length_delimited(pd, len, pout, sz)) {
+				*poutlen = sz;
+				return true;
+			}
+			return false;
+		}
 		inline bool get_string(const uint8_t* &pd, int &len, char* pout, size_t outlen) const
 		{
 			uint32_t ul = 0;
@@ -323,6 +331,13 @@ namespace ec
 			set_flag(id);
 			return true;
 		}
+		bool p_cls(int id, uint32_t wire_type, const uint8_t* &pd, int &len, const uint8_t** p, size_t *psize) { // no copy
+			if (pb_length_delimited == wire_type && get_length_delimited(pd, len, p, psize)) {
+				set_flag(id);
+				return true;
+			}
+			return false;
+		}
 		bool p_cls(int id, uint32_t wire_type, const uint8_t* &pd, int &len, ec::vector<uint8_t>* pout)
 		{
 			if (wire_type != pb_length_delimited || !get_length_delimited(pd, len, pout))
@@ -459,6 +474,11 @@ namespace ec
 		inline bool p_str(uint32_t wire_type, const uint8_t* &pd, int &len, char* pout, size_t outlen) {
 			return pb_length_delimited == wire_type && get_string(pd, len, pout, outlen);
 		}
+		
+		bool p_cls(uint32_t wire_type, const uint8_t* &pd, int &len, const uint8_t** p , size_t *psize) { // no copy		
+			return (pb_length_delimited == wire_type && get_length_delimited(pd, len, p, psize));
+		}
+
 		inline bool p_cls(uint32_t wire_type, const uint8_t* &pd, int &len, ec::vector<uint8_t>* pout) {
 			return pb_length_delimited == wire_type && get_length_delimited(pd, len, pout);
 		}
