@@ -3,7 +3,7 @@
 \brief parse json from string or file
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.11.10
+\update 2018.11.15
 
 eclibe parse json for windows & linux
 
@@ -77,6 +77,24 @@ namespace ec {
 			}
 			return false;
 		}
+		inline bool ps_skipto(const char* &ps, const char* pe, char c)//跳过空白字符到c
+		{
+			while (ps < pe) {
+				if (*ps != '\x20' && *ps != '\n' && *ps != '\r' && *ps != '\b' && *ps != '\t' && *ps != '\f')
+					return c == *ps;
+				ps++;
+			}
+			return false;
+		}
+		inline bool ps_skipto(const char* &ps, const char* pe, const char* cs)//跳过空白字符到cs中任何一个字符的位置
+		{
+			while (ps < pe) {
+				if (*ps != '\x20' && *ps != '\n' && *ps != '\r' && *ps != '\b' && *ps != '\t' && *ps != '\f')
+					return nullptr != strchr(cs, *ps);
+				ps++;
+			}
+			return false;
+		}
 		inline bool ps_objend(const char* &ps, const char* pe, char cs, char ce) //ps指向cs开始,移动到对象结束,ps会指向ce之后的一个字符
 		{
 			int nk = 1;
@@ -126,7 +144,7 @@ namespace ec {
 					v.val = nullptr;
 				});
 				_kvs.clear(true);
-			}			
+			}
 		public:
 			json(ec::memory *pmem) : _pmem(pmem), _kvs(SIZE_JSON_KVS_GROWN, pmem) {
 			}
@@ -164,9 +182,9 @@ namespace ec {
 				return false;
 			}
 			bool from_str(const char* ps, size_t size) {
-				if (!ps || !size)
-					return false;
 				clear();
+				if (!ps || !size)
+					return false;				
 				const char *pe = ps + size;
 				if (!ps_skip(ps, pe)) //跳过中间的空格换行等到值的起点
 					return false;
@@ -195,7 +213,7 @@ namespace ec {
 					s++;
 				}
 				if (sp && s > sp + 1)
-					pout->add(sp, s - sp - 1);
+					pout->add(sp, s - sp);
 			}
 			bool from_file(const char *sfile) {
 				if (!sfile)
@@ -207,7 +225,7 @@ namespace ec {
 				if (!(c == 0xef && c2 == 0xbb && c3 == 0xbf)) // not utf8 with bom
 					fseek(pf, 0, SEEK_SET);
 				char s[1024 * 8];
-				
+
 				ec::vector<char> v(1024 * 8, true, _pmem);
 				size_t sz;
 				while ((sz = fread(s, 1, sizeof(s), pf)) > 0)
@@ -216,7 +234,7 @@ namespace ec {
 				if (!v.size())
 					return false;
 				ec::vector<char> vjstr(1024 * 8, true, _pmem);
-				del_comment(&v,&vjstr);
+				del_comment(&v, &vjstr);
 				return from_str(vjstr.data(), vjstr.size());
 			}
 			inline void prt(int nspace) {
@@ -275,15 +293,22 @@ namespace ec {
 					return false;
 				ps++;
 				while (ps < pe) {
-					if (!ps_tochar(ps, pe, "\"}")) // to key start
+					if (!ps_skipto(ps, pe, ",\"}")) // to key start
 						return false;
+					if (*ps == ',') {
+						ps++;
+						continue;
+					}
 					if (*ps == '}')
 						return true;
 					ps++;	pf = ps;
 					if (!ps_tochar(ps, pe, '"'))  //to key end
 						return false;
 					nf = (int)(ps - pf);
-					if (!ps_tochar(ps, pe, ':'))
+					if (nf > 40)
+						return false;
+					ps++;
+					if (!ps_skipto(ps, pe, ':'))
 						return false;
 					ps++;
 					if (!ps_skip(ps, pe))
@@ -311,8 +336,6 @@ namespace ec {
 					}
 					if (pf && nf && pv && nv)
 					{
-						if (nf > 40)
-							return false;
 						if (exist(pf, nf))
 							return false; //有重复key
 						t_i t;
@@ -386,7 +409,7 @@ namespace ec {
 									return false;
 								memcpy(s, pv, nv);
 								s[nv] = '\0';
-								_kvs.add(t_i(nullptr, s));								
+								_kvs.add(t_i(nullptr, s));
 							}
 						}
 						ps++;
@@ -403,6 +426,299 @@ namespace ec {
 								memcpy(s, pv, nv);
 								s[nv] = '\0';
 								_kvs.add(t_i(nullptr, s));
+							}
+						}
+						return true; //结束
+					}
+					else
+						ps++;
+				}
+				return false;
+			}
+		};
+
+		class jsonex // json对象解析,无内存拷贝，高速版
+		{
+
+		public:
+			class t_i {
+			public:
+				t_i(const char *k, uint32_t kl, const char *v, uint32_t vl) :key(k), val(v), klen(kl), vlen(vl) {
+				}
+				const char *key; // nullptr表示是数组成员
+				const char *val;
+				uint32_t klen;
+				uint32_t vlen;
+			};
+		private:
+			ec::memory *_pmem;
+			ec::vector<t_i> _kvs;
+		public:
+			jsonex(ec::memory *pmem = nullptr) : _pmem(pmem), _kvs(SIZE_JSON_KVS_GROWN, true, pmem) {
+			}
+			~jsonex() {
+			}
+			inline size_t size() {
+				return _kvs.size();
+			}
+			inline ec::memory* mem() {
+				return _pmem;
+			}
+			const t_i* at(size_t i) {
+				if (i < _kvs.size())
+					return &_kvs[i];
+				return nullptr;
+			}
+			const char* getval(const char* key, size_t *psize, KVTYPE* pvt = nullptr) {
+				size_t i, n = _kvs.size();
+				for (i = 0; i < n; i++) {
+					if (_kvs[i].key && _kvs[i].klen && ec::str_ineq(_kvs[i].key, key, _kvs[i].klen)) {
+						if (pvt)
+							*pvt = vtype(_kvs[i].val);
+						*psize = _kvs[i].vlen;
+						return _kvs[i].val;
+					}
+				}
+				return nullptr;
+			}
+			bool exist(const char* key, size_t keysize) {
+				size_t i, n = _kvs.size();
+				for (i = 0; i < n; i++) {					
+					if (_kvs[i].key && _kvs[i].klen && _kvs[i].klen == keysize && ec::str_ineq(_kvs[i].key, key, keysize))
+						return true;
+				}
+				return false;
+			}
+			bool from_str(const char* ps, size_t size) {
+				_kvs.clear();
+				if (!ps || !size)
+					return false;				
+				const char *pe = ps + size;
+				if (!ps_skip(ps, pe)) //跳过中间的空格换行等到值的起点
+					return false;
+				if (*ps == '[')
+					return from_array(ps, pe);
+				else if (*ps == '{')
+					return from_obj(ps, pe);
+				return false;
+			}
+				
+			bool tst_from_file(const char *sfile) {
+				if (!sfile)
+					return false;
+				FILE *pf = fopen(sfile, "rt");
+				if (!pf)
+					return false;
+				int c = fgetc(pf), c2 = fgetc(pf), c3 = fgetc(pf);
+				if (!(c == 0xef && c2 == 0xbb && c3 == 0xbf)) // not utf8 with bom
+					fseek(pf, 0, SEEK_SET);
+				char s[1024 * 8];
+
+				ec::vector<char> v(1024 * 8, true, _pmem);
+				size_t sz;
+				while ((sz = fread(s, 1, sizeof(s), pf)) > 0)
+					v.add(s, sz);
+				fclose(pf);
+				if (!v.size())
+					return false;
+				ec::vector<char> vjstr(1024 * 8, true, _pmem);
+				json::del_comment(&v, &vjstr);
+				if (from_str(vjstr.data(), vjstr.size()))
+				{
+					print();
+					return true;
+				}
+				return false;
+			}
+
+			inline void prt(int nspace) {
+				while (nspace > 0) {
+					printf("\x20");
+					nspace--;
+				}
+			}
+
+			void prtstr(const char* s,size_t size) {
+				while (size) {
+					printf("%c",*s);
+					size--;
+					s++;
+				}
+			}			
+			void print(int nspace = 0) { //递归打印json对象
+				int i = 0;
+				_kvs.for_each([&](t_i &v) {
+					KVTYPE vt = vtype(v.val);
+					if (vt == jsv_val) {
+						prt(nspace);
+						if (v.key) {
+							prtstr(v.key, v.klen);
+							printf(":");
+							prtstr(v.val, v.vlen);
+							printf("\n");
+						}
+						else {
+							printf("[%d] ", i++);
+							prtstr(v.val, v.vlen);
+							printf("\n");
+						}
+					}
+					else {
+						jsonex js(_pmem);
+						if (!js.from_str(v.val, v.vlen)) {
+							prt(nspace);
+							printf("err-> ");
+							prtstr(v.key, v.klen);
+							printf(":");
+							prtstr(v.val, v.vlen);
+							printf("\n");
+						}
+						else {
+							prt(nspace);
+							if (v.key) {
+								if (vt == jsv_array) {									
+									prtstr(v.key, v.klen);
+									printf(":[ \n");
+								}
+								else {									
+									prtstr(v.key, v.klen);
+									printf(":{ \n");
+								}
+							}
+							else {
+								if (vt == jsv_array)
+									printf("[%d] [\n ", i++);
+								else
+									printf("[%d] {\n ", i++);
+							}
+							js.print(nspace + 4);
+							prt(nspace);
+							if (vt == jsv_array)
+								printf("]\n");
+							else
+								printf("}\n");
+						}
+					}
+				});
+			}
+		private:
+			bool from_obj(const char* ps, const char* pe) { // 从 json对象解析
+				bool bend = false;
+				int  nf = 0, nv = 0;
+				const char *pf = nullptr, *pv = nullptr;
+				if (*ps != '{')
+					return false;
+				ps++;
+				while (ps < pe) {
+					if (!ps_skipto(ps, pe, ",\"}")) // to key start
+						return false;
+					if (*ps == ',') {
+						ps++;
+						continue;
+					}
+					if (*ps == '}')
+						return true;
+					ps++;	pf = ps;
+					if (!ps_tochar(ps, pe, '"'))  //to key end
+						return false;
+					nf = (int)(ps - pf);
+					if (nf > 40)
+						return false;
+					ps++;
+					if (!ps_skipto(ps, pe, ':'))
+						return false;
+					ps++;
+					if (!ps_skip(ps, pe))
+						return false;
+					if (*ps == '"') { //字符串
+						ps++;	pv = ps;
+						if (!ps_tochar(ps, pe, '\"'))
+							return false;
+						nv = (int)(ps - pv);	ps++;
+					}
+					else if (*ps == '{' || *ps == '[') { //JSON对象
+						pv = ps;
+						if (!ps_objend(ps, pe, *ps, *ps == '{' ? '}' : ']'))
+							return false;
+						nv = (int)(ps - pv);
+					}
+					else { //立即数
+						pv = ps;
+						if (!ps_tochar(ps, pe, ",}"))
+							return false;
+						nv = (int)(ps - pv);
+						if (*ps == '}')
+							bend = true;
+						ps++;
+					}
+					if (pf && nf && pv && nv)
+					{
+						if (exist(pf, nf))
+							return false; //有重复key
+						t_i t(pf,nf,pv,nv);
+						if (!_kvs.add(t))
+							return false;
+					}
+					if (bend)
+						return true;
+					nv = 0; nf = 0;	pf = nullptr;	pv = nullptr;
+				}
+				return false;
+			}
+			bool from_array(const char* ps, const char*pe) {//从json数组数组解析
+				int  nv = 0;
+				const char *pv = nullptr;
+				if (*ps != '[')
+					return false;
+				ps++;
+				pv = ps;
+
+				while (ps < pe)
+				{
+					if (!ps_skip(ps, pe))
+						return false;
+					if (*ps == '{' || *ps == '[') { //JSON数组对象成员
+						pv = ps;
+						if (!ps_objend(ps, pe, *ps, *ps == '{' ? '}' : ']'))
+							return false;
+						nv = (int)(ps - pv);
+						t_i t(nullptr, 0, pv, nv);
+						if (!_kvs.add(t))
+							return false;
+						pv = ps;
+					}
+					else if (*ps == '\"') { //JSON数组字符串成员
+						ps++;	pv = ps;
+						if (!ps_tochar(ps, pe, '\"'))
+							return false;
+						nv = (int)(ps - pv);						
+						t_i t(nullptr, 0, pv, nv);
+						if (!_kvs.add(t))
+							return false;
+						ps++;
+						pv = ps;
+					}
+					else if (*ps == ',') {
+						if (pv) {
+							ps_skip(pv, ps);
+							if (pv != ps) {
+								nv = (int)(ps - pv);
+								t_i t(nullptr, 0, pv, nv);
+								if (!_kvs.add(t))
+									return false;
+							}
+						}
+						ps++;
+						pv = ps;
+					}
+					else if (*ps == ']') {
+						if (pv) {
+							ps_skip(pv, ps);
+							if (pv != ps) {
+								nv = (int)(ps - pv);
+								t_i t(nullptr, 0, pv, nv);
+								if (!_kvs.add(t))
+									return false;
 							}
 						}
 						return true; //结束
