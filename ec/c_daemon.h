@@ -232,6 +232,10 @@ namespace ec
         {
             return _sDaemon;
         }
+		inline const char* version()
+		{
+			return _sVer;
+		}
         static void CloseIO()
         {
             int fd = open("/dev/null", O_RDWR);
