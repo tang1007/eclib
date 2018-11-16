@@ -2,7 +2,7 @@
 \file c_str.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.7.1
+\update 2018.11.16
 
 eclib  string
 
@@ -57,7 +57,7 @@ namespace ec
 		if (!*s)
 			return;
 		char *sp = s, *s1 = s;
-		while (strchr(flt, *sp))
+		while (*sp && strchr(flt, *sp))
 			sp++;
 		if (sp != s) {
 			while (*sp)
