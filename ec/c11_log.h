@@ -184,8 +184,7 @@ namespace ec
 			_buf.add('\0');
 			_buf.clear();
 		}
-		virtual ~cLog()
-		{
+		virtual ~cLog()	{
 		}
 	protected:
 		bool _blinestylewin; // true \r\a ,false \n
@@ -244,6 +243,9 @@ namespace ec
 		}
 		inline int get_outlevel() {
 			return _cfg._outleval;
+		}
+		inline const char* getlogpath() {
+			return _slogpath;
 		}
 		void	add(int level, const char * format, ...)
 		{
