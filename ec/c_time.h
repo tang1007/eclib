@@ -2,7 +2,7 @@
 \file c_time.h
 \author	jiangyong
 \email	kipway@outlook.com
-\update 2018.11.3
+\update 2018.11.16
 
 InterProcess Communication with socket AF_UNIX(Linux), AF_INET(windows)
 
@@ -174,6 +174,13 @@ namespace ec
 			else
 				snprintf(sout, sizeout, "%d/%d/%d", _year, _mon, _day);
 		}
+		void tostring_ag(char* sout, size_t sizeout, bool hastime = true) {
+			if (hastime)
+				snprintf(sout, sizeout, "%d/%02d/%02d %02d:%02d:%02d", _year, _mon, _day, _hour, _min, _sec);
+			else
+				snprintf(sout, sizeout, "%d/%02d/%02d", _year, _mon, _day);
+		}
+
 		int weekday() { // 1=monday,..., 7=sunday, 0:error
 			if (!_gmt)
 				return 0;
