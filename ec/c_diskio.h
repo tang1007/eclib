@@ -3,7 +3,7 @@
 \file c_diskio.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.10.9
+\update 2018.11.15
 
 disk io tools
 
@@ -49,6 +49,11 @@ limitations under the License.
 
 namespace ec
 {
+	struct t_stat {
+		long long size;
+		time_t mtime;
+		time_t ctime;
+	};
 	class IO
 	{
 	public:
@@ -166,11 +171,20 @@ namespace ec
 			strcpy(sappname, sFname);
 			return true;
 		}
-
-		static long long filesize(const char* wsfile)
+		static bool filestat(const char* sfile,t_stat *pout) {
+			struct __stat64 statbuf;
+			if (!_stat64(sfile, &statbuf)) {
+				pout->size = statbuf.st_size;
+				pout->mtime = statbuf.st_mtime;
+				pout->ctime = statbuf.st_ctime;
+				return true;
+			}
+			return false;
+		}
+		static long long filesize(const char* sfile)
 		{
 			struct __stat64 statbuf;
-			if (!_stat64(wsfile, &statbuf))
+			if (!_stat64(sfile, &statbuf))
 				return statbuf.st_size;
 			return -1;
 		}
@@ -388,6 +402,17 @@ namespace ec
 			return -1;
 		}
 
+		static bool filestat(const char* sfile, t_stat *pout) {
+			struct stat statbuf;
+			if (!::stat(sfile, &statbuf)) {
+				pout->size = statbuf.st_size;
+				pout->mtime = statbuf.st_mtim.tv_sec;
+				pout->ctime = statbuf.st_ctim.tv_sec;
+				return true;
+			}
+			return false;
+		}
+
 		/*!
 		\brief lock read whole file for linux
 
@@ -470,6 +495,70 @@ namespace ec
 		}
 #endif
 #endif
+	};
+	class cdir
+	{
+	public:
+		cdir(const char* spath)//spath with'/'
+		{
+#ifdef _WIN32
+			char szFilter[512];
+			snprintf(szFilter, sizeof(szFilter), "%s*.*", spath);
+			hFind = FindFirstFileA(szFilter, &FindFileData);
+#else
+			dir = opendir(spath);
+#endif
+		}
+		~cdir() {
+#ifdef _WIN32
+			if (hFind != INVALID_HANDLE_VALUE)
+			{
+				FindClose(hFind);
+				hFind = INVALID_HANDLE_VALUE;
+			}
+#else
+			if (dir) {
+				closedir(dir);
+				dir = nullptr;
+			}
+#endif
+		}
+	protected:
+#ifdef _WIN32
+		WIN32_FIND_DATAA FindFileData;
+		HANDLE hFind;// = INVALID_HANDLE_VALUE;
+		bool bfind;
+#else
+		DIR * dir;
+#endif
+	public:
+		bool next(char *sout, size_t sizeout) {
+#ifdef _WIN32
+
+			if (hFind != INVALID_HANDLE_VALUE)
+			{
+				char* pc = FindFileData.cFileName;
+				ec::str_lcpy(sout, pc, sizeout);
+				if (!FindNextFileA(hFind, &FindFileData)) {
+					FindClose(hFind);
+					hFind = INVALID_HANDLE_VALUE;
+				}				
+				return true;
+			}
+			return false;
+#else
+			if (!dir)
+				return false;
+			struct dirent *d = readdir(dir);
+			if (d) {
+				ec::str_lcpy(sout, d->d_name, sizeout);
+				return true;
+			}
+			closedir(dir);
+			dir = nullptr;
+			return false;
+#endif
+		}
 	};
 }; // ec
 
