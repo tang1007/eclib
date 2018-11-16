@@ -49,7 +49,7 @@ namespace ec
 		cLog*			_plog;		//!<日志
 
 		cHttpClientMap*	_pclis;		//!<连接客户MAP
-	private:
+	
 		cHttpPacket		_httppkg;	//!<报文解析
 		tArray<char>	_filetmp;	//!<文件临时区
 		tArray<char>	_answer;	//!<http,https,ws,wss use     
@@ -221,7 +221,7 @@ namespace ec
 		/*!
 		\brief 处理GET和HEAD方法
 		*/
-		bool DoGetAndHead(unsigned int ucid, bool bGet = true)
+		virtual bool DoGetAndHead(unsigned int ucid, bool bGet = true)
 		{
 			char sfile[1024], tmp[4096];
 			const char* sc;
