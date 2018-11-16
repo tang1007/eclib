@@ -242,7 +242,9 @@ namespace ec
             SaveLog();
             StopThread();
         }
-
+		inline const char* getlogpath() {
+			return _slogpath;
+		}
         void	AddLog(const char * format, ...)
         {
             cSafeLock lock(&_cs);
