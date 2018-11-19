@@ -601,7 +601,7 @@ namespace ec
                 ulen = p[3];
                 ulen = (ulen << 8) + p[4];
                 if (uct < (uint8)tls::rec_change_cipher_spec || uct >(uint8)tls::rec_application_data ||
-                    _pkgtcp[1] != TLSVER_MAJOR || ulen > tls_rec_fragment_len || _pkgtcp[2] > TLSVER_NINOR)
+                    _pkgtcp[1] != TLSVER_MAJOR || ulen > tls_rec_fragment_len + 48 || _pkgtcp[2] > TLSVER_NINOR)
                 {                    
                     return -1;
                 }
