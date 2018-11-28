@@ -2,7 +2,7 @@
 \file c11_tls12.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.8.2
+\update 2018.11.28
 
 eclib TLS1.2(rfc5246)  class
 support:
@@ -1121,11 +1121,17 @@ namespace ec
 			}
 			_cipher_suite = 0;
 			unsigned char* pch = phandshakemsg + ss.getpos();
-			for (i = 0; i < cipherlen; i += 2)
-			{
-				if (_plog)
-					_plog->add(CLOG_DEFAULT_DBG, "cipher %02X,%02X", pch[i], pch[i + 1]);
-
+			if (_plog) {
+				ec::Array<char, 1024> ao;
+				char stmp[32];
+				for (i = 0; i < cipherlen && i < 32; i += 2) {
+					snprintf(stmp, sizeof(stmp), "(%02X,%02X) ", pch[i], pch[i + 1]);
+					ao.add(stmp, strlen(stmp));
+				}
+				ao.add(char(0));
+				_plog->add(CLOG_DEFAULT_DBG, "client ciphers=%s ", ao.data());
+			}
+			for (i = 0; i < cipherlen; i += 2) {
 				if (pch[i] == 0 && (pch[i + 1] == TLS_RSA_WITH_AES_128_CBC_SHA256 || pch[i + 1] == TLS_RSA_WITH_AES_256_CBC_SHA256
 					|| pch[i + 1] == TLS_RSA_WITH_AES_128_CBC_SHA || pch[i + 1] == TLS_RSA_WITH_AES_256_CBC_SHA)
 					) {
@@ -1138,7 +1144,7 @@ namespace ec
 				return false;
 			}
 			if (_plog)
-				_plog->add(CLOG_DEFAULT_DBG, "srv:cipher = %02x,%02x", (_cipher_suite >> 8) & 0xFF, _cipher_suite & 0xFF);
+				_plog->add(CLOG_DEFAULT_DBG, "server cipher = (%02x,%02x)", (_cipher_suite >> 8) & 0xFF, _cipher_suite & 0xFF);
 
 			MakeServerHello();
 			MakeCertificateMsg();
