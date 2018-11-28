@@ -3,7 +3,7 @@
 \file c_diskio.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.11.15
+\update 2018.11.18
 
 disk io tools
 
@@ -42,6 +42,7 @@ limitations under the License.
 #include <sys/statfs.h>
 #include <fcntl.h>
 #endif
+#include "c_str.h"
 #include "c_array.h"
 #if (0 != USE_ECLIB_C11)
 #include "c11_vector.h"
