@@ -79,10 +79,10 @@ namespace ec
 	inline char* str_ncpy(char* sd, const char* ss, size_t count)//like strncpy,add null to the end of sd, buffer size of sd must > count
 	{
 		if (!sd)
-			return nullptr;
+			return (char*)0;
 		if (!ss || !(*ss) || !count) {
 			*sd = '\0';
-			return nullptr;
+			return (char*)0;
 		}
 		char* sr = sd;
 		while (count && (*sd++ = *ss++) != '\0')
