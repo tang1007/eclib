@@ -257,7 +257,7 @@ namespace ec {
 #endif
 
 	//return send bytes size or -1 for error,use for block or nonblocking  mode
-	inline int netio_tcpsend(SOCKET s, const void* pbuf, int nsize)
+	inline int netio_tcpsend(SOCKET s, const void* pbuf, int nsize,int ntimeoutmsec = 4000)
 	{
 		char *ps = (char*)pbuf;
 		int  nsend = 0, ns = 0;
@@ -282,7 +282,7 @@ namespace ec {
 					if (FD_ISSET(s, &fde))
 						return SOCKET_ERROR;
 					ns++;
-					if (ns > 40) //4 secs
+					if (ns > ntimeoutmsec/100 + 1)
 						return SOCKET_ERROR;
 					continue;
 				}
@@ -310,7 +310,7 @@ namespace ec {
 					if (FD_ISSET(s, &fde))
 						return SOCKET_ERROR;
 					ns++;
-					if (ns > 40) //4 secs
+					if (ns > ntimeoutmsec / 100 + 1) //4 secs
 						return SOCKET_ERROR;
 					continue;
 				}
@@ -388,5 +388,34 @@ namespace ec {
 		if (result)
 			freeaddrinfo(result);
 		return uip;
+	}
+	inline  SOCKET	netio_tcpconnectasyn(const char* sip, unsigned short suport) //异步连接
+	{
+		if (!sip || !*sip || !inet_addr(sip) || !suport)
+			return INVALID_SOCKET;
+
+		struct sockaddr_in ServerHostAddr = { 0 };
+		ServerHostAddr.sin_family = AF_INET;
+		ServerHostAddr.sin_port = htons(suport);
+		ServerHostAddr.sin_addr.s_addr = inet_addr(sip);
+		SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+		if (s == INVALID_SOCKET)
+			return INVALID_SOCKET;
+
+		long ul = 1;
+#ifdef _WIN32
+		if (SOCKET_ERROR == ioctlsocket(s, FIONBIO, (unsigned long*)&ul)) {
+			closesocket(s);
+			return INVALID_SOCKET;
+		}
+#else
+		if (ioctl(s, FIONBIO, &ul) == -1) {
+			closesocket(s);
+			return INVALID_SOCKET;
+		}
+#endif
+		connect(s, (sockaddr *)(&ServerHostAddr), sizeof(ServerHostAddr));
+		return s;
 	}
 }// ec
