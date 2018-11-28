@@ -842,11 +842,18 @@ namespace ec
                 return false;
             }
 #endif
-
             InternetAddr.sin_family = AF_INET;
             InternetAddr.sin_addr.s_addr = htonl(INADDR_ANY);
             InternetAddr.sin_port = htons(m_wport);
 
+			int opt = 1;
+#ifdef _WIN32
+			setsockopt(m_sListen, SOL_SOCKET, SO_REUSEADDR,
+				(const char *)&opt, sizeof(opt));
+#else
+			setsockopt(m_sListen, SOL_SOCKET, SO_REUSEADDR,
+				(const void *)&opt, sizeof(opt));
+#endif
             if (bind(m_sListen, (const sockaddr *)&InternetAddr, sizeof(InternetAddr)) == SOCKET_ERROR)
             {
 #ifdef _WIN32
