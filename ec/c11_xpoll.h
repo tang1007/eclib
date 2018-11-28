@@ -185,6 +185,7 @@ namespace ec {
 		uint32_t utail; //add position, point empty
 		time_t	 lasterr; //last time send failed
 		time_t   timeconnect; // TCP connect time
+		time_t   timelastcom; //
 		char     sinfo[64];// '\n' seperate, now just has "ip:192.168.1.41\n"
 		struct t_pkg {
 			uint32_t size; //message bytes size
@@ -226,6 +227,12 @@ namespace ec {
 	};
 	class xpoll : public cThread
 	{
+	public:
+		struct t_idle {
+			uint32_t ucid;
+			time_t   timelastcom;
+		};
+
 	private:
 		ec::spinlock _cpevtlock;//lock for _cpevt
 		ec::cEvent _evtiocp, _evtcanadd; // for _cpevt
@@ -288,7 +295,22 @@ namespace ec {
 			_maplock.unlock();
 			_udpevt.close();
 		}
-
+		size_t get_idles(int noverseconds, ec::vector<t_idle>*pout) {
+			pout->clear();
+			_maplock.lock();
+			time_t ltime = ::time(0);
+			t_idle t;
+			_map.for_each([&](t_xpoll_item & v) //make all complete event
+			{
+				if (ltime - v.timelastcom >= noverseconds) {
+					t.ucid = v.ucid;
+					t.timelastcom = v.timelastcom;
+					pout->add(t);
+				}				
+			});
+			_maplock.unlock();
+			return pout->size();
+		}
 		void add_event(uint32_t ucid, uint8_t opt, uint8_t st, void *pdata, size_t datasize)
 		{
 			t_xpoll_event evt;//先添加一个connect事件到 _cpevt
@@ -319,6 +341,7 @@ namespace ec {
 			t.fd = fd;
 			t.uflag = 1; //set read event not done,can't read continue
 			t.timeconnect = ::time(0);
+			t.timelastcom = t.timeconnect;
 			_maplock.lock();
 			if (!_map.set(ucid, t)) {
 				_maplock.unlock();				
@@ -513,6 +536,7 @@ namespace ec {
 				ps->usendsize = p->usendsize;
 				ps->pd = p->pkg[p->uhead].pd;
 				ps->usize = p->pkg[p->uhead].size;
+				p->timelastcom = ::time(0);
 				return true;
 			}
 			return false;
@@ -676,6 +700,7 @@ namespace ec {
 				_maplock.unlock();
 				return;
 			}
+			p->timelastcom = ::time(0);
 			_maplock.unlock();
 
 			t_xpoll_event evt;//读

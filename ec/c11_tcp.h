@@ -492,7 +492,7 @@ namespace ec
 				CheckNotLogin();
 			}
 			t_xpoll_event evt;
-			memset(&evt,0,sizeof(evt));
+			memset(&evt, 0, sizeof(evt));
 			if (!_ppoll->get_event(&evt))
 				return;
 			if (XPOLL_EVT_OPT_READ == evt.opt) {
@@ -525,7 +525,7 @@ namespace ec
 	{
 	public:
 		AioTcpSrv(uint32_t maxconnum, ec::cLog* plog, memory* pmem, void* pappcls = nullptr, void* pargs = nullptr) : _pmem(pmem), _bkeepalivefast(false), _busebnagle(true), _wport(0),
-			_plog(plog), _poll(maxconnum, plog) {
+			_plog(plog), _poll(maxconnum, plog), _nerr_emfile_count(0) {
 		}
 		inline int getsendnodone(uint32_t ucid) { // get send not done pkg number
 			return _poll.sendnodone(ucid);
@@ -543,6 +543,9 @@ namespace ec
 			}
 			return (int)i;
 		}
+		uint16_t port() {
+			return _wport;
+		}
 	protected:
 		inline void InitArgs(_THREAD* pthread) {
 			static_cast<_CLS*>(this)->InitArgs(pthread);
@@ -559,6 +562,7 @@ namespace ec
 		SOCKET	_fd_listen;
 
 		ec::Array<_THREAD*, MAX_XPOLLTCPSRV_THREADS> _workers;
+		int     _nerr_emfile_count;
 	public:
 		bool start(uint16_t port, int workthreadnum, const char* sip = nullptr)
 		{
@@ -607,6 +611,14 @@ namespace ec
 				i++;
 			}
 			return nerr > 0;
+		}
+		inline void close_ucid(uint32_t ucid) // close ucid graceful,send all unsend messages
+		{
+			tcp_post(ucid, nullptr, 0, 100);
+		}
+
+		inline size_t get_idles(int noverseconds, ec::vector<xpoll::t_idle>*pout) {
+			return _poll.get_idles(noverseconds, pout);
 		}
 		void stop()
 		{
@@ -686,6 +698,10 @@ namespace ec
 		}
 
 	protected:
+		virtual void on_err_accept(uint16_t port, int nerr, cLog* plog) //
+		{
+		}
+
 		virtual	void dojob()// accept thread
 		{
 			int nRet;
@@ -705,8 +721,46 @@ namespace ec
 			if (!nRet || !FD_ISSET(_fd_listen, &fdr))
 				return;
 #ifdef _WIN32
-			if ((sAccept = ::accept(_fd_listen, (struct sockaddr*)(&addrClient), &nClientAddrLen)) == INVALID_SOCKET)
+			if ((sAccept = ::accept(_fd_listen, (struct sockaddr*)(&addrClient), &nClientAddrLen)) == INVALID_SOCKET) {
+#ifdef _WIN32
+				int nerr = WSAGetLastError();
+				if (WSAEWOULDBLOCK == nerr) {
+					_nerr_emfile_count = 0;
+					return;
+				}
+				else if (WSAEMFILE == nerr) { //超限,报警日志
+					if (_plog)
+						_plog->add(CLOG_DEFAULT_WRN, "server port(%d) error EMFILE!", _wport);
+					on_err_accept(_wport, nerr, _plog);
+					if (!_nerr_emfile_count)
+						std::this_thread::sleep_for(std::chrono::milliseconds(10));
+					_nerr_emfile_count++;
+				}
+				else {
+					_nerr_emfile_count = 0;
+					on_err_accept(_wport, nerr, _plog);
+				}
+#else
+				int nerr = errno;
+				if (EAGAIN == err || EWOULDBLOCK == nerr) {
+					_nerr_emfile_count = 0;
+					return;
+				}
+				else if (EMFILE == nerr) {
+					if (_plog)
+						_plog->add(CLOG_DEFAULT_WRN, "server port(%d) error EMFILE!", _wport);
+					on_err_accept(_wport, nerr, _plog);
+					if (!_nerr_emfile_count)
+						std::this_thread::sleep_for(std::chrono::milliseconds(10));
+					_nerr_emfile_count++;
+				}
+				else {
+					_nerr_emfile_count = 0;
+					on_err_accept(_wport, nerr, _plog);
+				}
+#endif				
 				return;
+			}
 			unsigned long ul = 1;
 			if (SOCKET_ERROR == ioctlsocket(sAccept, FIONBIO, (unsigned long*)&ul)) {
 				::closesocket(sAccept);
