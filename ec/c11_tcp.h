@@ -722,7 +722,6 @@ namespace ec
 				return;
 #ifdef _WIN32
 			if ((sAccept = ::accept(_fd_listen, (struct sockaddr*)(&addrClient), &nClientAddrLen)) == INVALID_SOCKET) {
-#ifdef _WIN32
 				int nerr = WSAGetLastError();
 				if (WSAEWOULDBLOCK == nerr) {
 					_nerr_emfile_count = 0;
@@ -740,9 +739,17 @@ namespace ec
 					_nerr_emfile_count = 0;
 					on_err_accept(_wport, nerr, _plog);
 				}
+				return;
+			}
+			unsigned long ul = 1;
+			if (SOCKET_ERROR == ioctlsocket(sAccept, FIONBIO, (unsigned long*)&ul)) {
+				::closesocket(sAccept);
+				return;
+			}
 #else
+			if ((sAccept = ::accept(_fd_listen, (struct sockaddr*)(&addrClient), (socklen_t*)&nClientAddrLen)) == INVALID_SOCKET) {
 				int nerr = errno;
-				if (EAGAIN == err || EWOULDBLOCK == nerr) {
+				if (EAGAIN == nerr || EWOULDBLOCK == nerr) {
 					_nerr_emfile_count = 0;
 					return;
 				}
@@ -758,17 +765,8 @@ namespace ec
 					_nerr_emfile_count = 0;
 					on_err_accept(_wport, nerr, _plog);
 				}
-#endif				
 				return;
 			}
-			unsigned long ul = 1;
-			if (SOCKET_ERROR == ioctlsocket(sAccept, FIONBIO, (unsigned long*)&ul)) {
-				::closesocket(sAccept);
-				return;
-			}
-#else
-			if ((sAccept = ::accept(_fd_listen, (struct sockaddr*)(&addrClient), (socklen_t*)&nClientAddrLen)) == INVALID_SOCKET)
-				return;
 			int nv = 1;
 			if (ioctl(sAccept, FIONBIO, &nv) == -1) {
 				::closesocket(sAccept);
