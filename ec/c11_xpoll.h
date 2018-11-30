@@ -456,6 +456,13 @@ namespace ec {
 			}
 			_maplock.unlock();
 		}
+		size_t  size() {
+			size_t n = 0;
+			_maplock.lock();
+			n = _map.size();
+			_maplock.unlock();
+			return n;
+		}
 	private:
 		void make_pollfd()
 		{
