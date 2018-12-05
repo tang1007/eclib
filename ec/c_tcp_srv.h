@@ -1071,7 +1071,7 @@ namespace ec
 			return nret;
 #endif
 		};
-			};
-		}// namespace ec
+	};
+}// namespace ec
 
 #endif //C_TCPSRV_H
