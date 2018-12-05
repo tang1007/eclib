@@ -603,12 +603,21 @@ namespace ec
 		if (!p_var(wire_type, pd, len, VAR, true)) \
 			return false; \
 		break
+
 #define P3_BYTES(FID,STR) case FID: \
 	if (!p_bytes(wire_type, pd, len, STR, sizeof(STR))) \
 		return false; \
 	break
 
+#define P3_CLS_NOCPY(FID,PPD,PDSIZE) case FID: \
+	if (!p_cls(wire_type, pd, len, PPD, PDSIZE)) \
+		return false; \
+	break
 
+#define P3_DEFAULT default:\
+	if (!jump_over(pd, len, wire_type))\
+		return false;\
+	break
 
 #define P2_STR(FID,STR) case FID: \
 	if (!p_str(FID, wire_type, pd, len, STR, sizeof(STR))) \
