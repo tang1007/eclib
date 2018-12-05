@@ -160,6 +160,7 @@ namespace ec
 
 			for (i = 0; i < MAX_XPOLLTCPSRV_THREADS; i++)
 				m_pThread[i] = NULL;
+			_nerr_emfile_count = 0;
 		};
 		virtual ~cTcpServer() {};
 
@@ -170,7 +171,6 @@ namespace ec
 		cLog*	_plog;
 		uint16_t _wport;
 	private:
-
 		xpoll	_poll;
 		SOCKET	_fd_listen;
 
@@ -178,7 +178,7 @@ namespace ec
 		bool    _bkeepalivefast;
 		bool    _busebnagle;
 		cTcpSvrWorkThread*	m_pThread[MAX_XPOLLTCPSRV_THREADS];
-
+		int _nerr_emfile_count;
 	private:
 		SOCKET listen_port(unsigned short wport, const char* sip = nullptr)
 		{
@@ -223,6 +223,9 @@ namespace ec
 			return sl;
 		}
 	protected:
+		virtual void on_err_accept(uint16_t port, int nerr, cLog* plog) //
+		{
+		}
 		virtual	void dojob()
 		{
 			int nRet;
@@ -242,16 +245,52 @@ namespace ec
 			if (!nRet || !FD_ISSET(_fd_listen, &fdr))
 				return;
 #ifdef _WIN32
-			if ((sAccept = ::accept(_fd_listen, (struct sockaddr*)(&addrClient), &nClientAddrLen)) == INVALID_SOCKET)
+			if ((sAccept = ::accept(_fd_listen, (struct sockaddr*)(&addrClient), &nClientAddrLen)) == INVALID_SOCKET) {
+				int nerr = WSAGetLastError();
+				if (WSAEWOULDBLOCK == nerr) {
+					_nerr_emfile_count = 0;
+					return;
+				}
+				else if (WSAEMFILE == nerr) { //超限,报警日志
+					if (_plog)
+						_plog->add(CLOG_DEFAULT_WRN, "server port(%d) error EMFILE!", _wport);
+					on_err_accept(_wport, nerr, _plog);
+					if (!_nerr_emfile_count)
+						std::this_thread::sleep_for(std::chrono::milliseconds(10));
+					_nerr_emfile_count++;
+				}
+				else {
+					_nerr_emfile_count = 0;
+					on_err_accept(_wport, nerr, _plog);
+				}
 				return;
+			}
 			unsigned long ul = 1;
 			if (SOCKET_ERROR == ioctlsocket(sAccept, FIONBIO, (unsigned long*)&ul)) {
 				::closesocket(sAccept);
 				return;
 			}
 #else
-			if ((sAccept = ::accept(_fd_listen, (struct sockaddr*)(&addrClient), (socklen_t*)&nClientAddrLen)) == INVALID_SOCKET)
+			if ((sAccept = ::accept(_fd_listen, (struct sockaddr*)(&addrClient), (socklen_t*)&nClientAddrLen)) == INVALID_SOCKET) {
+				int nerr = errno;
+				if (EAGAIN == nerr || EWOULDBLOCK == nerr) {
+					_nerr_emfile_count = 0;
+					return;
+				}
+				else if (EMFILE == nerr) {
+					if (_plog)
+						_plog->add(CLOG_DEFAULT_WRN, "server port(%d) error EMFILE!", _wport);
+					on_err_accept(_wport, nerr, _plog);
+					if (!_nerr_emfile_count)
+						std::this_thread::sleep_for(std::chrono::milliseconds(10));
+					_nerr_emfile_count++;
+				}
+				else {
+					_nerr_emfile_count = 0;
+					on_err_accept(_wport, nerr, _plog);
+				}
 				return;
+			}
 			int nv = 1;
 			if (ioctl(sAccept, FIONBIO, &nv) == -1) {
 				::closesocket(sAccept);
@@ -290,6 +329,7 @@ namespace ec
 			m_uThreads = 0;
 		}	
 	public:		
+
 		bool	Start(unsigned short wport, unsigned int uThreads, bool bkeepalivefast = false, bool busenagle = true)
 		{
 			if (IsRun())
@@ -321,6 +361,31 @@ namespace ec
 			m_uThreads = pos;
 			StartThread(nullptr);
 			return true;
+		}
+
+		bool tcp_post(uint32_t ucid, void* pdata, size_t bytesize, int timeovermsec = 100) // post data, warning: zero copy, direct put pdata pointer to send buffer
+		{
+			int nerr = _poll.post_msg(ucid, pdata, bytesize);
+			if (nerr < 0)
+				return false;
+			int nt = timeovermsec / 2, i = 0;;
+			if (nt % 2)
+				nt++;
+			while (!nerr && i < nt) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				nerr = _poll.post_msg(ucid, pdata, bytesize);
+				i++;
+			}
+			return nerr > 0;
+		}
+
+		inline void close_ucid(uint32_t ucid) // close ucid graceful,send all unsend messages
+		{
+			tcp_post(ucid, nullptr, 0, 100);
+		}
+
+		inline size_t get_idles(int noverseconds, ec::vector<xpoll::t_idle>*pout) {
+			return _poll.get_idles(noverseconds, pout);
 		}
 
 		void Stop()
