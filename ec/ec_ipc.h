@@ -1,9 +1,9 @@
 /*!
 \file ec_ipc.h
 \author kipway@outlook.com
-\update 2018.12.2
+\update 2018.12.6
 
-eclib IPC class
+eclib IPC class easy to use, no thread , lock-free
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib
@@ -63,14 +63,12 @@ namespace ec {
 	class ez_ipcpkg // IPC package
 	{
 	public:
-		ez_ipcpkg(memory* pmem) : _rbuf(1024 * 32, true, pmem) {
-		}
-		virtual ~ez_ipcpkg() {}
 		struct t_head {
 			uint8_t  sync;
 			uint8_t  flag;
 			uint32_t msglen;
 		};
+
 	public:
 		/*!
 		\brief send no copy ,6 bytes blank in front of the pmsg
@@ -85,7 +83,7 @@ namespace ec {
 			}
 			catch (int) {
 				return -1;
-			}			
+			}
 			return netio_tcpsend(sock, ppkg, (int)sizepkg, timeoutms);
 		}
 
@@ -101,25 +99,22 @@ namespace ec {
 			}
 			return true;
 		}
-	protected:
-		ec::vector<uint8_t>	_rbuf;
+
 	public:
-		int parse(const uint8_t* pdata, size_t usize, ec::vector<uint8_t> *pout) {
+		static int parse(ec::vector<uint8_t>* pin, const uint8_t* pdata, size_t usize, ec::vector<uint8_t> *pout) {
 			if (pdata && usize)
-				_rbuf.add(pdata, usize);
-			return parsepkg(pout);
+				pin->add(pdata, usize);
+			return parsepkg(pin, pout);
 		}
-		inline void clear() {
-			_rbuf.clear();
-		}
+
 	protected:
-		int parsepkg(ec::vector<uint8_t> *pout)//return 0:wait; -1:err; 1:OK; msg include head 6 bytes for No copy forwarding
+		static int parsepkg(ec::vector<uint8_t>* pin, ec::vector<uint8_t> *pout)//return 0:wait; -1:err; 1:OK; msg include head 6 bytes for No copy forwarding
 		{
-			size_t  ulen = _rbuf.size();
-			uint8_t* pu = _rbuf.data();
-			if (_rbuf.size() < 6)
+			size_t  ulen = pin->size();
+			uint8_t* pu = pin->data();
+			if (pin->size() < 6)
 				return ECIPCPKG_ST_WAIT;
-			ec::cStream ss((void*)pu, _rbuf.size());
+			ec::cStream ss((void*)pu, pin->size());
 			t_head h;
 			try {
 				ss > &h.sync > &h.flag > &h.msglen;
@@ -128,56 +123,94 @@ namespace ec {
 			}
 			if (h.sync != 0xF5 || h.flag != 0x10 || h.msglen > IPCMSG_MAXSIZE)
 				return ECIPCPKG_ST_ERR;
-			if (h.msglen + 6 > _rbuf.size())
+			if (h.msglen + 6 > pin->size())
 				return ECIPCPKG_ST_WAIT;
 			pout->clear();
 			pout->add(pu, h.msglen + 6); //include head 6 bytes
-			_rbuf.erase(0, h.msglen + 6);
-			_rbuf.shrink(1024 * 32);
+			pin->erase(0, h.msglen + 6);
+			pin->shrink(1024 * 32);
 			return ECIPCPKG_ST_OK;
 		}
 	};
 
-	struct t_ezipc_session // 客户端
+	class ipc_seesion_c
 	{
-		uint32_t   ucid;
-		uint32_t   ust;  //D0:connected; D1:logined  ;D2-D7 RES; D8 - D31: for user
-		SOCKET     fd;
-		ez_ipcpkg* pkg;
-		time_t     ti_connect; //连接时间
-		time_t     ti_lastcom; //上次读写时间
-		uint64_t   u64; //res
-		int32_t	   n1;  //res
-		int32_t    n2;  //res		
-		void*      ptr; //res
-		char       sda[32]; //res for app
+	public:
+		ipc_seesion_c(uint32_t ucid, SOCKET fd, memory* pmem) : _ucid(ucid), _ust(1), _fd(fd), _rbuf(1024 * 8, true, pmem),
+			_ti_connect(::time(0)), _ti_lastcom(0), _u64(0), _n1(0), _n2(0), _ptr(nullptr) {
+			_sda[0] = 0;
+		}
+		ipc_seesion_c() : _ucid(0), _ust(0), _fd(-1), _rbuf(1024 * 8, true),
+			_ti_connect(0), _ti_lastcom(0), _u64(0), _n1(0), _n2(0), _ptr(nullptr) {
+			_sda[0] = 0;
+		}
+
+		ipc_seesion_c(ipc_seesion_c&& v) :_rbuf(1024 * 8, true) {
+			_ucid = v._ucid;
+			_ust = v._ust;
+			_fd = v._fd;
+			_rbuf = std::move(v._rbuf);
+			_ti_connect = v._ti_connect;
+			_ti_lastcom = v._ti_lastcom;
+			_u64 = v._u64;
+			_n1 = v._n1;
+			_n2 = v._n2;
+			_ptr = v._ptr;
+			memcpy(_sda, v._sda, sizeof(_sda));
+		}
+
+		ipc_seesion_c& operator = (ipc_seesion_c&& v)
+		{
+			this->~ipc_seesion_c();
+			_ucid = v._ucid;
+			_ust = v._ust;
+			_fd = v._fd;
+			_rbuf = std::move(v._rbuf);
+			_ti_connect = v._ti_connect;
+			_ti_lastcom = v._ti_lastcom;
+			_u64 = v._u64;
+			_n1 = v._n1;
+			_n2 = v._n2;
+			_ptr = v._ptr;
+			memcpy(_sda, v._sda, sizeof(_sda));
+			return *this;
+		}
+
+		uint32_t   _ucid;
+		uint32_t   _ust;  //D0:connected; D1:logined  ;D2-D7 RES; D8 - D31: for user
+		SOCKET     _fd;
+		ec::vector<uint8_t> _rbuf;
+		time_t     _ti_connect; //连接时间
+		time_t     _ti_lastcom; //上次读写时间
+		uint64_t   _u64; //res
+		int32_t	   _n1;  //res
+		int32_t    _n2;  //res		
+		void*      _ptr; //res
+		char       _sda[40]; //res for app
 	};
 
 	template<>
-	struct key_equal<uint32_t, t_ezipc_session>
+	struct key_equal<uint32_t, ipc_seesion_c>
 	{
-		bool operator()(uint32_t key, const t_ezipc_session& val) {
-			return key == val.ucid;
+		bool operator()(uint32_t key, const ipc_seesion_c& val) {
+			return key == val._ucid;
 		}
 	};
 
 	template<>
-	struct del_node<t_ezipc_session>
+	struct del_node<ipc_seesion_c>
 	{
-		void operator()(t_ezipc_session& val) {
-			if (val.pkg) {
-				delete val.pkg;
-				val.pkg = nullptr;
-			}
-			if (val.fd != INVALID_SOCKET) {
+		void operator()(ipc_seesion_c& val) {
+			val._rbuf.~vector();
+			if (val._fd != INVALID_SOCKET) {
 #ifdef _WIN32
-				shutdown(val.fd, SD_BOTH);
-				closesocket(val.fd);
+				shutdown(val._fd, SD_BOTH);
+				closesocket(val._fd);
 #else				
 				shutdown(val.fd, SHUT_WR);
 				close(val.fd);
 #endif
-				val.fd = INVALID_SOCKET;
+				val._fd = INVALID_SOCKET;
 			}
 		}
 	};
@@ -186,7 +219,7 @@ namespace ec {
 	{
 	public:
 		ez_ipcsrv(cLog* plog, memory* pmem) :
-			_wport(0), _sock(INVALID_SOCKET), _plog(plog), _pmem(pmem), _mapmem(map< uint32_t, t_ezipc_session>::size_node(), 128),
+			_wport(0), _sock(INVALID_SOCKET), _plog(plog), _pmem(pmem), _mapmem(map< uint32_t, ipc_seesion_c>::size_node(), 128),
 			_map(128, &_mapmem), _pollfd(128, true, pmem), _pollkey(128, true, pmem), _rmsg(1024 * 32, true, pmem),
 			_bmodify_pool(false), _unextid(100) {
 		}
@@ -196,7 +229,7 @@ namespace ec {
 		cLog* _plog;
 		memory* _pmem;
 		memory _mapmem;
-		map< uint32_t, t_ezipc_session> _map;
+		map< uint32_t, ipc_seesion_c> _map;
 		vector<pollfd> _pollfd;
 		vector<uint32_t> _pollkey;
 		vector<uint8_t> _rmsg;
@@ -213,7 +246,7 @@ namespace ec {
 				_bmodify_pool = true;
 				ondisconnect(ucid);
 				if (blogout && _plog)
-					_plog->add(CLOG_DEFAULT_MSG, "port(%d) ucid %u disconnect by server", _wport, ucid);
+					_plog->add(CLOG_DEFAULT_MSG, "ipc port(%d) ucid %u disconnect by server", _wport, ucid);
 			}
 		}
 
@@ -265,44 +298,30 @@ namespace ec {
 				return false;
 			}
 
-			t_ezipc_session t;
-			memset(&t, 0, sizeof(t));
-			t.ucid = 1;
-			t.pkg = new ez_ipcpkg(_pmem);
-			t.fd = _sock;
-			_map.set(t.ucid, t);
+			_map.set(1, ipc_seesion_c(1, _sock, _pmem));
 			_bmodify_pool = true;
 			return true;
 		}
 
 		void close() {
-			_map.for_each([&](t_ezipc_session &v) {
-				ondisconnect(v.ucid);
+			_map.for_each([&](ipc_seesion_c &v) {
+				ondisconnect(v._ucid);
 			});
 			_map.clear();
-			if (_sock != INVALID_SOCKET) {
-#ifdef _WIN32
-				shutdown(_sock, SD_BOTH);
-				closesocket(_sock);
-#else				
-				shutdown(_sock, SHUT_WR);
-				close(_sock);
-#endif
-				_sock = INVALID_SOCKET;
-			}
+			_sock = INVALID_SOCKET;
 		}
 
 		int sendnocpybyucid(uint32_t ucid, void *pmsg, size_t msgsize) {
 			if (ucid < 100)
 				return 0;
-			t_ezipc_session* p = _map.get(ucid);
-			if (!p || !p->pkg)
+			ipc_seesion_c* p = _map.get(ucid);
+			if (!p)
 				return -1;
-			int nr = p->pkg->sendnocpy(p->fd, pmsg, msgsize);
+			int nr = ez_ipcpkg::sendnocpy(p->_fd, pmsg, msgsize);
 			if (nr < 0) {
 				_map.erase(ucid);
 				if (_plog)
-					_plog->add(CLOG_DEFAULT_MSG, "port(%d) ucid %u disconnect as send failed", _wport, ucid);
+					_plog->add(CLOG_DEFAULT_MSG, "ipc port(%d) ucid %u disconnect as send failed", _wport, ucid);
 			}
 			return nr;
 		}
@@ -333,7 +352,7 @@ namespace ec {
 						ondisconnect(puid[i]);
 						_map.erase(puid[i]);
 						if (_plog)
-							_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect", _wport, puid[i]);
+							_plog->add(CLOG_DEFAULT_MSG, "ipc port(%u) ucid %u disconnect", _wport, puid[i]);
 					}
 					else if (p[i].revents & POLLIN)
 						doread(puid[i], p[i].fd);
@@ -362,13 +381,13 @@ namespace ec {
 				return;
 			_pollfd.clear();
 			_pollkey.clear();
-			_map.for_each([this](t_ezipc_session & v) {
+			_map.for_each([this](ipc_seesion_c & v) {
 				pollfd t;
-				t.fd = v.fd;
+				t.fd = v._fd;
 				t.events = POLLIN;
 				t.revents = 0;
 				_pollfd.add(t);
-				_pollkey.add(v.ucid);
+				_pollkey.add(v._ucid);
 			});
 			_bmodify_pool = false;
 		}
@@ -395,22 +414,14 @@ namespace ec {
 			}
 #endif
 			if (_plog)
-				_plog->add(CLOG_DEFAULT_MSG, "port (%u) connect from %s:%u", _wport, inet_ntoa(addrClient.sin_addr), ntohs(addrClient.sin_port));
+				_plog->add(CLOG_DEFAULT_MSG, "ipc port(%u) connect from %s:%u", _wport, inet_ntoa(addrClient.sin_addr), ntohs(addrClient.sin_port));
 
 			ec::netio_tcpnodelay(sAccept);
 			ec::netio_setkeepalive(sAccept);
 
-			t_ezipc_session t;
-			memset(&t, 0, sizeof(t));
-			t.fd = sAccept;
-			t.ucid = nextid();
-			t.pkg = new ez_ipcpkg(_pmem);
-			if (!t.pkg) {
-				closesocket(sAccept);
-				return false;
-			}
-			_map.set(t.ucid, t);
-			onconnect(t.ucid);
+			uint32_t ucid = nextid();
+			_map.set(ucid, ipc_seesion_c(ucid, sAccept, _pmem));
+			onconnect(ucid);
 			return true;
 		}
 
@@ -426,7 +437,7 @@ namespace ec {
 				ondisconnect(ucid);
 				_map.erase(ucid);
 				if (_plog)
-					_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect gracefully", _wport, ucid);
+					_plog->add(CLOG_DEFAULT_MSG, "ipc port(%u) ucid %u disconnect gracefully", _wport, ucid);
 				return true;
 			}
 			else if (nr < 0) {
@@ -443,22 +454,22 @@ namespace ec {
 				ondisconnect(ucid);
 				_map.erase(ucid);
 				if (_plog)
-					_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect error %d", _wport, ucid, nerr);
+					_plog->add(CLOG_DEFAULT_MSG, "ipc port(%u) ucid %u disconnect error %d", _wport, ucid, nerr);
 				return true;
 			}
-			t_ezipc_session* pi = _map.get(ucid);
-			if (pi && pi->pkg) {
-				int ndo = pi->pkg->parse((const uint8_t*)rbuf, nr, &_rmsg);
+			ipc_seesion_c* pi = _map.get(ucid);
+			if (pi) {
+				int ndo = ez_ipcpkg::parse(&pi->_rbuf, (const uint8_t*)rbuf, nr, &_rmsg);
 				while (ndo > 0) {
 					domessage(ucid, _rmsg.data(), _rmsg.size());
-					ndo = pi->pkg->parse(nullptr, 0, &_rmsg);
+					ndo = ez_ipcpkg::parse(&pi->_rbuf, nullptr, 0, &_rmsg);
 				}
 				if (ndo < 0) {
 					_bmodify_pool = true;
 					ondisconnect(ucid);
 					_map.erase(ucid);
 					if (_plog)
-						_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect error package", _wport, ucid);
+						_plog->add(CLOG_DEFAULT_MSG, "ipc port(%u) ucid %u disconnect error package", _wport, ucid);
 					return true;
 				}
 			}
@@ -469,7 +480,7 @@ namespace ec {
 	class ez_ipccli
 	{
 	public:
-		ez_ipccli(cLog* plog, memory* pmem) : _wport(0), _plog(plog), _pmem(pmem), _pkg(pmem), _rmsg(1024 * 32, true, pmem), _nst(0) {
+		ez_ipccli(cLog* plog, memory* pmem) : _wport(0), _plog(plog), _pmem(pmem), _rbuf(1024 * 32, true, pmem), _rmsg(1024 * 32, true, pmem), _nst(0) {
 			_pollfd.events = 0;
 			_pollfd.revents = 0;
 			_pollfd.fd = INVALID_SOCKET;
@@ -478,7 +489,7 @@ namespace ec {
 		uint16_t _wport;
 		cLog*    _plog;
 		memory*  _pmem;
-		ez_ipcpkg _pkg;
+		vector<uint8_t> _rbuf;
 		vector<uint8_t> _rmsg;
 		int    _nst;
 		pollfd _pollfd;
@@ -539,7 +550,7 @@ namespace ec {
 			_pollfd.fd = s;
 			_pollfd.events = POLLOUT;
 			_nst = 0;
-			_pkg.clear();
+			_rbuf.clear();
 
 			return true;
 		}
@@ -577,7 +588,8 @@ namespace ec {
 					getsockopt(_pollfd.fd, SOL_SOCKET, SO_ERROR, (void *)&serr, &serrlen);
 					if (serr)
 						EZIPCCLICLOSE()
-#endif						
+#endif					
+					onconnect();
 				}
 			}
 			else if (_pollfd.revents & POLLIN) {
@@ -602,10 +614,10 @@ namespace ec {
 					EZIPCCLICLOSE()
 				}
 
-				int ndo = _pkg.parse((const uint8_t*)rbuf, nr, &_rmsg);
+				int ndo = ez_ipcpkg::parse(&_rbuf, (const uint8_t*)rbuf, nr, &_rmsg);
 				while (ndo > 0) {
 					onmessage(_rmsg.data(), _rmsg.size());
-					ndo = _pkg.parse(nullptr, 0, &_rmsg);
+					ndo = ez_ipcpkg::parse(&_rbuf, nullptr, 0, &_rmsg);
 				}
 				if (ndo < 0)
 					EZIPCCLICLOSE()
@@ -627,7 +639,7 @@ namespace ec {
 			int nr = ez_ipcpkg::sendnocpy(_pollfd.fd, pmsg, msgsize);
 			if (nr < 0) {
 				if (_plog)
-					_plog->add(CLOG_DEFAULT_MSG, "disconnect as send to server(%u) failed", _wport);
+					_plog->add(CLOG_DEFAULT_MSG, "ipc disconnect as send to server(%u) failed", _wport);
 				closesocket(_pollfd.fd);
 				_pollfd.fd = INVALID_SOCKET;
 				_pollfd.events = 0;
