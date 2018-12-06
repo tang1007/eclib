@@ -2,7 +2,7 @@
 \file c11_map.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.11.2
+\update 2018.12.6
 
 eclib class map with c++11. fast noexcept unordered hashmap with safety iterator
 
@@ -179,14 +179,14 @@ namespace ec
 				if (_Keyeq()(key, pnode->value))
 				{
 					_DelVal()(pnode->value);
-					pnode->value = Value;
+					pnode->value = std::move(Value);
 					return true;
 				}
 			}
 			pnode = new_node();
 			if (pnode == nullptr)
 				return false;
-			pnode->value = Value;
+			pnode->value = std::move(Value);
 			pnode->pNext = _ppv[upos];
 			_ppv[upos] = pnode;
 			_usize++;
