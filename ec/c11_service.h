@@ -327,20 +327,17 @@ namespace ec {
 
 #else
 #define EC_SERVICE_FRAME(SSERVICE,SPID,MSGKEY,SBUILD,SVER) int main(int argc, char* argv[])\
-{\	
+{\
 char sod[1024] = { 0 }, sw[64] = { 0 }; \
 memset(sod, 0, sizeof(sod)); \
 CRuncls srv; \
-if (!srv.start()) {
-	\
-		printf("srv.Start failed!\n"); \
+if (!srv.start()) {\
+		printf("srv Start failed!\n"); \
 		return 0; \
 }\
 printf("start success\n"); \
-while (1) {
-	\
-		if (fgets(sod, (int)sizeof(sod) - 1, stdin)) {
-			\
+while (1) {\
+		if (fgets(sod, (int)sizeof(sod) - 1, stdin)) {\
 				size_t n = strlen(sod), pos = 0; \
 				if (!ec::str_getnextstring(' ', sod, n, pos, sw, sizeof(sw)))\
 					continue; \
