@@ -2,7 +2,7 @@
 \file c11_vector.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.7.27
+\update 2018.12.6
 
 eclib class vector with c++11. fast noexcept simple vector. members of a vector can only be simple types, pointers and structures
 
@@ -83,6 +83,7 @@ namespace ec
 			_ubufsize = v._ubufsize;
 			_ugrown = v._ugrown;
 			_pmem = v._pmem;
+			_doublegrown = v._doublegrown;
 			v._pbuf = nullptr;
 			v._usize = 0;
 			v._ubufsize = 0;
