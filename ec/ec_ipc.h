@@ -184,7 +184,7 @@ namespace ec {
 		time_t     _ti_lastcom; //上次读写时间
 		uint64_t   _u64; //res
 		int32_t	   _n1;  //res
-		int32_t    _n2;  //res		
+		int32_t    _n2;  //res
 		void*      _ptr; //res
 		char       _sda[40]; //res for app
 	};
@@ -206,9 +206,9 @@ namespace ec {
 #ifdef _WIN32
 				shutdown(val._fd, SD_BOTH);
 				closesocket(val._fd);
-#else				
-				shutdown(val.fd, SHUT_WR);
-				close(val.fd);
+#else
+				shutdown(val._fd, SHUT_WR);
+				close(val._fd);
 #endif
 				val._fd = INVALID_SOCKET;
 			}
@@ -249,7 +249,22 @@ namespace ec {
 					_plog->add(CLOG_DEFAULT_MSG, "ipc port(%d) ucid %u disconnect by server", _wport, ucid);
 			}
 		}
+#ifndef _WIN32
+		static int  SetNoBlock(int sfd)
+		{
+			int flags, s;
 
+			flags = fcntl(sfd, F_GETFL, 0);
+			if (flags == -1)
+				return -1;
+
+			flags |= O_NONBLOCK;
+			s = fcntl(sfd, F_SETFL, flags);
+			if (s == -1)
+				return -1;
+			return 0;
+		}
+#endif
 		bool open(uint16_t wport) {
 			if (_sock != INVALID_SOCKET)
 				return true;
@@ -263,7 +278,7 @@ namespace ec {
 			struct sockaddr_un Addr;
 			memset(&Addr, 0, sizeof(Addr));
 			Addr.sun_family = AF_UNIX;
-			snprintf(Addr.sun_path, sizeof(Addr.sun_path), "/var/tmp/ezipc:%d", m_wport);
+			snprintf(Addr.sun_path, sizeof(Addr.sun_path), "/var/tmp/ezipc:%d", _wport);
 			unlink(Addr.sun_path);
 #else
 			if ((_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == INVALID_SOCKET)
@@ -279,9 +294,9 @@ namespace ec {
 #ifdef _WIN32
 				shutdown(_sock, SD_BOTH);
 				closesocket(_sock);
-#else				
+#else
 				shutdown(_sock, SHUT_WR);
-				close(_sock);
+				::close(_sock);
 #endif
 				_sock = INVALID_SOCKET;
 				return false;
@@ -290,9 +305,9 @@ namespace ec {
 #ifdef _WIN32
 				shutdown(_sock, SD_BOTH);
 				closesocket(_sock);
-#else				
+#else
 				shutdown(_sock, SHUT_WR);
-				close(_sock);
+				::close(_sock);
 #endif
 				_sock = INVALID_SOCKET;
 				return false;
@@ -398,23 +413,25 @@ namespace ec {
 			struct  sockaddr_un		 addrClient;
 #else
 			struct  sockaddr_in		 addrClient;
-#endif		
+#endif
 			int		nClientAddrLen = sizeof(addrClient);
 #ifdef _WIN32
 			if ((sAccept = ::accept(_sock, (struct sockaddr*)(&addrClient), &nClientAddrLen)) == INVALID_SOCKET)
 				return false;
 			u_long iMode = 1;
 			ioctlsocket(sAccept, FIONBIO, &iMode);
+			if (_plog)
+				_plog->add(CLOG_DEFAULT_MSG, "ipc port(%u) connect from %s:%u", _wport, inet_ntoa(addrClient.sin_addr), ntohs(addrClient.sin_port));
 #else
 			if ((sAccept = ::accept(_sock, (struct sockaddr*)(&addrClient), (socklen_t*)&nClientAddrLen)) == INVALID_SOCKET)
 				return false;
 			if (SetNoBlock(sAccept) < 0) {
-				closesocket(sAccept);
+				::close(sAccept);
 				return false;
 			}
-#endif
 			if (_plog)
-				_plog->add(CLOG_DEFAULT_MSG, "ipc port(%u) connect from %s:%u", _wport, inet_ntoa(addrClient.sin_addr), ntohs(addrClient.sin_port));
+				_plog->add(CLOG_DEFAULT_MSG, "ipc port(%u) connect from local", _wport);
+#endif
 
 			ec::netio_tcpnodelay(sAccept);
 			ec::netio_setkeepalive(sAccept);
@@ -432,7 +449,7 @@ namespace ec {
 #else
 			int nr = ::recv(fd, rbuf, (int)sizeof(rbuf), MSG_DONTWAIT);
 #endif
-			if (nr == 0) { //close gracefully 
+			if (nr == 0) { //close gracefully
 				_bmodify_pool = true;
 				ondisconnect(ucid);
 				_map.erase(ucid);
@@ -509,7 +526,7 @@ namespace ec {
 			struct sockaddr_un srvaddr;
 			memset(&srvaddr, 0, sizeof(srvaddr));
 			srvaddr.sun_family = AF_UNIX;
-			snprintf(srvaddr.sun_path, sizeof(srvaddr.sun_path), "/var/tmp/ezipc:%d", uport);
+			snprintf(srvaddr.sun_path, sizeof(srvaddr.sun_path), "/var/tmp/ezipc:%d", wport);
 			SOCKET s = socket(AF_UNIX, SOCK_STREAM, 0);
 #else
 			struct sockaddr_in srvaddr;
@@ -588,7 +605,7 @@ namespace ec {
 					getsockopt(_pollfd.fd, SOL_SOCKET, SO_ERROR, (void *)&serr, &serrlen);
 					if (serr)
 						EZIPCCLICLOSE()
-#endif					
+#endif
 					onconnect();
 				}
 			}
