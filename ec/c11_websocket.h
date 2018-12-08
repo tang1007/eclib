@@ -2,7 +2,7 @@
 \file c11_websocket.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.6.24
+\update 2018.12.8
 
 eclib websocket protocol
 http protocol only support get and head. websocket protocol support Sec-WebSocket-Version:13
@@ -31,7 +31,7 @@ limitations under the License.
 #include "c11_netio.h"
 #include "c11_config.h"
 #include "c_diskio.h"
-
+#include "c11_keyval.h"
 #include "c_base64.h"
 
 #include "c_sha1.h"
