@@ -11,12 +11,453 @@ source repository : https://github.com/kipway/eclib
 Licensed under the Apache License, Version 2.0 (the "License");
 */
 #pragma once
-#include "ec_tls12srv.h"
-#include "c11_websocket.h"
+#include "ec_tlssrv.h"
+#include "c11_keyval.h"
+#include "c_base64.h"
 
-#define EZ_PROTOC_WSS  (EZ_PROTOC_BASETLS12 + 1) // WSS
-#define EZ_MAX_WSMSG_SIZE (1024 * 1024 * 100) //100MB
+#include "c_sha1.h"
+#include "zlib/zlib.h"
+
+#define EC_PROTOC_WSS     (EC_PROTOC_TLS + 1) // WSS
+#define EC_MAX_WSMSG_SIZE (1024 * 1024 * 100) //100MB
+
+#ifndef MAX_FILESIZE_HTTP_DOWN
+#define MAX_FILESIZE_HTTP_DOWN (1024 * 1024 * 32u)
+#endif
+
+#define EC_SIZE_WS_FRAME (1024 * 62)
+#define EC_SIZE_WS_READ_FRAME_MAX (1024 * 1024) // read max ws frame size
+
+#define SIZE_MAX_HTTPHEAD   4096  // max http1.1 head characters
+#define SIZE_HTTPMAXREQUEST (1024 * 64) // max http request
+
+#define HTTPENCODE_NONE    0
+#define HTTPENCODE_DEFLATE 1
+
+#define PROTOCOL_HTTP   0
+#define PROTOCOL_WS     1
+
+#define WS_FINAL	  0x80
+#define WS_OP_CONTINUE  0 
+#define WS_OP_TXT		1
+#define WS_OP_BIN		2
+#define WS_OP_CLOSE	    8
+#define WS_OP_PING		9
+#define WS_OP_PONG		10
+
+#define ws_frame_size  (1024 * 60)
+#define ws_permessage_deflate		1  // for google chrome ,firefox
+#define ws_x_webkit_deflate_frame   2  // for ios safari
+
 namespace ec {
+	enum HTTPERROR
+	{
+		he_ok = 0,
+		he_waitdata,
+		he_failed,
+		he_method,
+		he_url,
+		he_ver,
+	};
+	static const char* http_sret404 = "http/1.1 404  not found!\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:9\r\n\r\nnot found";
+	static const char* http_sret404outsize = "http/1.1 404  over size!\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:15\r\n\r\nfile over size!";
+	static const char* http_sret400 = "http/1.1 400  Bad Request!\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:11\r\n\r\nBad Request";
+
+	struct t_httpmime
+	{
+		char sext[16];
+		char stype[80];
+	};
+
+	template<>
+	struct key_equal<const char*, t_httpmime>
+	{
+		bool operator()(const char* key, const t_httpmime& val)
+		{
+			return !strcmp(key, val.sext);
+		}
+	};
+
+#define SIZE_WSZLIBTEMP 32768
+	inline int ws_encode_zlib(const void *pSrc, size_t size_src, ec::vector<char>* pout)//pout first two byte x78 and x9c,the end  0x00 x00 xff xff, no  adler32
+	{
+		z_stream stream;
+		int err;
+		char outbuf[SIZE_WSZLIBTEMP];
+
+		stream.next_in = (z_const Bytef *)pSrc;
+		stream.avail_in = (uInt)size_src;
+
+		stream.zalloc = (alloc_func)0;
+		stream.zfree = (free_func)0;
+		stream.opaque = (voidpf)0;
+
+		err = deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15, 8, Z_DEFAULT_STRATEGY);
+		if (err != Z_OK)
+			return err;
+		uLong uout = 0;
+		stream.avail_out = 0;
+		while (!stream.avail_out) {
+			stream.next_out = (unsigned char*)outbuf;
+			stream.avail_out = (unsigned int)sizeof(outbuf);
+			err = deflate(&stream, Z_SYNC_FLUSH);
+			if (err != Z_OK)
+				break;
+			if (!pout->add(outbuf, stream.total_out - uout)) {
+				err = Z_MEM_ERROR;
+				break;
+			}
+			uout += stream.total_out - uout;
+		}
+		deflateEnd(&stream);
+		return err;
+	}
+
+	inline int ws_decode_zlib(const void *pSrc, size_t size_src, ec::vector<char>* pout)//pSrc begin with 0x78 x9c, has no end 0x00 x00 xff xff
+	{
+		z_stream stream;
+		int err;
+		char outbuf[SIZE_WSZLIBTEMP];
+
+		stream.next_in = (z_const Bytef *)pSrc;
+		stream.avail_in = (uInt)size_src;
+
+		stream.zalloc = (alloc_func)0;
+		stream.zfree = (free_func)0;
+		stream.opaque = (voidpf)0;
+
+		err = inflateInit(&stream);
+		if (err != Z_OK)
+			return err;
+		uLong uout = 0;
+		while (stream.avail_in > 0) {
+			stream.next_out = (unsigned char*)outbuf;
+			stream.avail_out = (unsigned int)sizeof(outbuf);
+			err = inflate(&stream, Z_SYNC_FLUSH);
+			if (err != Z_OK)
+				break;
+			if (!pout->add(outbuf, stream.total_out - uout)) {
+				err = Z_MEM_ERROR;
+				break;
+			}
+			uout += stream.total_out - uout;
+		}
+		inflateEnd(&stream);
+		return err;
+	}
+
+	inline bool ws_make_permsg(const void* pdata, size_t sizes, unsigned char wsopt, vector<char>* pout, int ncompress) //multi-frame,permessage_deflate
+	{
+		unsigned char uc;
+		const char* pds = (const char*)pdata;
+		size_t slen = sizes;
+		vector<char> tmp(2048 + sizes - sizes % 1024, pout->get_mem_allocator());
+		if (ncompress)
+		{
+			tmp.set_grow(2048 + sizes / 2 - sizes % 1024);
+			if (Z_OK != ws_encode_zlib(pdata, sizes, &tmp) || tmp.size() < 6)
+				return false;
+			pds = tmp.data() + 2;
+			slen = tmp.size() - 6;
+		}
+		size_t ss = 0, us;
+		pout->clear();
+		while (ss < slen)
+		{
+			uc = 0;
+			if (0 == ss)//first frame
+			{
+				uc = 0x0F & wsopt;
+				if (ncompress)
+					uc |= 0x40;
+			}
+			us = EC_SIZE_WS_FRAME;
+			if (ss + EC_SIZE_WS_FRAME >= slen) // end frame
+			{
+				uc |= 0x80;
+				us = slen - ss;
+			}
+			pout->add(uc);
+			if (us < 126)
+			{
+				uc = (unsigned char)us;
+				pout->add(uc);
+			}
+			else if (uc < 65536)
+			{
+				uc = 126;
+				pout->add(uc);
+				pout->add((char)((us & 0xFF00) >> 8)); //high byte
+				pout->add((char)(us & 0xFF)); //low byte
+			}
+			else // < 4G
+			{
+				uc = 127;
+				pout->add((char)uc);
+				pout->add((char)0); pout->add((char)0); pout->add((char)0); pout->add((char)0);//high 4 bytes 0
+				pout->add((char)((us & 0xFF000000) >> 24));
+				pout->add((char)((us & 0x00FF0000) >> 16));
+				pout->add((char)((us & 0x0000FF00) >> 8));
+				pout->add((char)(us & 0xFF));
+			}
+			pout->add(pds + ss, us);
+			ss += us;
+		}
+		return true;
+	}
+
+	inline bool ws_make_perfrm(const void* pdata, size_t sizes, unsigned char wsopt, vector< char>* pout)//multi-frame,deflate-frame, for ios safari
+	{
+		const char* pds = (const char*)pdata;
+		char* pf;
+		size_t slen = sizes;
+		vector<char> tmp(EC_SIZE_WS_FRAME, pout->get_mem_allocator());
+		unsigned char uc;
+		size_t ss = 0, us, fl;
+		pout->clear();
+		while (ss < slen)
+		{
+			uc = 0;
+			us = EC_SIZE_WS_FRAME;
+
+			if (0 == ss)//first frame
+				uc = 0x0F & wsopt;
+			if (us > 256)
+				uc |= 0x40;
+			if (ss + EC_SIZE_WS_FRAME >= slen) //end frame
+			{
+				uc |= 0x80;
+				us = slen - ss;
+			}
+			pout->add(uc);
+			if (uc & 0x40)
+			{
+				tmp.clear();
+				if (Z_OK != ws_encode_zlib(pds + ss, us, &tmp) || tmp.size() < 6)
+					return false;
+				pf = tmp.data() + 2;
+				fl = tmp.size() - 6;
+			}
+			else
+			{
+				pf = (char*)pds + ss;
+				fl = us;
+			}
+
+			if (fl < 126)
+			{
+				uc = (unsigned char)fl;
+				pout->add(uc);
+			}
+			else if (uc < 65536)
+			{
+				uc = 126;
+				pout->add(uc);
+				pout->add((char)((fl & 0xFF00) >> 8)); //high byte
+				pout->add((char)(fl & 0xFF)); //low byte
+			}
+			else // < 4G
+			{
+				uc = 127;
+				pout->add(uc);
+				pout->add((char)0); pout->add((char)0); pout->add((char)0); pout->add((char)0);//high 4 bytes 0
+				pout->add((char)((fl & 0xFF000000) >> 24));
+				pout->add((char)((fl & 0x00FF0000) >> 16));
+				pout->add((char)((fl & 0x0000FF00) >> 8));
+				pout->add((char)(fl & 0xFF));
+			}
+			pout->add(pf, fl);
+			ss += us;
+		}
+		return true;
+	}
+
+	inline bool isdir(const char* s)
+	{
+#ifdef _WIN32
+		struct _stat st;
+		if (_stat(s, &st))
+			return false;
+		if (st.st_mode & S_IFDIR)
+			return true;
+		return false;
+#else
+		struct stat st;
+		if (stat(s, &st))
+			return false;
+		if (st.st_mode & S_IFDIR)
+			return true;
+		return false;
+#endif
+	}
+	inline const char *file_extname(const char*s)
+	{
+		const char *pr = NULL;
+		while (*s) {
+			if (*s == '.')
+				pr = s;
+			s++;
+		}
+		return pr;
+	}
+
+	class http_pkg
+	{
+	public:
+		http_pkg(ec::memory* pmem) : _body(1024 * 128, pmem), _pmem(pmem), _fin(0), _opcode(0), _comp(0)
+		{
+			initbuf();
+		};
+		~http_pkg() {};
+	public:
+		int  _nprotocol;   // HTTP_PROTOCOL or WEB_SOCKET
+		char _method[32];  // get ,head
+		char _request[512];// requet URL
+		char _reqargs[256];// request args
+		char _version[32];
+		char _sline[512];
+
+		Array<char, SIZE_MAX_HTTPHEAD> _txthead;
+		txtkeyval _headers;
+		vector<char> _body;
+		int _fin;   // end
+		int _opcode;// operator code
+		int _comp;  // encode
+	private:
+		ec::memory* _pmem;
+		void initbuf() {
+			_method[0] = '\0';
+			_request[0] = '\0';
+			_reqargs[0] = '\0';
+			_version[0] = '\0';
+			_sline[0] = '\0';
+		}
+	protected:
+		int NextLine(const char* in, size_t sizein, size_t &pos, char *out, size_t sizeout)//return -1:err; 0:wait ; > 0 linesize
+		{
+			size_t i = 0;
+			while (pos < sizein) {
+				if (in[pos] == '\r')
+					pos++;
+				else if (in[pos] == '\n') {
+					if (i >= sizeout)
+						return -1;
+					out[i++] = in[pos++];
+					out[i] = 0;
+					return (int)i;
+				}
+				else {
+					out[i++] = in[pos++];
+					if (i >= sizeout)
+						return -1;
+				}
+			}
+			return 0;
+		}
+
+		int GetContextLength()
+		{
+			char sval[16] = { 0 };
+			if (!_headers.get("Context-Length", sval, sizeof(sval)))
+				return 0;
+			return atoi(sval);
+		}
+
+	public:
+		int  HttpParse(const char* stxt, size_t usize, size_t &sizedo)
+		{
+			if (usize < 3)
+				return he_waitdata;
+			initbuf();
+			int nret;
+			size_t pos = 0;
+			nret = NextLine(stxt, usize, pos, _sline, sizeof(_sline)); // first line
+			if (nret < 0)
+				return he_failed;
+			else if (nret == 0)
+				return he_waitdata;
+			char surl[512];
+			cStrSplit sp(_sline);
+			if (!sp.next("\x20\t", _method, sizeof(_method)) || !sp.next("\x20\t", surl, sizeof(surl))
+				|| !sp.next("\x20\t", _version, sizeof(_version)))
+				return he_failed;
+			if (str_icmp("get", _method) && str_icmp("head", _method))
+				return he_failed;
+			sp.reset(surl);
+			sp.next("?", _request, sizeof(_request));
+			sp.next("?", _reqargs, sizeof(_reqargs));
+
+			size_t poshead = pos, poshead_e = 0; //do head
+			do {
+				nret = NextLine(stxt, usize, pos, _sline, sizeof(_sline));
+				if (_sline[0] == '\n')
+					break;
+			} while (nret > 0);
+			if (nret < 0)
+				return he_failed;
+			else if (nret == 0)
+				return he_waitdata;
+			if (pos - poshead >= SIZE_MAX_HTTPHEAD)
+				return he_failed;
+
+			_txthead.clear();
+			_txthead.add(stxt + poshead, pos - poshead);
+			_headers.init(_txthead.data(), _txthead.size());
+
+			_nprotocol = PROTOCOL_HTTP;
+
+			_body.clear(size_t(0)); // do body
+			int bodylength = GetContextLength();
+			if (bodylength < 0)
+				return  he_failed;
+			if (!bodylength) {
+				sizedo = pos;
+				return he_ok;
+			}
+			if (pos + bodylength > usize)
+				return he_waitdata;
+
+			_body.add(stxt + pos, bodylength);
+			sizedo = pos + bodylength;
+			return he_ok;
+		}
+		void Resetwscomp()
+		{
+			_body.clear((size_t)0);
+		}
+
+		inline bool HasKeepAlive()
+		{
+			return CheckHeadFiled("Connection", "keep-alive");
+		}
+
+		bool GetWebSocketKey(char sout[], int nsize)
+		{
+			if (!CheckHeadFiled("Connection", "Upgrade") || !CheckHeadFiled("Upgrade", "websocket"))
+				return false;
+			return _headers.get("Sec-WebSocket-Key", sout, nsize);
+		}
+
+		inline bool GetHeadFiled(const char* sname, char sval[], size_t size)
+		{
+			return _headers.get(sname, sval, size);
+		}
+
+		bool CheckHeadFiled(const char* sname, const char* sval)
+		{
+			char stmp[256], sv[80];
+			if (!_headers.get(sname, stmp, sizeof(stmp)))
+				return false;
+			size_t pos = 0;
+			while (str_getnext(",", stmp, strlen(stmp), pos, sv, sizeof(sv)))
+			{
+				if (!str_icmp(sv, sval))
+					return true;
+			}
+			return false;
+		}
+	};
+
 	/*!
 	\brief mimecfg config
 
@@ -70,12 +511,12 @@ namespace ec {
 			reset();
 		}
 	};
-	namespace tls12 {
-		class ws_session : public tls12_session {
+	namespace tcp {
+		class ws_session : public tls_session {
 		public:
-			ws_session(SOCKET  fd, uint32_t ucid, const void* pcer, size_t cerlen,
+			ws_session(uint32_t ucid, SOCKET  fd, const void* pcer, size_t cerlen,
 				const void* pcerroot, size_t cerrootlen, std::mutex *pRsaLck, RSA* pRsaPrivate, ec::memory* pmem, ec::cLog* plog) :
-				tls12_session(fd, ucid, pcer, cerlen, pcerroot, cerrootlen, pRsaLck, pRsaPrivate, pmem, plog, EZ_PROTOC_WSS),
+				tls_session(ucid, fd, pcer, cerlen, pcerroot, cerrootlen, pRsaLck, pRsaPrivate, pmem, plog, EC_PROTOC_WSS),
 				_txt(1024 * 16, true, pmem), _wsmsg(1024 * 16, true, pmem), _wsappmsg(1024 * 16, true, pmem)
 			{
 				memset(_sip, 0, sizeof(_sip));
@@ -192,7 +633,7 @@ namespace ec {
 				return (int)sizedo;
 			}
 
-			int WebsocketParse(const char* stxt, size_t usize, size_t &sizedo, cHttpPacket* pout)//support multi-frame
+			int WebsocketParse(const char* stxt, size_t usize, size_t &sizedo, http_pkg* pout)//support multi-frame
 			{
 				const char *pd = stxt;
 				int ndo = 0, fin = 0;
@@ -225,16 +666,16 @@ namespace ec {
 			}
 		public:
 			virtual int send(const void* pdata, size_t size, int timeoutmsec = 1000) {
-				if (_protocol == PROTOCOL_HTTP) 
-					return tls12_session::send(pdata, size, timeoutmsec);
+				if (_protocol == PROTOCOL_HTTP)
+					return tls_session::send(pdata, size, timeoutmsec);
 				else if (_protocol == PROTOCOL_WS) {
 					bool bsend;
-					vector<uint8_t> vret(2048 + size - size % 1024, _pmem);
-					if (_wscompress == ws_x_webkit_deflate_frame){ //deflate-frame					
+					vector<char> vret(2048 + size - size % 1024, _pmem);
+					if (_wscompress == ws_x_webkit_deflate_frame) { //deflate-frame					
 						vret.set_grow(2048 + size / 2 - size % 1024);
 						bsend = ws_make_perfrm(pdata, size, WS_OP_TXT, &vret);
 					}
-					else{ // ws_permessage_deflate					
+					else { // ws_permessage_deflate					
 						if (size > 128 && _wscompress)
 							vret.set_grow(2048 + size / 2 - size % 1024);
 						bsend = ws_make_permsg(pdata, size, WS_OP_TXT, &vret, size > 128 && _wscompress);
@@ -244,13 +685,13 @@ namespace ec {
 							_plog->add(CLOG_DEFAULT_ERR, "send ucid %u make wsframe failed,size %u", _ucid, (unsigned int)size);
 						return -1;
 					}
-					return tls12_session::send(vret.data(), vret.size(), timeoutmsec);
+					return tls_session::send(vret.data(), vret.size(), timeoutmsec);
 				}
 				_plog->add(CLOG_DEFAULT_ERR, "wss send failed _protocol = %d", _protocol);
 				return -1;
 			}
 
-			int OnReadData(const char* pdata, size_t usize, cHttpPacket* pout)
+			int OnReadData(const char* pdata, size_t usize, http_pkg* pout)
 			{
 				pout->Resetwscomp();
 				if (!pdata || !usize || !pout)
@@ -286,7 +727,7 @@ namespace ec {
 				return nr;
 			}
 
-			int DoNextData(cHttpPacket* pout)
+			int DoNextData(http_pkg* pout)
 			{
 				pout->Resetwscomp();
 				size_t sizedo = 0;
@@ -319,22 +760,22 @@ namespace ec {
 			}
 		};
 
-		class httpserver : public server {
+		class httpserver : public tls_server {
 		public:
-			httpserver(ec::cLog* plog, ec::memory* pmem, ec::mimecfg* pmime) : server(plog, pmem), _httppkg(pmem), _pmime(pmime) {
+			httpserver(ec::cLog* plog, ec::memory* pmem, ec::mimecfg* pmime) : tls_server(plog, pmem), _httppkg(pmem), _pmime(pmime) {
 			}
 		protected:
 			ec::mimecfg* _pmime;
-			cHttpPacket _httppkg;
+			http_pkg _httppkg;
 			virtual bool domessage(uint32_t ucid, const uint8_t*pmsg, size_t msgsize) {
-				ptrbasession pi = nullptr;
+				psession pi = nullptr;
 				if (!_map.get(ucid, pi))
 					return false;
-				if (EZ_PROTOC_WSS != pi->_protoc)
+				if (EC_PROTOC_WSS != pi->_protoc)
 					return onprotcomessage(pi, pmsg, msgsize);
 
 				ws_session* pws = (ws_session*)pi; //处理WSS协议
-				
+
 				int nr = pws->OnReadData((const char*)pmsg, msgsize, &_httppkg);
 				while (nr == he_ok)
 				{
@@ -347,7 +788,7 @@ namespace ec {
 					else if (_httppkg._nprotocol == PROTOCOL_WS) {
 						if (_httppkg._opcode <= WS_OP_BIN) {
 							pws->_wsappmsg.add(_httppkg._body.data(), _httppkg._body.size());
-							if (pws->_wsappmsg.size() > EZ_MAX_WSMSG_SIZE) {
+							if (pws->_wsappmsg.size() > EC_MAX_WSMSG_SIZE) {
 								closeucid(ucid);
 								pws->_wsappmsg.clear((size_t)0);
 								return false;
@@ -364,7 +805,7 @@ namespace ec {
 							return false;
 						}
 						else if (_httppkg._opcode == WS_OP_PING) {
-							if (ws_send(pws, _httppkg._body.data(), _httppkg._body.size(), WS_OP_PONG) < 0) {
+							if (pws->send(_httppkg._body.data(), _httppkg._body.size(), WS_OP_PONG) < 0) {
 								closeucid(ucid);
 								return false;
 							}
@@ -386,14 +827,14 @@ namespace ec {
 			}
 			virtual void ondisconnect(uint32_t ucid) {
 			}
-			virtual base_session* createsession(SOCKET  fd, uint32_t ucid, const void* pcer, size_t cerlen,
-				const void* pcerroot, size_t cerrootlen, std::mutex *pRsaLck, RSA* pRsaPrivate, ec::memory* pmem, ec::cLog* plog) {
-				return new ws_session(fd, ucid, pcer, cerlen, pcerroot, cerrootlen, pRsaLck, pRsaPrivate, pmem, plog);
+			virtual session* createsession(uint32_t ucid, SOCKET  fd, uint32_t status, ec::memory* pmem, ec::cLog* plog) {
+				return new ws_session(ucid, fd, _ca._pcer.data(), _ca._pcer.size(),
+					_ca._prootcer.data(), _ca._prootcer.size(), &_ca._csRsa, _ca._pRsaPrivate, _pmem, _plog);
 			}
 		protected:
-			virtual bool onhttprequest(uint32_t ucid, cHttpPacket* phttpmsg) = 0;
+			virtual bool onhttprequest(uint32_t ucid, http_pkg* phttpmsg) = 0;
 			virtual bool onwsmessage(uint32_t ucid, const void* pdata, size_t size) = 0;
-			virtual bool onprotcomessage(ptrbasession pi, const void* pdata, size_t size) { //other protoc
+			virtual bool onprotcomessage(psession pi, const void* pdata, size_t size) { //other protoc
 				return false;
 			}
 			virtual void onupdatewss(uint32_t ucid) {};
@@ -409,24 +850,24 @@ namespace ec {
 			{
 				if (_plog) {
 					if (_httppkg._reqargs[0])
-						_plog->add(CLOG_DEFAULT_MSG, "ucid %u read: %s %s?%s %s", pws->ucid(), _httppkg._method, _httppkg._request, _httppkg._reqargs, _httppkg._version);
+						_plog->add(CLOG_DEFAULT_MSG, "ucid %u read: %s %s?%s %s", pws->_ucid, _httppkg._method, _httppkg._request, _httppkg._reqargs, _httppkg._version);
 					else
-						_plog->add(CLOG_DEFAULT_MSG, "ucid %u read: %s %s %s", pws->ucid(), _httppkg._method, _httppkg._request, _httppkg._version);
+						_plog->add(CLOG_DEFAULT_MSG, "ucid %u read: %s %s %s", pws->_ucid, _httppkg._method, _httppkg._request, _httppkg._version);
 				}
 				if (!stricmp("GET", _httppkg._method)) { //GET			
 					char skey[128];
 					if (_httppkg.GetWebSocketKey(skey, sizeof(skey))) { //websocket Upgrade
 						if (DoUpgradeWebSocket(pws, skey)) {
-							onupdatewss(pws->ucid());
+							onupdatewss(pws->_ucid);
 							return true;
 						}
 						else
 							return false;
 					}
 				}
-				return onhttprequest(pws->ucid(), &_httppkg);
+				return onhttprequest(pws->_ucid, &_httppkg);
 			}
-			bool httprequest(const char* sroot, uint32_t ucid, cHttpPacket* pPkg) //default httprequest
+			bool httprequest(const char* sroot, uint32_t ucid, http_pkg* pPkg) //default httprequest
 			{
 				if (!stricmp("GET", _httppkg._method))
 					return  DoGetAndHead(sroot, ucid, pPkg);
@@ -436,7 +877,7 @@ namespace ec {
 				return _httppkg.HasKeepAlive();
 			}
 
-			bool DoGetAndHead(const char* sroot, uint32_t ucid, cHttpPacket* pPkg, bool bGet = true)
+			bool DoGetAndHead(const char* sroot, uint32_t ucid, http_pkg* pPkg, bool bGet = true)
 			{
 				char sfile[1024], tmp[4096];
 				const char* sc;
@@ -452,36 +893,40 @@ namespace ec {
 				size_t n = strlen(sfile);
 				if (n && (sfile[n - 1] == '/' || sfile[n - 1] == '\\'))
 					strcat(sfile, "index.html");
-				else if (IsDir(sfile)) {
+				else if (isdir(sfile)) {
 					httpreterr(ucid, http_sret404);
 					return pPkg->HasKeepAlive();
 				}
-				size_t flen = ec::IO::filesize(sfile);
+				long long flen = ec::IO::filesize(sfile);
+				if (flen < 0) {
+					httpreterr(ucid, http_sret404);
+					return pPkg->HasKeepAlive();
+				}
 				if (flen > MAX_FILESIZE_HTTP_DOWN) {
 					httpreterr(ucid, http_sret404outsize);
 					return pPkg->HasKeepAlive();
 				}
 
-				vector<uint8_t> answer(1024 * 32, true, _pmem);
+				vector<char> answer(1024 * 32, true, _pmem);
 				sc = "HTTP/1.1 200 ok\r\n";
-				answer.add((const uint8_t*)sc, strlen(sc));
+				answer.add(sc, strlen(sc));
 
 				sc = "Server: rdb5 websocket server\r\n";
-				answer.add((const uint8_t*)sc, strlen(sc));
+				answer.add(sc, strlen(sc));
 
 				if (pPkg->HasKeepAlive()) {
 					sc = "Connection: keep-alive\r\n";
-					answer.add((const uint8_t*)sc, strlen(sc));
+					answer.add(sc, strlen(sc));
 				}
-				const char* sext = GetFileExtName(sfile);
+				const char* sext = file_extname(sfile);
 				if (sext && *sext && getmime(sext, tmp, sizeof(tmp))) {
-					answer.add((const uint8_t*)"Content-type: ", 13);
-					answer.add((const uint8_t*)tmp, strlen(tmp));
-					answer.add((const uint8_t*)"\r\n", 2);
+					answer.add("Content-type: ", 13);
+					answer.add(tmp, strlen(tmp));
+					answer.add("\r\n", 2);
 				}
 				else {
 					sc = "Content-type: application/octet-stream\r\n";
-					answer.add((const uint8_t*)sc, strlen(sc));
+					answer.add(sc, strlen(sc));
 				}
 
 				int necnode = 0;
@@ -491,7 +936,7 @@ namespace ec {
 					while (ec::str_getnext(";,", tmp, strlen(tmp), pos, sencode, sizeof(sencode))) {
 						if (!ec::str_icmp("deflate", sencode)) {
 							sc = "Content-Encoding: deflate\r\n";
-							answer.add((const uint8_t*)sc, strlen(sc));
+							answer.add(sc, strlen(sc));
 							necnode = HTTPENCODE_DEFLATE;
 							break;
 						}
@@ -504,7 +949,7 @@ namespace ec {
 				}
 				size_t poslen = answer.size(), sizehead;
 				sprintf(tmp, "Content-Length: %9d\r\n\r\n", (int)filetmp.size());
-				answer.add((const uint8_t*)tmp, strlen(tmp));
+				answer.add(tmp, strlen(tmp));
 				sizehead = answer.size();
 				if (HTTPENCODE_DEFLATE == necnode) {
 					if (Z_OK != ec::ws_encode_zlib(filetmp.data(), filetmp.size(), &answer)) {
@@ -520,7 +965,7 @@ namespace ec {
 				}
 				else {
 					if (bGet)
-						answer.add((const uint8_t*)filetmp.data(), filetmp.size());
+						answer.add(filetmp.data(), filetmp.size());
 				}
 
 				if (_plog)
@@ -530,7 +975,7 @@ namespace ec {
 
 			void httpreterr(unsigned int ucid, const char* sret)
 			{
-				int nret = sendbyucid(ucid, (const uint8_t*)sret, strlen(sret));
+				int nret = sendbyucid(ucid, sret, strlen(sret));
 				if (_plog) {
 					if (nret > 0)
 						_plog->add(CLOG_DEFAULT_DBG, "http write ucid %u:\n%s", ucid, sret);
@@ -543,7 +988,7 @@ namespace ec {
 			{
 				if (_plog) {
 					char stmp[128] = { 0 };
-					_plog->add(CLOG_DEFAULT_MSG, "ucid %u upgrade websocket", pws->ucid());
+					_plog->add(CLOG_DEFAULT_MSG, "ucid %u upgrade websocket", pws->_ucid);
 					if (_httppkg.GetHeadFiled("Origin", stmp, sizeof(stmp)))
 						_plog->append(CLOG_DEFAULT_DBG, "\tOrigin: %s\n", stmp);
 					if (_httppkg.GetHeadFiled("Sec-WebSocket-Extensions", stmp, sizeof(stmp)))
@@ -557,15 +1002,15 @@ namespace ec {
 
 				if (atoi(sVersion) != 13) {
 					if (_plog)
-						_plog->add(CLOG_DEFAULT_MSG, "ws sVersion(%s) error :ucid=%d, ", sVersion, pws->ucid());
+						_plog->add(CLOG_DEFAULT_MSG, "ws sVersion(%s) error :ucid=%d, ", sVersion, pws->_ucid);
 					pws->send(http_sret400, strlen(http_sret400));
 					return _httppkg.HasKeepAlive();
 				}
-				vector<uint8_t> vret(1024 * 4, _pmem);
+				vector<char> vret(1024 * 4, _pmem);
 				sc = "HTTP/1.1 101 Switching Protocols\x0d\x0a"
 					"Upgrade: websocket\x0d\x0a"
 					"Connection: Upgrade\x0d\x0a";
-				vret.add((const uint8_t*)sc, strlen(sc));
+				vret.add(sc, strlen(sc));
 
 				char ss[256];
 				strcpy(ss, skey);
@@ -576,22 +1021,22 @@ namespace ec {
 				encode_base64(base64out, sha1out, 20);    //BASE64
 
 				sc = "Sec-WebSocket-Accept: ";
-				vret.add((const uint8_t*)sc, strlen(sc));
-				vret.add((const uint8_t*)base64out, strlen(base64out));
-				vret.add((const uint8_t*)"\x0d\x0a", 2);
+				vret.add(sc, strlen(sc));
+				vret.add(base64out, strlen(base64out));
+				vret.add("\x0d\x0a", 2);
 
 				if (sProtocol[0]) {
 					sc = "Sec-WebSocket-Protocol: ";
-					vret.add((const uint8_t*)sc, strlen(sc));
-					vret.add((const uint8_t*)sProtocol, strlen(sProtocol));
-					vret.add((const uint8_t*)"\x0d\x0a", 2);
+					vret.add(sc, strlen(sc));
+					vret.add(sProtocol, strlen(sProtocol));
+					vret.add("\x0d\x0a", 2);
 				}
 
 				if (_httppkg.GetHeadFiled("Host", tmp, sizeof(tmp))) {
 					sc = "Host: ";
-					vret.add((const uint8_t*)sc, strlen(sc));
-					vret.add((const uint8_t*)tmp, strlen(tmp));
-					vret.add((const uint8_t*)"\x0d\x0a", 2);
+					vret.add(sc, strlen(sc));
+					vret.add(tmp, strlen(tmp));
+					vret.add("\x0d\x0a", 2);
 				}
 
 				int ncompress = 0;
@@ -601,101 +1046,48 @@ namespace ec {
 					while (ec::str_getnext(";,", tmp, len, pos, st, sizeof(st))) {
 						if (!ec::str_icmp("permessage-deflate", st)) {
 							sc = "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover";
-							vret.add((const uint8_t*)sc, strlen(sc));
-							vret.add((const uint8_t*)"\x0d\x0a", 2);
+							vret.add(sc, strlen(sc));
+							vret.add("\x0d\x0a", 2);
 							ncompress = ws_permessage_deflate;
 							break;
 						}
 						else if (!ec::str_icmp("x-webkit-deflate-frame", st)) {
 							sc = "Sec-WebSocket-Extensions: x-webkit-deflate-frame; no_context_takeover";
-							vret.add((const uint8_t*)sc, strlen(sc));
-							vret.add((const uint8_t*)"\x0d\x0a", 2);
+							vret.add(sc, strlen(sc));
+							vret.add("\x0d\x0a", 2);
 							ncompress = ws_x_webkit_deflate_frame;
 							break;
 						}
 					}
 				}
-				vret.add((const uint8_t*)"\x0d\x0a", 2);				
+				vret.add("\x0d\x0a", 2);
 				pws->_txt.clear((size_t)0);
 
-				int ns = 0;
+				int ns = pws->send(vret.data(), vret.size());
 				if (_plog) {
-					vector<char> vlog(1024 * 4, _pmem);
-					vlog.add((const char*)vret.data(), vret.size());
-					vlog.add(char(0));
-					ns = pws->send(vret.data(), vret.size());
-					if (ns < 0) {
-						_plog->add(CLOG_DEFAULT_MSG, "ucid %d upggrade WS failed", pws->ucid());
-						_plog->append(CLOG_DEFAULT_DBG, "%s", vlog.data());
-						return false;
-					}
-					vlog.for_each([](char &v) {
+					vret.add((char)0);
+					vret.for_each([](char &v) {
 						if ('\r' == v)
 							v = '\x20';
 					});
-					_plog->add(CLOG_DEFAULT_MSG, "ucid %d upggrade WS success\n%s", pws->ucid(), vlog.data());					
 				}
-				else
-					ns = pws->send(vret.data(), vret.size());
+
+				if (ns < 0) {
+					if (_plog)
+						_plog->add(CLOG_DEFAULT_MSG, "ucid %d upggrade WS failed\n%s", pws->_ucid, vret.data());
+					return false;
+				}
+
+				if (_plog)
+					_plog->add(CLOG_DEFAULT_MSG, "ucid %d upggrade WS success\n%s", pws->_ucid, vret.data());
+
 				pws->_protocol = PROTOCOL_WS;
 				pws->_wscompress = ncompress;
-				pws->_status |= EZ_PROTOC_ST_WORK;
+				pws->_status |= EC_PROTOC_ST_WORK;
 				return ns > 0;
 			}
-
-			int ws_send(unsigned int ucid, const void* pdata, size_t size, unsigned char wsopt, int waitmsec = 1000) //return -1 error, >0 is send bytes
-			{
-				ptrbasession pi = nullptr;
-				if (!_map.get(ucid, pi))
-					return -1;
-				if (pi->_protoc != EZ_PROTOC_WSS)
-					return -1;
-				ws_session* pws = (ws_session*)pi;
-				bool bsend;
-				vector<uint8_t> vret(2048 + size - size % 1024, _pmem);
-				if (pws->_wscompress == ws_x_webkit_deflate_frame) //deflate-frame
-				{
-					vret.set_grow(2048 + size / 2 - size % 1024);
-					bsend = ws_make_perfrm(pdata, size, wsopt, &vret);
-				}
-				else // ws_permessage_deflate
-				{
-					if (size > 128 && pws->_wscompress)
-						vret.set_grow(2048 + size / 2 - size % 1024);
-					bsend = ws_make_permsg(pdata, size, wsopt, &vret, size > 128 && pws->_wscompress);
-				}
-				if (!bsend) {
-					if (_plog)
-						_plog->add(CLOG_DEFAULT_ERR, "send ucid %u make wsframe failed,size %u", ucid, (unsigned int)size);
-					return -1;
-				}
-				return pws->send(vret.data(), vret.size(), waitmsec);
-			}
-
-			int ws_send(ws_session* pws, const void* pdata, size_t size, unsigned char wsopt, int waitmsec = 1000) //return -1 error, >0 is send bytes
-			{
-				bool bsend;
-				vector<uint8_t> vret(2048 + size - size % 1024, _pmem);
-				if (pws->_wscompress == ws_x_webkit_deflate_frame) //deflate-frame
-				{
-					vret.set_grow(2048 + size / 2 - size % 1024);
-					bsend = ws_make_perfrm(pdata, size, wsopt, &vret);
-				}
-				else // ws_permessage_deflate
-				{
-					if (size > 128 && pws->_wscompress)
-						vret.set_grow(2048 + size / 2 - size % 1024);
-					bsend = ws_make_permsg(pdata, size, wsopt, &vret, size > 128 && pws->_wscompress);
-				}
-				if (!bsend) {
-					if (_plog)
-						_plog->add(CLOG_DEFAULT_ERR, "send ucid %u make wsframe failed,size %u", pws->ucid(), (unsigned int)size);
-					return -1;
-				}
-				return pws->send(vret.data(), vret.size(), waitmsec);
-			}
 		};
-	}
+	}//tcp
 }// ec
 
 
