@@ -235,9 +235,13 @@ namespace ec {
 		vector<uint8_t> _rmsg;
 		bool _bmodify_pool;
 	protected:
-		virtual void domessage(uint32_t ucid, const uint8_t*pmsg, size_t msgsize) = 0;
+		virtual bool domessage(uint32_t ucid, const uint8_t*pmsg, size_t msgsize) = 0;
 		virtual void onconnect(uint32_t ucid) = 0;
 		virtual void ondisconnect(uint32_t ucid) = 0;
+
+		virtual int  pkgparse(ipc_seesion_c* pi, ec::vector<uint8_t>* pin, const uint8_t* pdata, size_t usize, ec::vector<uint8_t> *pout) {
+			return ez_ipcpkg::parse(pin, pdata, usize, pout);
+		}
 	public:
 		void disconnect(uint32_t ucid, bool blogout = true) {
 			if (ucid < 100)
@@ -265,7 +269,7 @@ namespace ec {
 			return 0;
 		}
 #endif
-		bool open(uint16_t wport) {
+		bool open(uint16_t wport,const char* skeywords = "ezipc",const char* slocalip = "127.0.0.171") {  // c11_ipc.h "ECIPC", "127.0.0.191"
 			if (_sock != INVALID_SOCKET)
 				return true;
 			_wport = wport;
@@ -278,7 +282,7 @@ namespace ec {
 			struct sockaddr_un Addr;
 			memset(&Addr, 0, sizeof(Addr));
 			Addr.sun_family = AF_UNIX;
-			snprintf(Addr.sun_path, sizeof(Addr.sun_path), "/var/tmp/ezipc:%d", _wport);
+			snprintf(Addr.sun_path, sizeof(Addr.sun_path), "/var/tmp/%s:%d", skeywords, _wport);
 			unlink(Addr.sun_path);
 #else
 			if ((_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == INVALID_SOCKET)
@@ -286,7 +290,7 @@ namespace ec {
 			struct sockaddr_in	Addr;
 			memset(&Addr, 0, sizeof(Addr));
 			Addr.sin_family = AF_INET;
-			Addr.sin_addr.s_addr = inet_addr("127.0.0.171");
+			Addr.sin_addr.s_addr = inet_addr(slocalip);
 			Addr.sin_port = htons(_wport);
 #endif
 
@@ -380,6 +384,7 @@ namespace ec {
 		uint32_t _unextid;
 		uint32_t nextid()
 		{
+			_unextid++;
 			if (_unextid < 100)
 				_unextid = 100;
 			while (_map.get(_unextid)) {
@@ -476,9 +481,12 @@ namespace ec {
 			}
 			ipc_seesion_c* pi = _map.get(ucid);
 			if (pi) {
-				int ndo = ez_ipcpkg::parse(&pi->_rbuf, (const uint8_t*)rbuf, nr, &_rmsg);
+				int ndo = pkgparse(pi, &pi->_rbuf, (const uint8_t*)rbuf, nr, &_rmsg);
 				while (ndo > 0) {
-					domessage(ucid, _rmsg.data(), _rmsg.size());
+					if (!domessage(ucid, _rmsg.data(), _rmsg.size())) {
+						ndo = -1;
+						break;
+					}
 					ndo = ez_ipcpkg::parse(&pi->_rbuf, nullptr, 0, &_rmsg);
 				}
 				if (ndo < 0) {
