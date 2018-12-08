@@ -1,9 +1,9 @@
 ﻿/*!
-\file ec_tls12srv.h
+\file ec_tcpsrv.h
 \author kipway@outlook.com
 \update 2018.12.2
 
-eclib TLS1.2 server class. easy to use, no thread , lock-free
+eclib tcp server class. easy to use, no thread , lock-free
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib
@@ -33,140 +33,99 @@ Licensed under the Apache License, Version 2.0 (the "License");
 #	include <sys/socket.h>
 #	include <sys/eventfd.h>
 #	include <sys/ioctl.h>
-#	include <sys/un.h>
 
 #	include <errno.h>
 #	include <poll.h>
 #	include <fcntl.h>
 #endif
-#include "ec/c11_netio.h"
 
-#include "ec/c11_map.h"
-#include "ec/c11_tls12.h"
+#include "c_str.h"
+#include "c11_log.h"
+#include "c11_netio.h"
+#include "c11_map.h"
 
-#define EZ_PROTOC_BASETCP    0x01000  // base TCP    protocol
-#define EZ_PROTOC_BASETLS12  0x02000  // base TLS12  protocol
-#define EZ_PROTOC_BASELISTEN 0x04000  // base listen protocol
-#define EZ_PROTOC_CONNECTOUT 0x10000  // base connect out flag
+#define EC_PROTOC_TCP        0x01000  // base TCP    protocol
+#define EC_PROTOC_TLS        0x02000  // base TLS12  protocol
+#define EC_PROTOC_LISTEN     0x04000  // base listen protocol
+#define EC_PROTOC_CONNECTOUT 0x10000  // base connect out flag
 
-
-#define EZ_PROTOC_ST_PRE     0x00
-#define EZ_PROTOC_ST_CONNECT 0x01
-#define EZ_PROTOC_ST_WORK    0x02
+#define EC_PROTOC_ST_PRE     0x00
+#define EC_PROTOC_ST_CONNECT 0x01
+#define EC_PROTOC_ST_WORK    0x02
 
 namespace ec {
 
-	namespace tls12 {
-		/*!
-		\brief base session class
-		*/
-		class base_session {
+	namespace tcp {
+		class session // base connect session class
+		{
 		public:
-			base_session(SOCKET  fd, uint32_t protoc, uint32_t status = EZ_PROTOC_ST_PRE) : _fd(fd), _protoc(protoc), _status(status) {
+			session(uint32_t ucid, SOCKET  fd, uint32_t protoc, uint32_t status, ec::memory* pmem, ec::cLog* plog) :
+				_ucid(ucid), _fd(fd), _protoc(protoc), _status(status) {
+				_ip[0] = 0;
+				_cid[0] = 0;
+			}
+			virtual ~session() {
+				if (_fd != INVALID_SOCKET)
+#ifdef _WIN32
+					::closesocket(_fd);
+#else
+					::close(_fd);
+#endif
+				_fd = INVALID_SOCKET;
 			}
 		public:
 			uint32_t _protoc;
 			int32_t  _status; // D0:connected; D1:logined
 			SOCKET   _fd;
+			uint32_t _ucid;
+			char     _ip[40];
+			char     _cid[40];
 		public:
-			virtual uint32_t ucid() = 0;
-			virtual void setip(const char* sip) {};
+			
+			virtual void setip(const char* sip) {
+				ec::str_lcpy(_ip, sip, sizeof(_ip));
+			};
+
 			/*!
 			return 0: ok ; -1: error need close;
 			\param pmsgout , sendto peer if has data
 			*/
-			virtual int onrecvbytes(const void* pdata, size_t size, ec::vector<uint8_t>* pmsgout) = 0; //read Raw byte stream from tcp
+			virtual int onrecvbytes(const void* pdata, size_t size, ec::vector<uint8_t>* pmsgout) { 
+				return 0; 
+			}; //read Raw byte stream from tcp
+
 			virtual int send(const void* pdata, size_t size, int timeoutmsec = 1000) {
 				return ec::netio_tcpsend(_fd, pdata, (int)size, timeoutmsec);
 			}
 		};
 
-		class tls12_listen : public base_session
+		class listen_session : public session
 		{
 		public:
-			tls12_listen(SOCKET  fd) : base_session(fd, EZ_PROTOC_BASELISTEN, EZ_PROTOC_ST_WORK) {
+			listen_session(SOCKET  fd) : session(1, fd, EC_PROTOC_LISTEN, EC_PROTOC_ST_WORK, nullptr, nullptr) {
 			}
-
-			virtual uint32_t ucid() {
-				return 1u;
-			};
 
 			virtual int onrecvbytes(const void* pdata, size_t size, ec::vector<uint8_t>* pmsgout) {
+				pmsgout->clear();
 				return 0;
 			}
-		};
-
-		/*!
-		\brief tls12 session
-		*/
-		class tls12_session : public base_session, public ec::tls_session_srv {
-		public:
-			tls12_session(SOCKET  fd, uint32_t ucid, const void* pcer, size_t cerlen,
-				const void* pcerroot, size_t cerrootlen, std::mutex *pRsaLck, RSA* pRsaPrivate, ec::memory* pmem, ec::cLog* plog, uint32_t protoc = EZ_PROTOC_BASETLS12) :
-				base_session(fd, protoc, EZ_PROTOC_ST_CONNECT),
-				ec::tls_session_srv(ucid, pcer, cerlen, pcerroot, cerrootlen, pRsaLck, pRsaPrivate, pmem, plog)
-			{
-			}
-
-		public:
-			virtual uint32_t ucid() {
-				return _ucid;
-			}
-			virtual void setip(const char* sip) {
-				SetIP(sip);
-			};
-			virtual int onrecvbytes(const void* pdata, size_t size, ec::vector<uint8_t>* pmsgout) //read Raw byte stream from tcp
-			{
-				int nr = -1;
-				pmsgout->clear();
-				int nst = OnTcpRead(pdata, size, pmsgout);
-				if (TLS_SESSION_ERR == nst || TLS_SESSION_OK == nst || TLS_SESSION_NONE == nst) {
-					nr = TLS_SESSION_ERR == nst ? -1 : 0;
-					if (pmsgout->size()) {
-						if (ec::netio_tcpsend(_fd, pmsgout->data(), (int)pmsgout->size(), 1000) < 0)
-							nr = -1;
-					}
-					pmsgout->clear();
-					return nr;
-				}
-				else if (TLS_SESSION_HKOK == nst) {
-					nr = 0;
-					if (pmsgout->size()) {
-						if (ec::netio_tcpsend(_fd, pmsgout->data(), (int)pmsgout->size(), 1000) < 0)
-							nr = -1;
-					}
-					pmsgout->clear();
-					_status |= EZ_PROTOC_ST_WORK;
-					return nr;
-				}
-				else if (TLS_SESSION_APPDATA == nst)
-					nr = 0;
-				return nr;
-			}
-
-			virtual int send(const void* pdata, size_t size, int timeoutmsec = 1000) {
-				ec::vector<uint8_t> tlspkg(size + 1024 - size % 1024, _pmem);
-				if (MakeAppRecord(&tlspkg, pdata, size))
-					return ec::netio_tcpsend(_fd, tlspkg.data(), (int)tlspkg.size(), timeoutmsec);
-				return -1;
-			}
-		};
+		};		
 	}
 
-	typedef tls12::base_session* ptrbasession;
+	typedef tcp::session* psession;
 
 	template<>
-	struct key_equal<uint32_t, ptrbasession>
+	struct key_equal<uint32_t, psession>
 	{
-		bool operator()(uint32_t key, const ptrbasession &val) {
-			return key == val->ucid();
+		bool operator()(uint32_t key, const psession &val) {
+			return key == val->_ucid;
 		}
 	};
 
 	template<>
-	struct del_node<ptrbasession>
+	struct del_node<psession>
 	{
-		void operator()(ptrbasession& val) {
+		void operator()(psession& val) {
 			if (val) {
 				delete val;
 				val = nullptr;
@@ -174,39 +133,27 @@ namespace ec {
 		}
 	};
 
-	namespace tls12 {
-		/*!
-		\brief TLS1.2 server runtime class no thread,no lock
-		*/
-		class server
+	namespace tcp {		
+		class server // TCP server 
 		{
 		public:
 			server(ec::cLog* plog, ec::memory* pmem) : _wport(0), _fd_listen(INVALID_SOCKET), _plog(plog), _pmem(pmem),
 				_pollfd(128, true, pmem), _pollkey(128, true, pmem),
-				_mapmem(map<uint32_t, ptrbasession>::size_node(), 8192), _map(2048, &_mapmem),
+				_mapmem(map<uint32_t, psession>::size_node(), 8192), _map(2048, &_mapmem),
 				_bmodify_pool(false), _unextid(100) {
 			}
-			bool open(const char* filecert, const char* filerootcert, const char* fileprivatekey, uint16_t port, const char* sip = nullptr)
+			bool open(uint16_t port, const char* sip = nullptr)
 			{
 				if (INVALID_SOCKET != _fd_listen)
 					return true;
 
-				_wport = port;
-				if (_ca._px509)
-					_ca.~tls_srvca();
-
-				if (!_ca._px509 && !_ca.InitCert(filecert, filerootcert, fileprivatekey)) {
-					if (_plog)
-						_plog->add(CLOG_DEFAULT_ERR, "Load certificate failed! port(%u)", port);
-					return false;
-				}
-
+				_wport = port;				
 				_fd_listen = listen_port(_wport, sip);
 				if (INVALID_SOCKET == _fd_listen)
 					return false;
 
-				tls12_listen *p = new tls12_listen(_fd_listen);
-				_map.set(1, (ptrbasession)p);
+				listen_session *p = new listen_session(_fd_listen);
+				_map.set(1, (psession)p);
 				_bmodify_pool = true;
 				return true;
 			}
@@ -214,9 +161,9 @@ namespace ec {
 				_map.clear();
 			}
 
-			int sendbyucid(uint32_t ucid, const uint8_t*pmsg, size_t msgsize) {
+			int sendbyucid(uint32_t ucid, const void*pmsg, size_t msgsize) {
 				int nr = -1;
-				ptrbasession pi = nullptr;
+				psession pi = nullptr;
 				if (_map.get(ucid, pi))
 					nr = pi->send(pmsg, msgsize);
 				if (nr < 0) {
@@ -225,15 +172,15 @@ namespace ec {
 				}
 				return nr;
 			}
-			
+
 			void set_status(uint32_t ucid, uint32_t st) {
-				ptrbasession pi = nullptr;
+				psession pi = nullptr;
 				if (_map.get(ucid, pi))
 					pi->_status |= st;
 			}
-			
+
 			uint32_t get_status(uint32_t ucid) {
-				ptrbasession pi = nullptr;
+				psession pi = nullptr;
 				if (_map.get(ucid, pi))
 					return pi->_status;
 				return -1;
@@ -246,8 +193,7 @@ namespace ec {
 		protected:
 			uint16_t _wport;
 			SOCKET _fd_listen;
-			ec::cLog* _plog;
-			tls_srvca _ca;  // certificate
+			ec::cLog* _plog;			
 
 			ec::memory* _pmem;
 			ec::vector<pollfd> _pollfd;
@@ -255,16 +201,14 @@ namespace ec {
 
 		protected:
 			ec::memory _mapmem;
-			ec::map<uint32_t, ptrbasession> _map;
+			ec::map<uint32_t, psession> _map;
 			bool _bmodify_pool;
 		protected:
 			virtual bool domessage(uint32_t ucid, const uint8_t*pmsg, size_t msgsize) = 0; // return false will disconnect
 			virtual void onconnect(uint32_t ucid) = 0;
 			virtual void ondisconnect(uint32_t ucid) = 0;
-			virtual base_session* createsession(SOCKET  fd, uint32_t ucid, const void* pcer, size_t cerlen,
-				const void* pcerroot, size_t cerrootlen, std::mutex *pRsaLck, RSA* pRsaPrivate, ec::memory* pmem, ec::cLog* plog) {
-				return new tls12_session(fd, nextid(), _ca._pcer.data(), _ca._pcer.size(),
-					_ca._prootcer.data(), _ca._prootcer.size(), &_ca._csRsa, _ca._pRsaPrivate, _pmem, _plog);
+			virtual session* createsession(uint32_t ucid, SOCKET  fd, uint32_t status, ec::memory* pmem, ec::cLog* plog) {
+				return new session(ucid, fd, EC_PROTOC_TCP, status, _pmem, _plog);
 			}
 		public:
 #ifndef _WIN32
@@ -304,10 +248,10 @@ namespace ec {
 						}
 					}
 					else if (puid[i] < 100) {
-						ptrbasession pi = nullptr;
+						psession pi = nullptr;
 						if ((p[i].revents & POLLOUT) && _map.get(puid[i], pi)) {
-							if ((pi->_protoc & EZ_PROTOC_CONNECTOUT) && !pi->_status) {
-								pi->_status |= EZ_PROTOC_ST_CONNECT; //connected
+							if ((pi->_protoc & EC_PROTOC_CONNECTOUT) && !pi->_status) {
+								pi->_status |= EC_PROTOC_ST_CONNECT; //connected
 #ifndef _WIN32
 								int serr = 0;
 								socklen_t serrlen = sizeof(serr);
@@ -413,16 +357,16 @@ namespace ec {
 					return;
 				_pollfd.clear();
 				_pollkey.clear();
-				_map.for_each([this](ptrbasession & v) {
+				_map.for_each([this](psession & v) {
 					pollfd t;
 					t.fd = v->_fd;
-					if ((EZ_PROTOC_CONNECTOUT & v->_protoc) && !v->_status)
+					if ((EC_PROTOC_CONNECTOUT & v->_protoc) && !v->_status)
 						t.events = POLLOUT;
 					else
 						t.events = POLLIN;
 					t.revents = 0;
 					_pollfd.add(t);
-					_pollkey.add(v->ucid());
+					_pollkey.add(v->_ucid);
 				});
 				_bmodify_pool = false;
 			}
@@ -449,16 +393,15 @@ namespace ec {
 
 				ec::netio_tcpnodelay(sAccept);
 				ec::netio_setkeepalive(sAccept);
-
-				base_session* pi = createsession(sAccept, nextid(), _ca._pcer.data(), _ca._pcer.size(),
-					_ca._prootcer.data(), _ca._prootcer.size(), &_ca._csRsa, _ca._pRsaPrivate, _pmem, _plog);
+				
+				session* pi = createsession(nextid(),sAccept,  EC_PROTOC_ST_CONNECT, _pmem, _plog);
 				if (!pi) {
 					::closesocket(sAccept);
 					return false;
 				}
 				pi->setip(inet_ntoa(addrClient.sin_addr));
-				_map.set(pi->ucid(), (ptrbasession)pi);
-				onconnect(pi->ucid());
+				_map.set(pi->_ucid, pi);
+				onconnect(pi->_ucid);
 				return true;
 			}
 
@@ -495,7 +438,7 @@ namespace ec {
 					return true;
 				}
 
-				ptrbasession pi = nullptr;
+				psession pi = nullptr;
 				if (_map.get(ucid, pi)) {
 					ec::vector<uint8_t> msgr(1024 * 32, true, _pmem);
 					int ndo = pi->onrecvbytes((const uint8_t*)rbuf, nr, &msgr);
@@ -518,5 +461,5 @@ namespace ec {
 				return false;
 			}
 		};
-	}// tls12
+	}// tcp
 }// ec
