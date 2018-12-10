@@ -1,7 +1,7 @@
 ﻿/*!
 \file c_protobuf.h
 \author kipway@outlook.com
-\update 2018.11.14
+\update 2018.12.10
 
 eclib class base_protobuf ,parse google protocol buffer
 
@@ -92,7 +92,7 @@ namespace ec
 					pout->add(out);
 					break;
 				}
-			} while (nbit + 7 < (sizeof(_Tp) * 8));	
+			} while (nbit + 7 < (sizeof(_Tp) * 8));
 			if (v >> nbit)
 				pout->add((uint8_t)(v >> nbit));
 			return true;
@@ -259,9 +259,9 @@ namespace ec
 				else {
 					pout->add(out);
 					break;
-				}				
+				}
 			} while (nbit + 7 < (sizeof(_Tp) * 8));
-			if (v >> nbit) 
+			if (v >> nbit)
 				pout->add((uint8_t)(v >> nbit));
 			return true;
 		}
@@ -483,8 +483,8 @@ namespace ec
 		inline bool p_str(uint32_t wire_type, const uint8_t* &pd, int &len, char* pout, size_t outlen) {
 			return pb_length_delimited == wire_type && get_string(pd, len, pout, outlen);
 		}
-		
-		bool p_cls(uint32_t wire_type, const uint8_t* &pd, int &len, const uint8_t** p , size_t *psize) { // no copy		
+
+		bool p_cls(uint32_t wire_type, const uint8_t* &pd, int &len, const uint8_t** p, size_t *psize) { // no copy		
 			return (pb_length_delimited == wire_type && get_length_delimited(pd, len, p, psize));
 		}
 
@@ -549,6 +549,21 @@ namespace ec
 			}
 			return true;
 		}
+
+		template<class _Tp>
+		bool out_var64(ec::vector<uint8_t>* po, int id, _Tp v, bool zigzag = false) {
+
+			if (zigzag) {
+				if (!out_key(id, pb_varint, po) || !out_varint((uint64_t)(en_zigzag64(v)), po))
+					return false;
+			}
+			else {
+				if (!out_key(id, pb_varint, po) || !out_varint((uint64_t)v, po))
+					return false;
+			}
+			return true;
+		}
+
 		bool out_str(ec::vector<uint8_t>* po, int id, const char* s) {
 			return out_key(id, pb_length_delimited, po) && out_length_delimited((uint8_t*)s, strlen(s), po);
 		}
