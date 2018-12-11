@@ -494,7 +494,7 @@ namespace ec {
 		virtual void OnBlkName(const char* lpszBlkName) {};
 		virtual void OnDoKeyVal(const char* lpszBlkName, const char* lpszKeyName, const char* lpszKeyVal)
 		{
-			if (!stricmp("mime", lpszBlkName)) {
+			if (ec::str_ieq("mime", lpszBlkName)) {
 				if (lpszKeyName && *lpszKeyName && lpszKeyVal && *lpszKeyVal) {
 					t_httpmime t;
 					memset(&t, 0, sizeof(t));
@@ -854,7 +854,7 @@ namespace ec {
 					else
 						_plog->add(CLOG_DEFAULT_MSG, "ucid %u read: %s %s %s", pws->_ucid, _httppkg._method, _httppkg._request, _httppkg._version);
 				}
-				if (!stricmp("GET", _httppkg._method)) { //GET			
+				if (ec::str_ieq("GET", _httppkg._method)) { //GET
 					char skey[128];
 					if (_httppkg.GetWebSocketKey(skey, sizeof(skey))) { //websocket Upgrade
 						if (DoUpgradeWebSocket(pws, skey)) {
@@ -869,9 +869,9 @@ namespace ec {
 			}
 			bool httprequest(const char* sroot, uint32_t ucid, http_pkg* pPkg) //default httprequest
 			{
-				if (!stricmp("GET", _httppkg._method))
+				if (ec::str_ieq("GET", _httppkg._method))
 					return  DoGetAndHead(sroot, ucid, pPkg);
-				else if (!stricmp("HEAD", _httppkg._method))
+				else if (ec::str_ieq("HEAD", _httppkg._method))
 					return  DoGetAndHead(sroot, ucid, pPkg, false);
 				httpreterr(ucid, http_sret400);
 				return _httppkg.HasKeepAlive();

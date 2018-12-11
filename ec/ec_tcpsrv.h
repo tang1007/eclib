@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_tcpsrv.h
 \author kipway@outlook.com
-\update 2018.12.2
+\update 2018.12.11
 
 eclib tcp server class. easy to use, no thread , lock-free
 
@@ -60,7 +60,7 @@ namespace ec {
 		{
 		public:
 			session(uint32_t ucid, SOCKET  fd, uint32_t protoc, uint32_t status, ec::memory* pmem, ec::cLog* plog) :
-				_ucid(ucid), _fd(fd), _protoc(protoc), _status(status) {
+				_ucid(ucid), _fd(fd), _protoc(protoc), _status(status), _u32(0), _u64(0) {
 				_ip[0] = 0;
 				_cid[0] = 0;
 			}
@@ -80,6 +80,8 @@ namespace ec {
 			uint32_t _ucid;
 			char     _ip[40];
 			char     _cid[40];
+			uint32_t _u32;
+			uint64_t _u64;
 		public:
 			
 			virtual void setip(const char* sip) {
@@ -167,8 +169,8 @@ namespace ec {
 				if (_map.get(ucid, pi))
 					nr = pi->send(pmsg, msgsize);
 				if (nr < 0) {
-					_map.erase(ucid);
 					ondisconnect(ucid);
+					_map.erase(ucid);
 				}
 				return nr;
 			}
@@ -335,9 +337,7 @@ namespace ec {
 				}
 				return sl;
 			}
-		private:
 			uint32_t _unextid;
-
 			uint32_t nextid()
 			{
 				_unextid++;
@@ -350,7 +350,7 @@ namespace ec {
 				}
 				return _unextid;
 			}
-
+		private:
 			void make_pollfds()
 			{
 				if (!_bmodify_pool) // no change
