@@ -1,7 +1,7 @@
 /*!
 \file ec_ipc.h
 \author kipway@outlook.com
-\update 2018.12.6
+\update 2018.12.11
 
 eclib IPC class easy to use, no thread , lock-free
 
@@ -509,6 +509,7 @@ namespace ec {
 			_pollfd.events = 0;
 			_pollfd.revents = 0;
 			_pollfd.fd = INVALID_SOCKET;
+			_timeconnect = 0;
 		}
 	protected:
 		uint16_t _wport;
@@ -518,6 +519,8 @@ namespace ec {
 		vector<uint8_t> _rmsg;
 		int    _nst;
 		pollfd _pollfd;
+	private:
+		time_t _timeconnect;
 	protected:
 		virtual void ondisconnect() = 0;
 		virtual void onconnect() = 0;
@@ -575,6 +578,7 @@ namespace ec {
 			_pollfd.fd = s;
 			_pollfd.events = POLLOUT;
 			_nst = 0;
+			_timeconnect = ::time(0);
 			_rbuf.clear();
 
 			return true;
@@ -594,6 +598,12 @@ namespace ec {
 		void runtime(int waitmicroseconds) {
 			if (INVALID_SOCKET == _pollfd.fd)
 				return;
+			if (!_nst) {
+				time_t tcur = ::time(0);
+				if (tcur - _timeconnect > 5) {
+					EZIPCCLICLOSE()
+				}
+			}
 #ifdef _WIN32
 			int n = WSAPoll(&_pollfd, 1, waitmicroseconds);
 #else
