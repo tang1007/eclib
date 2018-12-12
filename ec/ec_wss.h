@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_wss.h
 \author kipway@outlook.com
-\update 2018.12.6
+\update 2018.12.12
 
 eclib websocket secret class. easy to use, no thread , lock-free
 
@@ -873,7 +873,7 @@ namespace ec {
 					return  DoGetAndHead(sroot, ucid, pPkg);
 				else if (ec::str_ieq("HEAD", _httppkg._method))
 					return  DoGetAndHead(sroot, ucid, pPkg, false);
-				httpreterr(ucid, http_sret400);
+				httpreterr(ucid, http_sret400,400);
 				return _httppkg.HasKeepAlive();
 			}
 
@@ -894,16 +894,16 @@ namespace ec {
 				if (n && (sfile[n - 1] == '/' || sfile[n - 1] == '\\'))
 					strcat(sfile, "index.html");
 				else if (isdir(sfile)) {
-					httpreterr(ucid, http_sret404);
+					httpreterr(ucid, http_sret404,400);
 					return pPkg->HasKeepAlive();
 				}
 				long long flen = ec::IO::filesize(sfile);
 				if (flen < 0) {
-					httpreterr(ucid, http_sret404);
+					httpreterr(ucid, http_sret404,404);
 					return pPkg->HasKeepAlive();
 				}
 				if (flen > MAX_FILESIZE_HTTP_DOWN) {
-					httpreterr(ucid, http_sret404outsize);
+					httpreterr(ucid, http_sret404outsize,404);
 					return pPkg->HasKeepAlive();
 				}
 
@@ -944,7 +944,7 @@ namespace ec {
 				}
 				vector<char>	filetmp(1024 * 16, true, _pmem);
 				if (!IO::LckRead(sfile, &filetmp)) {
-					httpreterr(ucid, http_sret404);
+					httpreterr(ucid, http_sret404,404);
 					return pPkg->HasKeepAlive();
 				}
 				size_t poslen = answer.size(), sizehead;
@@ -973,14 +973,14 @@ namespace ec {
 				return sendbyucid(ucid, answer.data(), answer.size()) > 0;
 			}
 
-			void httpreterr(unsigned int ucid, const char* sret)
+			void httpreterr(unsigned int ucid, const char* sret,int errcode)
 			{
 				int nret = sendbyucid(ucid, sret, strlen(sret));
 				if (_plog) {
 					if (nret > 0)
-						_plog->add(CLOG_DEFAULT_DBG, "http write ucid %u:\n%s", ucid, sret);
+						_plog->add(CLOG_DEFAULT_DBG, "http write ucid %u: error %d", ucid, errcode);
 					else
-						_plog->add(CLOG_DEFAULT_DBG, "http write ucid %u failed.\n%s", ucid, sret);
+						_plog->add(CLOG_DEFAULT_DBG, "http write ucid %u failed.", ucid);
 				}
 			}
 
