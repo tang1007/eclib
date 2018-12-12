@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_tcpsrv.h
 \author kipway@outlook.com
-\update 2018.12.11
+\update 2018.12.12
 
 eclib tcp server class. easy to use, no thread , lock-free
 
@@ -63,6 +63,7 @@ namespace ec {
 				_ucid(ucid), _fd(fd), _protoc(protoc), _status(status), _u32(0), _u64(0) {
 				_ip[0] = 0;
 				_cid[0] = 0;
+				_timelastio = ::time(0);
 			}
 			virtual ~session() {
 				if (_fd != INVALID_SOCKET)
@@ -82,6 +83,7 @@ namespace ec {
 			char     _cid[40];
 			uint32_t _u32;
 			uint64_t _u64;
+			time_t   _timelastio;
 		public:
 			
 			virtual void setip(const char* sip) {
@@ -93,10 +95,12 @@ namespace ec {
 			\param pmsgout , sendto peer if has data
 			*/
 			virtual int onrecvbytes(const void* pdata, size_t size, ec::vector<uint8_t>* pmsgout) { 
+				_timelastio = ::time(0);
 				return 0; 
 			}; //read Raw byte stream from tcp
 
 			virtual int send(const void* pdata, size_t size, int timeoutmsec = 1000) {
+				_timelastio = ::time(0);
 				return ec::netio_tcpsend(_fd, pdata, (int)size, timeoutmsec);
 			}
 		};
@@ -142,7 +146,7 @@ namespace ec {
 			server(ec::cLog* plog, ec::memory* pmem) : _wport(0), _fd_listen(INVALID_SOCKET), _plog(plog), _pmem(pmem),
 				_pollfd(128, true, pmem), _pollkey(128, true, pmem),
 				_mapmem(map<uint32_t, psession>::size_node(), 8192), _map(2048, &_mapmem),
-				_bmodify_pool(false), _unextid(100) {
+				_bmodify_pool(false), _nerr_emfile_count(0), _unextid(100) {
 			}
 			bool open(uint16_t port, const char* sip = nullptr)
 			{
@@ -205,6 +209,7 @@ namespace ec {
 			ec::memory _mapmem;
 			ec::map<uint32_t, psession> _map;
 			bool _bmodify_pool;
+			int     _nerr_emfile_count;
 		protected:
 			virtual bool domessage(uint32_t ucid, const uint8_t*pmsg, size_t msgsize) = 0; // return false will disconnect
 			virtual void onconnect(uint32_t ucid) = 0;
@@ -248,10 +253,22 @@ namespace ec {
 							if (acp())
 								_bmodify_pool = true;
 						}
+						p[i].revents = 0;
+						continue;
 					}
-					else if (puid[i] < 100) {
+					if (p[i].revents & (POLLERR | POLLHUP | POLLNVAL)) { // error
+						_bmodify_pool = true;
+						ondisconnect(puid[i]);
+						_map.erase(puid[i]);
+						if (_plog)
+							_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect", _wport, puid[i]);
+						p[i].revents = 0;
+						continue;
+					}
+					if (p[i].revents & POLLOUT) {
 						psession pi = nullptr;
-						if ((p[i].revents & POLLOUT) && _map.get(puid[i], pi)) {
+						if (_map.get(puid[i], pi)) {
+							pi->_timelastio = ::time(0);
 							if ((pi->_protoc & EC_PROTOC_CONNECTOUT) && !pi->_status) {
 								pi->_status |= EC_PROTOC_ST_CONNECT; //connected
 #ifndef _WIN32
@@ -259,9 +276,10 @@ namespace ec {
 								socklen_t serrlen = sizeof(serr);
 								getsockopt(pi->_fd, SOL_SOCKET, SO_ERROR, (void *)&serr, &serrlen);
 								if (serr) {
-									_map.erase(puid[i]);
+									_bmodify_pool = true;
 									ondisconnect(puid[i]);
-									return;
+									_map.erase(puid[i]);									
+									continue;
 								}
 #endif
 								onconnect(puid[i]);
@@ -269,24 +287,15 @@ namespace ec {
 								p[i].events = POLLIN;
 							}
 						}
-						else if (p[i].revents & POLLIN)
-							doread(puid[i], p[i].fd);
 					}
-					else {
-						if (p[i].revents & (POLLERR | POLLHUP | POLLNVAL)) { // error
-							_bmodify_pool = true;
-							ondisconnect(puid[i]);
-							_map.erase(puid[i]);
-							if (_plog)
-								_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect", _wport, puid[i]);
-						}
-						else if (p[i].revents & POLLIN)
-							doread(puid[i], p[i].fd);
-					}
+					if (p[i].revents & POLLIN)
+						doread(puid[i], p[i].fd);					
 					p[i].revents = 0;
 				}
 			}
 		protected:
+			virtual void on_emfile() {
+			}
 			SOCKET listen_port(unsigned short wport, const char* sip = nullptr)
 			{
 				if (!wport)
@@ -376,13 +385,33 @@ namespace ec {
 				struct  sockaddr_in		 addrClient;
 				int		nClientAddrLen = sizeof(addrClient);
 #ifdef _WIN32
-				if ((sAccept = ::accept(_fd_listen, (struct sockaddr*)(&addrClient), &nClientAddrLen)) == INVALID_SOCKET)
+				if ((sAccept = ::accept(_fd_listen, (struct sockaddr*)(&addrClient), &nClientAddrLen)) == INVALID_SOCKET) {
+					int nerr = WSAGetLastError();
+					if (WSAEMFILE == nerr) {						
+						if (!_nerr_emfile_count && _plog)
+							_plog->add(CLOG_DEFAULT_ERR, "server port(%d) error EMFILE!", _wport);
+						_nerr_emfile_count++;
+						on_emfile();
+					}
+					else
+						_nerr_emfile_count = 0;
 					return false;
+				}
 				u_long iMode = 1;
 				ioctlsocket(sAccept, FIONBIO, &iMode);
 #else
-				if ((sAccept = ::accept(_fd_listen, (struct sockaddr*)(&addrClient), (socklen_t*)&nClientAddrLen)) == INVALID_SOCKET)
+				if ((sAccept = ::accept(_fd_listen, (struct sockaddr*)(&addrClient), (socklen_t*)&nClientAddrLen)) == INVALID_SOCKET) {
+					int nerr = errno;
+					if (EMFILE == nerr) {
+						if (!_nerr_emfile_count && _plog)
+							_plog->add(CLOG_DEFAULT_ERR, "server port(%d) error EMFILE!", _wport);
+						_nerr_emfile_count++;
+						on_emfile();
+					}
+					else
+						_nerr_emfile_count = 0;
 					return false;
+				}
 				if (SetNoBlock(sAccept) < 0) {
 					::close(sAccept);
 					return false;
@@ -440,6 +469,7 @@ namespace ec {
 
 				psession pi = nullptr;
 				if (_map.get(ucid, pi)) {
+					pi->_timelastio = ::time(0);
 					ec::vector<uint8_t> msgr(1024 * 32, true, _pmem);
 					int ndo = pi->onrecvbytes((const uint8_t*)rbuf, nr, &msgr);
 					while (ndo != -1 && msgr.size()) {
