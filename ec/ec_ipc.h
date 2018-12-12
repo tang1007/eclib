@@ -1,7 +1,7 @@
 /*!
 \file ec_ipc.h
 \author kipway@outlook.com
-\update 2018.12.11
+\update 2018.12.12
 
 eclib IPC class easy to use, no thread , lock-free
 
@@ -23,7 +23,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 #		define  pollfd WSAPOLLFD
 #   endif
 
-#else _WIN32
+#else
 #	define USE_AFUNIX 1
 #	include <unistd.h>
 
@@ -48,7 +48,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 #include "c11_map.h"
 
 #ifndef IPCMSG_MAXSIZE
-#define IPCMSG_MAXSIZE  (1024 * 1024 * 100)
+#define IPCMSG_MAXSIZE  (1024 * 1024 * 30)
 #endif
 
 #define ECIPC_ST_SEND_ERR		(-1)
@@ -221,7 +221,7 @@ namespace ec {
 		ez_ipcsrv(cLog* plog, memory* pmem) :
 			_wport(0), _sock(INVALID_SOCKET), _plog(plog), _pmem(pmem), _mapmem(map< uint32_t, ipc_seesion_c>::size_node(), 128),
 			_map(128, &_mapmem), _pollfd(128, true, pmem), _pollkey(128, true, pmem), _rmsg(1024 * 32, true, pmem),
-			_bmodify_pool(false), _unextid(100) {
+			_bmodify_pool(false), _nerr_emfile_count(0), _unextid(100) {
 		}
 	protected:
 		uint16_t _wport;
@@ -234,6 +234,7 @@ namespace ec {
 		vector<uint32_t> _pollkey;
 		vector<uint8_t> _rmsg;
 		bool _bmodify_pool;
+		int  _nerr_emfile_count;
 	protected:
 		virtual bool domessage(uint32_t ucid, const uint8_t*pmsg, size_t msgsize) = 0;
 		virtual void onconnect(uint32_t ucid) = 0;
@@ -242,15 +243,18 @@ namespace ec {
 		virtual int  pkgparse(ipc_seesion_c* pi, ec::vector<uint8_t>* pin, const uint8_t* pdata, size_t usize, ec::vector<uint8_t> *pout) {
 			return ez_ipcpkg::parse(pin, pdata, usize, pout);
 		}
+		virtual void on_emfile() {
+		}
 	public:
 		void disconnect(uint32_t ucid, bool blogout = true) {
 			if (ucid < 100)
 				return;
-			if (_map.erase(ucid)) {
-				_bmodify_pool = true;
+			if (_map.get(ucid)) {
 				ondisconnect(ucid);
 				if (blogout && _plog)
-					_plog->add(CLOG_DEFAULT_MSG, "ipc port(%d) ucid %u disconnect by server", _wport, ucid);
+					_plog->add(CLOG_DEFAULT_MSG, "ipc port(%u) ucid %u disconnect by server", _wport, ucid);
+				_map.erase(ucid);
+				_bmodify_pool = true;
 			}
 		}
 #ifndef _WIN32
@@ -269,7 +273,7 @@ namespace ec {
 			return 0;
 		}
 #endif
-		bool open(uint16_t wport,const char* skeywords = "ezipc",const char* slocalip = "127.0.0.171") {  // c11_ipc.h "ECIPC", "127.0.0.191"
+		bool open(uint16_t wport, const char* skeywords = "ezipc", const char* slocalip = "127.0.0.171") {  // c11_ipc.h "ECIPC", "127.0.0.191"
 			if (_sock != INVALID_SOCKET)
 				return true;
 			_wport = wport;
@@ -338,9 +342,10 @@ namespace ec {
 				return -1;
 			int nr = ez_ipcpkg::sendnocpy(p->_fd, pmsg, msgsize);
 			if (nr < 0) {
+				ondisconnect(ucid);
 				_map.erase(ucid);
 				if (_plog)
-					_plog->add(CLOG_DEFAULT_MSG, "ipc port(%d) ucid %u disconnect as send failed", _wport, ucid);
+					_plog->add(CLOG_DEFAULT_MSG, "ipc port(%u) ucid %u disconnect as send failed", _wport, ucid);
 			}
 			return nr;
 		}
@@ -421,15 +426,35 @@ namespace ec {
 #endif
 			int		nClientAddrLen = sizeof(addrClient);
 #ifdef _WIN32
-			if ((sAccept = ::accept(_sock, (struct sockaddr*)(&addrClient), &nClientAddrLen)) == INVALID_SOCKET)
+			if ((sAccept = ::accept(_sock, (struct sockaddr*)(&addrClient), &nClientAddrLen)) == INVALID_SOCKET) {
+				int nerr = WSAGetLastError();
+				if (WSAEMFILE == nerr) {
+					if (!_nerr_emfile_count && _plog)
+						_plog->add(CLOG_DEFAULT_ERR, "ipc server port(%d) error EMFILE!", _wport);
+					_nerr_emfile_count++;
+					on_emfile();
+				}
+				else
+					_nerr_emfile_count = 0;
 				return false;
+			}
 			u_long iMode = 1;
 			ioctlsocket(sAccept, FIONBIO, &iMode);
 			if (_plog)
 				_plog->add(CLOG_DEFAULT_MSG, "ipc port(%u) connect from %s:%u", _wport, inet_ntoa(addrClient.sin_addr), ntohs(addrClient.sin_port));
 #else
-			if ((sAccept = ::accept(_sock, (struct sockaddr*)(&addrClient), (socklen_t*)&nClientAddrLen)) == INVALID_SOCKET)
+			if ((sAccept = ::accept(_sock, (struct sockaddr*)(&addrClient), (socklen_t*)&nClientAddrLen)) == INVALID_SOCKET) {
+				int nerr = errno;
+				if (EMFILE == nerr) {
+					if (!_nerr_emfile_count && _plog)
+						_plog->add(CLOG_DEFAULT_ERR, "ipc server port(%d) error EMFILE!", _wport);
+					_nerr_emfile_count++;
+					on_emfile();
+				}
+				else
+					_nerr_emfile_count = 0;
 				return false;
+			}
 			if (SetNoBlock(sAccept) < 0) {
 				::close(sAccept);
 				return false;
