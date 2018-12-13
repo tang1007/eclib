@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_tcpsrv.h
 \author kipway@outlook.com
-\update 2018.12.12
+\update 2018.12.13
 
 eclib tcp server class. easy to use, no thread , lock-free
 
@@ -484,7 +484,7 @@ namespace ec {
 						ondisconnect(ucid);
 						_map.erase(ucid);
 						if (_plog)
-							_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect error package", _wport, ucid);
+							_plog->add(CLOG_DEFAULT_ERR, "port(%u) ucid %u disconnected by the server", _wport, ucid);
 						return true;
 					}
 				}
