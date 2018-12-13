@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_wss.h
 \author kipway@outlook.com
-\update 2018.12.12
+\update 2018.12.13
 
 eclib websocket secret class. easy to use, no thread , lock-free
 
@@ -19,7 +19,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 #include "zlib/zlib.h"
 
 #define EC_PROTOC_WSS     (EC_PROTOC_TLS + 1) // WSS
-#define EC_MAX_WSMSG_SIZE (1024 * 1024 * 100) //100MB
+#define EC_MAX_WSMSG_SIZE (1024 * 1024 * 30) //30MB
 
 #ifndef MAX_FILESIZE_HTTP_DOWN
 #define MAX_FILESIZE_HTTP_DOWN (1024 * 1024 * 32u)
@@ -780,35 +780,30 @@ namespace ec {
 				while (nr == he_ok)
 				{
 					if (_httppkg._nprotocol == PROTOCOL_HTTP) {
-						if (!DoHttpRequest(pws)) {
-							closeucid(ucid);
-							return false;
-						}
+						if (!DoHttpRequest(pws))							
+							return false;						
 					}
 					else if (_httppkg._nprotocol == PROTOCOL_WS) {
 						if (_httppkg._opcode <= WS_OP_BIN) {
 							pws->_wsappmsg.add(_httppkg._body.data(), _httppkg._body.size());
 							if (pws->_wsappmsg.size() > EC_MAX_WSMSG_SIZE) {
-								closeucid(ucid);
 								pws->_wsappmsg.clear((size_t)0);
 								return false;
 							}
 							if (_httppkg._fin) {
-								onwsmessage(ucid, pws->_wsappmsg.data(), pws->_wsappmsg.size());
+								if (!onwsmessage(ucid, pws->_wsappmsg.data(), pws->_wsappmsg.size()))
+									return false;
 								pws->_wsappmsg.clear((size_t)0);
 							}
 						}
 						else if (_httppkg._opcode == WS_OP_CLOSE) {
 							if (_plog)
 								_plog->add(CLOG_DEFAULT_MSG, "ucid %d WS_OP_CLOSE!", ucid);
-							closeucid(ucid);
 							return false;
 						}
 						else if (_httppkg._opcode == WS_OP_PING) {
-							if (pws->send(_httppkg._body.data(), _httppkg._body.size(), WS_OP_PONG) < 0) {
-								closeucid(ucid);
-								return false;
-							}
+							if (pws->send(_httppkg._body.data(), _httppkg._body.size(), WS_OP_PONG) < 0)
+								return false;							
 							if (_plog)
 								_plog->add(CLOG_DEFAULT_MSG, "ucid %d WS_OP_PING!", ucid);
 						}
@@ -817,7 +812,6 @@ namespace ec {
 				}
 				if (nr == he_failed) {
 					pws->send(http_sret400, strlen(http_sret400));
-					closeucid(ucid);
 					return false;
 				}
 				return true;
