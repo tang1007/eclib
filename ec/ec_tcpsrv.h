@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_tcpsrv.h
 \author kipway@outlook.com
-\update 2018.12.13
+\update 2018.12.14
 
 eclib tcp server class. easy to use, no thread , lock-free
 
@@ -172,10 +172,8 @@ namespace ec {
 				psession pi = nullptr;
 				if (_map.get(ucid, pi))
 					nr = pi->send(pmsg, msgsize);
-				if (nr < 0) {
-					ondisconnect(ucid);
-					_map.erase(ucid);
-				}
+				if (nr < 0)
+					closeucid(ucid);
 				return nr;
 			}
 
@@ -192,9 +190,10 @@ namespace ec {
 				return -1;
 			}
 
-			void closeucid(uint32_t ucid) {
+			bool closeucid(uint32_t ucid) {
 				ondisconnect(ucid);
-				_map.erase(ucid);
+				_bmodify_pool = true;
+				return _map.erase(ucid);
 			}
 		protected:
 			uint16_t _wport;
@@ -257,9 +256,7 @@ namespace ec {
 						continue;
 					}
 					if (p[i].revents & (POLLERR | POLLHUP | POLLNVAL)) { // error
-						_bmodify_pool = true;
-						ondisconnect(puid[i]);
-						_map.erase(puid[i]);
+						closeucid(puid[i]);						
 						if (_plog)
 							_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect", _wport, puid[i]);
 						p[i].revents = 0;
@@ -442,9 +439,7 @@ namespace ec {
 				int nr = ::recv(fd, rbuf, (int)sizeof(rbuf), MSG_DONTWAIT);
 #endif
 				if (nr == 0) { //close gracefully
-					_bmodify_pool = true;
-					ondisconnect(ucid);
-					_map.erase(ucid);
+					closeucid(ucid);
 					if (_plog)
 						_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect gracefully", _wport, ucid);
 					return true;
@@ -459,9 +454,7 @@ namespace ec {
 					if (nerr == EAGAIN || nerr == EWOULDBLOCK)
 						return false;
 #endif
-					_bmodify_pool = true;
-					ondisconnect(ucid);
-					_map.erase(ucid);
+					closeucid(ucid);
 					if (_plog)
 						_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect error %d", _wport, ucid, nerr);
 					return true;
@@ -480,9 +473,7 @@ namespace ec {
 						ndo = pi->onrecvbytes(nullptr, 0, &msgr);
 					}
 					if (-1 == ndo) {
-						_bmodify_pool = true;
-						ondisconnect(ucid);
-						_map.erase(ucid);
+						closeucid(ucid);
 						if (_plog)
 							_plog->add(CLOG_DEFAULT_ERR, "port(%u) ucid %u disconnected by the server", _wport, ucid);
 						return true;
