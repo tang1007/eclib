@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_wss.h
 \author kipway@outlook.com
-\update 2018.12.13
+\update 2018.12.20
 
 eclib websocket secret class. easy to use, no thread , lock-free
 
@@ -762,7 +762,7 @@ namespace ec {
 
 		class httpserver : public tls_server {
 		public:
-			httpserver(ec::cLog* plog, ec::memory* pmem, ec::mimecfg* pmime) : tls_server(plog, pmem), _httppkg(pmem), _pmime(pmime) {
+			httpserver(ec::cLog* plog, ec::memory* pmem, ec::mimecfg* pmime) : tls_server(plog, pmem), _pmime(pmime), _httppkg(pmem) {
 			}
 		protected:
 			ec::mimecfg* _pmime;
@@ -780,8 +780,8 @@ namespace ec {
 				while (nr == he_ok)
 				{
 					if (_httppkg._nprotocol == PROTOCOL_HTTP) {
-						if (!DoHttpRequest(pws))							
-							return false;						
+						if (!DoHttpRequest(pws))
+							return false;
 					}
 					else if (_httppkg._nprotocol == PROTOCOL_WS) {
 						if (_httppkg._opcode <= WS_OP_BIN) {
@@ -803,7 +803,7 @@ namespace ec {
 						}
 						else if (_httppkg._opcode == WS_OP_PING) {
 							if (pws->send(_httppkg._body.data(), _httppkg._body.size(), WS_OP_PONG) < 0)
-								return false;							
+								return false;
 							if (_plog)
 								_plog->add(CLOG_DEFAULT_MSG, "ucid %d WS_OP_PING!", ucid);
 						}
@@ -867,7 +867,7 @@ namespace ec {
 					return  DoGetAndHead(sroot, ucid, pPkg);
 				else if (ec::str_ieq("HEAD", _httppkg._method))
 					return  DoGetAndHead(sroot, ucid, pPkg, false);
-				httpreterr(ucid, http_sret400,400);
+				httpreterr(ucid, http_sret400, 400);
 				return _httppkg.HasKeepAlive();
 			}
 
@@ -888,16 +888,16 @@ namespace ec {
 				if (n && (sfile[n - 1] == '/' || sfile[n - 1] == '\\'))
 					strcat(sfile, "index.html");
 				else if (isdir(sfile)) {
-					httpreterr(ucid, http_sret404,400);
+					httpreterr(ucid, http_sret404, 400);
 					return pPkg->HasKeepAlive();
 				}
 				long long flen = ec::IO::filesize(sfile);
 				if (flen < 0) {
-					httpreterr(ucid, http_sret404,404);
+					httpreterr(ucid, http_sret404, 404);
 					return pPkg->HasKeepAlive();
 				}
 				if (flen > MAX_FILESIZE_HTTP_DOWN) {
-					httpreterr(ucid, http_sret404outsize,404);
+					httpreterr(ucid, http_sret404outsize, 404);
 					return pPkg->HasKeepAlive();
 				}
 
@@ -938,7 +938,7 @@ namespace ec {
 				}
 				vector<char>	filetmp(1024 * 16, true, _pmem);
 				if (!IO::LckRead(sfile, &filetmp)) {
-					httpreterr(ucid, http_sret404,404);
+					httpreterr(ucid, http_sret404, 404);
 					return pPkg->HasKeepAlive();
 				}
 				size_t poslen = answer.size(), sizehead;
@@ -967,7 +967,7 @@ namespace ec {
 				return sendbyucid(ucid, answer.data(), answer.size()) > 0;
 			}
 
-			void httpreterr(unsigned int ucid, const char* sret,int errcode)
+			void httpreterr(unsigned int ucid, const char* sret, int errcode)
 			{
 				int nret = sendbyucid(ucid, sret, strlen(sret));
 				if (_plog) {

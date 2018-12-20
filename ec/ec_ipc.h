@@ -1,7 +1,7 @@
 /*!
 \file ec_ipc.h
 \author kipway@outlook.com
-\update 2018.12.12
+\update 2018.12.20
 
 eclib IPC class easy to use, no thread , lock-free
 
@@ -110,7 +110,6 @@ namespace ec {
 	protected:
 		static int parsepkg(ec::vector<uint8_t>* pin, ec::vector<uint8_t> *pout)//return 0:wait; -1:err; 1:OK; msg include head 6 bytes for No copy forwarding
 		{
-			size_t  ulen = pin->size();
 			uint8_t* pu = pin->data();
 			if (pin->size() < 6)
 				return ECIPCPKG_ST_WAIT;

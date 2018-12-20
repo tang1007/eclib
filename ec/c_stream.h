@@ -1,7 +1,7 @@
 /*!
 \file c_stream.h
 \author kipway@outlook.com
-\update 2018.9.5
+\update 2018.12.20
 
 eclib class memery stream
 
@@ -75,14 +75,14 @@ namespace ec
             }
             else if (sizeof(T) == 2)
             {
-                unsigned short uv = *((unsigned short*)&v);
+                unsigned short uv = (unsigned short)v;
                 unsigned char *pu = (unsigned char*)(_ps + _pos);
                 *pu++ = (uv >> 8) & 0xFF;
                 *pu++ = uv & 0xFF;
             }
             else if (sizeof(T) == 4)
             {
-                unsigned int uv = *((unsigned int *)&v);
+                unsigned int uv = (unsigned int)v;
                 unsigned char *pu = (unsigned char*)(_ps + _pos);
                 *pu++ = (uv >> 24) & 0xFF;
                 *pu++ = (uv >> 16) & 0xFF;
@@ -91,7 +91,7 @@ namespace ec
             }
             else if (sizeof(T) == 8)
             {
-                unsigned long long  uv = *((unsigned long long*)&v);
+                unsigned long long  uv = (unsigned long long)v;
                 unsigned char *pu = (unsigned char*)(_ps + _pos);
                 *pu++ = (uv >> 56) & 0xFF;
                 *pu++ = (uv >> 48) & 0xFF;
@@ -122,7 +122,7 @@ namespace ec
                 unsigned char *pu = (unsigned char*)(_ps + _pos);
                 uv = *pu++;
                 uv = (uv << 8) | *pu++;
-                *pv = *((T*)&uv);
+                *pv = (T)uv;
             }
             else if (sizeof(T) == 4)
             {
@@ -132,7 +132,7 @@ namespace ec
                 uv = (uv << 8) | *pu++;
                 uv = (uv << 8) | *pu++;
                 uv = (uv << 8) | *pu++;
-                *pv = *((T*)&uv);
+                *pv = (T)uv;
             }
             else if (sizeof(T) == 8)
             {
@@ -146,7 +146,7 @@ namespace ec
                 uv = (uv << 8) | *pu++;
                 uv = (uv << 8) | *pu++;
                 uv = (uv << 8) | *pu++;
-                *pv = *((T*)&uv);
+                *pv = (T)uv;
             }
             else
                 throw (int)2;

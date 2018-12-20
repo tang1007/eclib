@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_tcpsrv.h
 \author kipway@outlook.com
-\update 2018.12.14
+\update 2018.12.20
 
 eclib tcp server class. easy to use, no thread , lock-free
 
@@ -24,7 +24,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 #		define  pollfd WSAPOLLFD
 #   endif
 
-#else _WIN32
+#else
 #	define USE_AFUNIX 1
 #	include <unistd.h>
 
@@ -60,7 +60,7 @@ namespace ec {
 		{
 		public:
 			session(uint32_t ucid, SOCKET  fd, uint32_t protoc, uint32_t status, ec::memory* pmem, ec::cLog* plog) :
-				_ucid(ucid), _fd(fd), _protoc(protoc), _status(status), _u32(0), _u64(0) {
+				_protoc(protoc), _status(status), _fd(fd), _ucid(ucid), _u32(0), _u64(0) {
 				_ip[0] = 0;
 				_cid[0] = 0;
 				_timelastio = ::time(0);
@@ -85,7 +85,7 @@ namespace ec {
 			uint64_t _u64;
 			time_t   _timelastio;
 		public:
-			
+
 			virtual void setip(const char* sip) {
 				ec::str_lcpy(_ip, sip, sizeof(_ip));
 			};
@@ -94,9 +94,9 @@ namespace ec {
 			return 0: ok ; -1: error need close;
 			\param pmsgout , sendto peer if has data
 			*/
-			virtual int onrecvbytes(const void* pdata, size_t size, ec::vector<uint8_t>* pmsgout) { 
+			virtual int onrecvbytes(const void* pdata, size_t size, ec::vector<uint8_t>* pmsgout) {
 				_timelastio = ::time(0);
-				return 0; 
+				return 0;
 			}; //read Raw byte stream from tcp
 
 			virtual int send(const void* pdata, size_t size, int timeoutmsec = 1000) {
@@ -115,7 +115,7 @@ namespace ec {
 				pmsgout->clear();
 				return 0;
 			}
-		};		
+		};
 	}
 
 	typedef tcp::session* psession;
@@ -139,7 +139,7 @@ namespace ec {
 		}
 	};
 
-	namespace tcp {		
+	namespace tcp {
 		class server // TCP server 
 		{
 		public:
@@ -153,7 +153,7 @@ namespace ec {
 				if (INVALID_SOCKET != _fd_listen)
 					return true;
 
-				_wport = port;				
+				_wport = port;
 				_fd_listen = listen_port(_wport, sip);
 				if (INVALID_SOCKET == _fd_listen)
 					return false;
@@ -198,7 +198,7 @@ namespace ec {
 		protected:
 			uint16_t _wport;
 			SOCKET _fd_listen;
-			ec::cLog* _plog;			
+			ec::cLog* _plog;
 
 			ec::memory* _pmem;
 			ec::vector<pollfd> _pollfd;
@@ -256,7 +256,7 @@ namespace ec {
 						continue;
 					}
 					if (p[i].revents & (POLLERR | POLLHUP | POLLNVAL)) { // error
-						closeucid(puid[i]);						
+						closeucid(puid[i]);
 						if (_plog)
 							_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect", _wport, puid[i]);
 						p[i].revents = 0;
@@ -275,7 +275,7 @@ namespace ec {
 								if (serr) {
 									_bmodify_pool = true;
 									ondisconnect(puid[i]);
-									_map.erase(puid[i]);									
+									_map.erase(puid[i]);
 									continue;
 								}
 #endif
@@ -286,7 +286,7 @@ namespace ec {
 						}
 					}
 					if (p[i].revents & POLLIN)
-						doread(puid[i], p[i].fd);					
+						doread(puid[i], p[i].fd);
 					p[i].revents = 0;
 				}
 			}
@@ -384,7 +384,7 @@ namespace ec {
 #ifdef _WIN32
 				if ((sAccept = ::accept(_fd_listen, (struct sockaddr*)(&addrClient), &nClientAddrLen)) == INVALID_SOCKET) {
 					int nerr = WSAGetLastError();
-					if (WSAEMFILE == nerr) {						
+					if (WSAEMFILE == nerr) {
 						if (!_nerr_emfile_count && _plog)
 							_plog->add(CLOG_DEFAULT_ERR, "server port(%d) error EMFILE!", _wport);
 						_nerr_emfile_count++;
@@ -419,8 +419,8 @@ namespace ec {
 
 				ec::netio_tcpnodelay(sAccept);
 				ec::netio_setkeepalive(sAccept);
-				
-				session* pi = createsession(nextid(),sAccept,  EC_PROTOC_ST_CONNECT, _pmem, _plog);
+
+				session* pi = createsession(nextid(), sAccept, EC_PROTOC_ST_CONNECT, _pmem, _plog);
 				if (!pi) {
 					::closesocket(sAccept);
 					return false;

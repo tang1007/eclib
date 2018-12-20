@@ -2,7 +2,7 @@
 \file c11_config.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.6.11
+\update 2018.12.20
 
 eclibe config for windows & linux
 
@@ -61,7 +61,7 @@ namespace ec
 			if (c == ',') {
 				if (!nstr) {
 					stmp[np] = 0;
-					if (nerr = fun(nr, nc, stmp, false))
+					if (0 != (nerr = fun(nr, nc, stmp, false)))
 						break;
 					nc++;   np = 0;
 				}
@@ -72,7 +72,7 @@ namespace ec
 			}
 			else if (c == '\n') {
 				stmp[np] = 0;
-				if (nerr = fun(nr, nc, stmp, true))
+				if (0 != (nerr = fun(nr, nc, stmp, true)))
 					break;
 				nr++; nc = 0; np = 0;
 			}
@@ -123,7 +123,7 @@ namespace ec
 				return false;
 			OnReadFile();
 			int c = fgetc(pf), c2 = fgetc(pf), c3 = fgetc(pf);
-			if (!(c == 0xef && c2 == 0xbb && c3 == 0xbf)) // not utf8 with bom            
+			if (!(c == 0xef && c2 == 0xbb && c3 == 0xbf)) // not utf8 with bom
 				fseek(pf, 0, SEEK_SET);
 
 			char *pc = m_szLine;

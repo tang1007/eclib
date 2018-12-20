@@ -2,7 +2,7 @@
 \file c11_tls12.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.11.28
+\update 2018.12.20
 
 eclib TLS1.2(rfc5246)  class
 support:
@@ -1390,8 +1390,8 @@ namespace ec
 	public:
 		sessiontlsmap(uint32_t maxconnect) :
 			_memmap(ec::map<uint32_t, t_tls_session>::size_node(), 8192, 0, 0, 0, 0, &_mem_lock),
-			_map(11 + (uint32_t)(2048), &_memmap),
-			_memcls(sizeof(tls_session_srv), maxconnect, 0, 0, 0, 0, &_cscls)
+			_memcls(sizeof(tls_session_srv), maxconnect, 0, 0, 0, 0, &_cscls),
+			_map(11 + (uint32_t)(2048), &_memmap)
 		{
 		}
 		~sessiontlsmap()
@@ -1401,16 +1401,16 @@ namespace ec
 		memory* getclsmem() {
 			return &_memcls;
 		}
-	protected:
-		unsigned int _ugroups;
-		map<uint32_t, t_tls_session> _map;
-		ec::spinlock _cs;
 	private:
 		ec::spinlock _mem_lock;// lock for _memmap
 		ec::memory _memmap;// memory for send
 
 		ec::spinlock _cscls;// lock for _mem
-		ec::memory _memcls;// memory for tls_session_srv		
+		ec::memory _memcls;// memory for tls_session_srv
+	protected:
+		unsigned int _ugroups;
+		map<uint32_t, t_tls_session> _map;
+		ec::spinlock _cs;
 	public:
 		void Add(uint32_t ucid, tls_session_srv* ps)
 		{
