@@ -341,6 +341,7 @@ namespace ec {
 				return -1;
 			int nr = ez_ipcpkg::sendnocpy(p->_fd, pmsg, msgsize);
 			if (nr < 0) {
+				_bmodify_pool = true;
 				ondisconnect(ucid);
 				_map.erase(ucid);
 				if (_plog)
