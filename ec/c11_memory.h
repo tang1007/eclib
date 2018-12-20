@@ -260,6 +260,19 @@ namespace ec {
 	public:
 		auto_buffer(memory* pmem = nullptr) :_pmem(pmem), _pbuf(0), _size(0), _sizebuf(0) {
 		}
+		auto_buffer(size_t size, memory* pmem = nullptr) :_pmem(pmem), _size(size), _sizebuf(0){
+			if (_pmem)
+				_pbuf = _pmem->malloc(size, _sizebuf);
+			else {
+				_pbuf = ::malloc(_size);
+				_sizebuf = _size;
+			}
+			if (!_pbuf) {
+				_pbuf = nullptr;
+				_size = 0;
+				_sizebuf = 0;
+			}
+		}
 		~auto_buffer() {
 			clear();
 		}
