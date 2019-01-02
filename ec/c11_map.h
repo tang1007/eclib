@@ -213,6 +213,19 @@ namespace ec
 			Value = *pv;
 			return true;
 		}
+		bool has(key_type key) noexcept
+		{
+			unique_spinlock lck(_pmutex);
+			if (nullptr == _ppv || !_usize)
+				return false;
+			size_type upos = _Hasher()(key) % _uhashsize;
+			t_node* pnode;
+			for (pnode = _ppv[upos]; pnode != nullptr; pnode = pnode->pNext) {
+				if (_Keyeq()(key, pnode->value))
+					return true;
+			}
+			return false;
+		}
 		void clear() noexcept //Multi-thread safe if _pmutex not null
 		{
 			unique_spinlock lck(_pmutex);

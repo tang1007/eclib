@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_wss.h
 \author kipway@outlook.com
-\update 2018.12.20
+\update 2019.1.2
 
 eclib websocket secret class. easy to use, no thread , lock-free
 
@@ -79,7 +79,8 @@ namespace ec {
 	};
 
 #define SIZE_WSZLIBTEMP 32768
-	inline int ws_encode_zlib(const void *pSrc, size_t size_src, ec::vector<char>* pout)//pout first two byte x78 and x9c,the end  0x00 x00 xff xff, no  adler32
+	template<class _Tp>
+	int ws_encode_zlib(const void *pSrc, size_t size_src, ec::vector<_Tp>* pout)//pout first two byte x78 and x9c,the end  0x00 x00 xff xff, no  adler32
 	{
 		z_stream stream;
 		int err;
@@ -103,7 +104,7 @@ namespace ec {
 			err = deflate(&stream, Z_SYNC_FLUSH);
 			if (err != Z_OK)
 				break;
-			if (!pout->add(outbuf, stream.total_out - uout)) {
+			if (!pout->add((_Tp*)outbuf, stream.total_out - uout)) {
 				err = Z_MEM_ERROR;
 				break;
 			}
@@ -113,7 +114,8 @@ namespace ec {
 		return err;
 	}
 
-	inline int ws_decode_zlib(const void *pSrc, size_t size_src, ec::vector<char>* pout)//pSrc begin with 0x78 x9c, has no end 0x00 x00 xff xff
+	template<class _Tp>
+	int ws_decode_zlib(const void *pSrc, size_t size_src, ec::vector<_Tp>* pout)//pSrc begin with 0x78 x9c, has no end 0x00 x00 xff xff
 	{
 		z_stream stream;
 		int err;
@@ -136,7 +138,7 @@ namespace ec {
 			err = inflate(&stream, Z_SYNC_FLUSH);
 			if (err != Z_OK)
 				break;
-			if (!pout->add(outbuf, stream.total_out - uout)) {
+			if (!pout->add((_Tp*)outbuf, stream.total_out - uout)) {
 				err = Z_MEM_ERROR;
 				break;
 			}
@@ -146,7 +148,8 @@ namespace ec {
 		return err;
 	}
 
-	inline bool ws_make_permsg(const void* pdata, size_t sizes, unsigned char wsopt, vector<char>* pout, int ncompress) //multi-frame,permessage_deflate
+	template<class _Tp>
+	bool ws_make_permsg(const void* pdata, size_t sizes, unsigned char wsopt, vector<_Tp>* pout, int ncompress) //multi-frame,permessage_deflate
 	{
 		unsigned char uc;
 		const char* pds = (const char*)pdata;
@@ -177,7 +180,7 @@ namespace ec {
 				uc |= 0x80;
 				us = slen - ss;
 			}
-			pout->add(uc);
+			pout->add((_Tp)uc);
 			if (us < 126)
 			{
 				uc = (unsigned char)us;
@@ -187,18 +190,18 @@ namespace ec {
 			{
 				uc = 126;
 				pout->add(uc);
-				pout->add((char)((us & 0xFF00) >> 8)); //high byte
-				pout->add((char)(us & 0xFF)); //low byte
+				pout->add((_Tp)((us & 0xFF00) >> 8)); //high byte
+				pout->add((_Tp)(us & 0xFF)); //low byte
 			}
 			else // < 4G
 			{
 				uc = 127;
-				pout->add((char)uc);
-				pout->add((char)0); pout->add((char)0); pout->add((char)0); pout->add((char)0);//high 4 bytes 0
-				pout->add((char)((us & 0xFF000000) >> 24));
-				pout->add((char)((us & 0x00FF0000) >> 16));
-				pout->add((char)((us & 0x0000FF00) >> 8));
-				pout->add((char)(us & 0xFF));
+				pout->add((_Tp)uc);
+				pout->add((_Tp)0); pout->add((_Tp)0); pout->add((_Tp)0); pout->add((_Tp)0);//high 4 bytes 0
+				pout->add((_Tp)((us & 0xFF000000) >> 24));
+				pout->add((_Tp)((us & 0x00FF0000) >> 16));
+				pout->add((_Tp)((us & 0x0000FF00) >> 8));
+				pout->add((_Tp)(us & 0xFF));
 			}
 			pout->add(pds + ss, us);
 			ss += us;
@@ -206,7 +209,8 @@ namespace ec {
 		return true;
 	}
 
-	inline bool ws_make_perfrm(const void* pdata, size_t sizes, unsigned char wsopt, vector< char>* pout)//multi-frame,deflate-frame, for ios safari
+	template<class _Tp>
+	bool ws_make_perfrm(const void* pdata, size_t sizes, unsigned char wsopt, vector< _Tp>* pout)//multi-frame,deflate-frame, for ios safari
 	{
 		const char* pds = (const char*)pdata;
 		char* pf;
@@ -229,7 +233,7 @@ namespace ec {
 				uc |= 0x80;
 				us = slen - ss;
 			}
-			pout->add(uc);
+			pout->add((_Tp)uc);
 			if (uc & 0x40)
 			{
 				tmp.clear();
@@ -253,18 +257,18 @@ namespace ec {
 			{
 				uc = 126;
 				pout->add(uc);
-				pout->add((char)((fl & 0xFF00) >> 8)); //high byte
-				pout->add((char)(fl & 0xFF)); //low byte
+				pout->add((_Tp)((fl & 0xFF00) >> 8)); //high byte
+				pout->add((_Tp)(fl & 0xFF)); //low byte
 			}
 			else // < 4G
 			{
 				uc = 127;
 				pout->add(uc);
-				pout->add((char)0); pout->add((char)0); pout->add((char)0); pout->add((char)0);//high 4 bytes 0
-				pout->add((char)((fl & 0xFF000000) >> 24));
-				pout->add((char)((fl & 0x00FF0000) >> 16));
-				pout->add((char)((fl & 0x0000FF00) >> 8));
-				pout->add((char)(fl & 0xFF));
+				pout->add((_Tp)0); pout->add((_Tp)0); pout->add((_Tp)0); pout->add((_Tp)0);//high 4 bytes 0
+				pout->add((_Tp)((fl & 0xFF000000) >> 24));
+				pout->add((_Tp)((fl & 0x00FF0000) >> 16));
+				pout->add((_Tp)((fl & 0x0000FF00) >> 8));
+				pout->add((_Tp)(fl & 0xFF));
 			}
 			pout->add(pf, fl);
 			ss += us;

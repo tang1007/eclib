@@ -475,7 +475,7 @@ namespace ec {
 					if (-1 == ndo) {
 						closeucid(ucid);
 						if (_plog)
-							_plog->add(CLOG_DEFAULT_ERR, "port(%u) ucid %u disconnected by the server", _wport, ucid);
+							_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnected by the server", _wport, ucid);
 						return true;
 					}
 				}
