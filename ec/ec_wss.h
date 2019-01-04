@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_wss.h
 \author kipway@outlook.com
-\update 2019.1.2
+\update 2019.1.4
 
 eclib websocket secret class. easy to use, no thread , lock-free
 
@@ -669,27 +669,31 @@ namespace ec {
 				return he_waitdata;
 			}
 		public:
-			virtual int send(const void* pdata, size_t size, int timeoutmsec = 1000) {
+			virtual int send(const void* pdata, size_t size) {
+				return ws_send(pdata, size, WS_OP_TXT);				
+			}
+			
+			int ws_send(const void* pdata, size_t size, unsigned char wsopt = WS_OP_TXT) {
 				if (_protocol == PROTOCOL_HTTP)
-					return tls_session::send(pdata, size, timeoutmsec);
+					return tls_session::send(pdata, size);
 				else if (_protocol == PROTOCOL_WS) {
 					bool bsend;
 					vector<char> vret(2048 + size - size % 1024, _pmem);
 					if (_wscompress == ws_x_webkit_deflate_frame) { //deflate-frame					
 						vret.set_grow(2048 + size / 2 - size % 1024);
-						bsend = ws_make_perfrm(pdata, size, WS_OP_TXT, &vret);
+						bsend = ws_make_perfrm(pdata, size, wsopt, &vret);
 					}
 					else { // ws_permessage_deflate					
 						if (size > 128 && _wscompress)
 							vret.set_grow(2048 + size / 2 - size % 1024);
-						bsend = ws_make_permsg(pdata, size, WS_OP_TXT, &vret, size > 128 && _wscompress);
+						bsend = ws_make_permsg(pdata, size, wsopt, &vret, size > 128 && _wscompress);
 					}
 					if (!bsend) {
 						if (_plog)
 							_plog->add(CLOG_DEFAULT_ERR, "send ucid %u make wsframe failed,size %u", _ucid, (unsigned int)size);
 						return -1;
 					}
-					return tls_session::send(vret.data(), vret.size(), timeoutmsec);
+					return tls_session::send(vret.data(), vret.size());
 				}
 				_plog->add(CLOG_DEFAULT_ERR, "wss send failed _protocol = %d", _protocol);
 				return -1;
@@ -806,7 +810,7 @@ namespace ec {
 							return false;
 						}
 						else if (_httppkg._opcode == WS_OP_PING) {
-							if (pws->send(_httppkg._body.data(), _httppkg._body.size(), WS_OP_PONG) < 0)
+							if (pws->ws_send(_httppkg._body.data(), _httppkg._body.size(), WS_OP_PONG) < 0)
 								return false;
 							if (_plog)
 								_plog->add(CLOG_DEFAULT_MSG, "ucid %d WS_OP_PING!", ucid);

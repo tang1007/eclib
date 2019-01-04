@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_tcpsrv.h
 \author kipway@outlook.com
-\update 2018.12.20
+\update 2019.1.4
 
 eclib tcp server class. easy to use, no thread , lock-free
 
@@ -53,14 +53,49 @@ Licensed under the Apache License, Version 2.0 (the "License");
 #define EC_PROTOC_ST_CONNECT 0x01
 #define EC_PROTOC_ST_WORK    0x02
 
+#ifndef TCP_PKG_MAXSIZE
+#	define TCP_PKG_MAXSIZE (1024 * 1024 * 64)
+#endif
+
+#ifndef EC_TCP_SEND_BLOCK_OVERSECOND
+#	define EC_TCP_SEND_BLOCK_OVERSECOND 10
+#endif
+
 namespace ec {
 
 	namespace tcp {
+		inline int send_non_block(SOCKET s, const void* pbuf, int nsize)//return send bytes size or -1 for error,use for nonblocking
+		{
+			int  nret;
+#ifdef _WIN32
+			nret = ::send(s, (char*)pbuf, nsize, 0);
+			if (SOCKET_ERROR == nret)
+			{
+				int nerr = WSAGetLastError();
+				if (WSAEWOULDBLOCK == nerr || WSAENOBUFS == nerr)  // nonblocking  mode
+					return 0;
+				else
+					return SOCKET_ERROR;
+			}
+			return nret;
+#else
+			nret = ::send(s, (char*)pbuf, nsize, MSG_DONTWAIT | MSG_NOSIGNAL);
+			if (SOCKET_ERROR == nret)
+			{
+				if (errno == EAGAIN || errno == EWOULDBLOCK) // nonblocking  mode
+					return 0;
+				else
+					return SOCKET_ERROR;
+			}
+			return nret;
+#endif
+		};
 		class session // base connect session class
 		{
 		public:
 			session(uint32_t ucid, SOCKET  fd, uint32_t protoc, uint32_t status, ec::memory* pmem, ec::cLog* plog) :
-				_protoc(protoc), _status(status), _fd(fd), _ucid(ucid), _u32(0), _u64(0) {
+				_protoc(protoc), _status(status), _fd(fd), _ucid(ucid), _u32(0), _u64(0), 
+				_pssmem(pmem), _psslog(plog), _timesndblcok(0), _sndpos(0), _sbuf(1024 * 16, true, pmem) {
 				_ip[0] = 0;
 				_cid[0] = 0;
 				_timelastio = ::time(0);
@@ -84,6 +119,12 @@ namespace ec {
 			uint32_t _u32;
 			uint64_t _u64;
 			time_t   _timelastio;
+			ec::memory* _pssmem;
+			ec::cLog*   _psslog;
+			time_t   _timesndblcok;//发送阻塞的开始时间
+		private:
+			size_t _sndpos;
+			ec::vector<uint8_t> _sbuf;
 		public:
 
 			virtual void setip(const char* sip) {
@@ -99,9 +140,92 @@ namespace ec {
 				return 0;
 			}; //read Raw byte stream from tcp
 
-			virtual int send(const void* pdata, size_t size, int timeoutmsec = 1000) {
+			virtual int send(const void* pdata, size_t size) {				
+				return iosend(pdata, (int)size);// timeoutmsec No longer use 
+			}
+
+			int iosend(const void* pdata, size_t size) // tcp sens; return -1:error
+			{
+				int ns = 0;
 				_timelastio = ::time(0);
-				return ec::netio_tcpsend(_fd, pdata, (int)size, timeoutmsec);
+				if (_sbuf.size() > 0) { // has data in buffer
+					if (_sndpos > _sbuf.size()) {
+						if (_psslog)
+							_psslog->add(CLOG_DEFAULT_ERR, "ucid %u buf error _sndpos=%zu, bufsize=%zu", _ucid, _sndpos, _sbuf.size());
+						return -1;
+					}
+					if (_sbuf.size() + size - _sndpos > TCP_PKG_MAXSIZE + 1024) {
+						if (_psslog)
+							_psslog->add(CLOG_DEFAULT_ERR, "ucid %u buf oversize _sndpos=%zu, bufsize=%zu, addsize=%zu", _ucid, _sndpos, _sbuf.size(), size);
+						return -1;
+					}
+					if (!_sbuf.add((uint8_t*)pdata, size))
+						return -1;
+					return send_c();
+				}
+				ns = send_non_block(_fd, pdata, (int)size);
+				if (_psslog)
+					_psslog->add(CLOG_DEFAULT_DBG, "iosend send_non_block ucid %u send size %d", _ucid, ns);
+				if(ns > 0)
+					_timesndblcok = 0;
+				if (ns == (int)size || ns < 0)					
+					return ns;
+				_sndpos = 0;
+				_sbuf.clear();
+				if (!_sbuf.add(((uint8_t*)pdata) + ns, size - ns)) // add data no send to buffer
+					return -1;
+				if (ns == 0) { // do send overtime
+					if (!_timesndblcok)
+						_timesndblcok = _timelastio;
+					else if (::time(0) - _timesndblcok > EC_TCP_SEND_BLOCK_OVERSECOND) {
+						if (_psslog)
+							_psslog->add(CLOG_DEFAULT_WRN, "ucid %u send block over %d seconds", _ucid, EC_TCP_SEND_BLOCK_OVERSECOND);
+						return -1; //block 15 second
+					}
+				}
+				return ns;
+			}
+
+			int send_c() // continue send form buf,return -1 error
+			{
+				int ns = 0;
+				if (!_sbuf.size())
+					return 0;
+				_timelastio = ::time(0);
+				if (_sndpos > _sbuf.size()) {
+					if (_psslog)
+						_psslog->add(CLOG_DEFAULT_ERR, "buf error ucid %u _sndpos=%zu,bufsize=%zu", _ucid, _sndpos, _sbuf.size());
+					return -1;
+				}
+				ns = send_non_block(_fd, _sbuf.data() + _sndpos, (int)(_sbuf.size() - _sndpos));
+				if (ns < 0) {
+					if (_psslog)
+						_psslog->add(CLOG_DEFAULT_DBG, "ucid %u send_c failed _sndpos=%zu,bufsize=%zu", _ucid, _sndpos, _sbuf.size());
+					return -1;
+				}
+				_sndpos += ns;
+				if (_sndpos == _sbuf.size()) {
+					_sndpos = 0;
+					_sbuf.clear(true);
+				}
+				if (ns > 0)
+					_timesndblcok = 0;
+				else if (ns == 0) { // do send overtime
+					if (!_timesndblcok)
+						_timesndblcok = _timelastio;
+					else if (::time(0) - _timesndblcok > EC_TCP_SEND_BLOCK_OVERSECOND) {
+						if (_psslog)
+							_psslog->add(CLOG_DEFAULT_WRN, "ucid %u send block over %d seconds", _ucid, EC_TCP_SEND_BLOCK_OVERSECOND);
+						return -1; //block 15 second
+					}
+				}
+				if (_psslog)
+					_psslog->add(CLOG_DEFAULT_DBG, "ucid %u send_c bytes %d, _sndpos=%zu,bufsize=%zu", _ucid, ns, _sndpos, _sbuf.size());
+				return ns;
+			}
+
+			inline size_t sndbufsize() {
+				return _sbuf.size();
 			}
 		};
 
@@ -262,11 +386,11 @@ namespace ec {
 						p[i].revents = 0;
 						continue;
 					}
-					if (p[i].revents & POLLOUT) {
-						psession pi = nullptr;
+					psession pi = nullptr;
+					if (p[i].revents & POLLOUT) {						
 						if (_map.get(puid[i], pi)) {
 							pi->_timelastio = ::time(0);
-							if ((pi->_protoc & EC_PROTOC_CONNECTOUT) && !pi->_status) {
+							if ((pi->_protoc & EC_PROTOC_CONNECTOUT) && !pi->_status) { // connect out session
 								pi->_status |= EC_PROTOC_ST_CONNECT; //connected
 #ifndef _WIN32
 								int serr = 0;
@@ -274,8 +398,8 @@ namespace ec {
 								getsockopt(pi->_fd, SOL_SOCKET, SO_ERROR, (void *)&serr, &serrlen);
 								if (serr) {
 									_bmodify_pool = true;
-									ondisconnect(puid[i]);
-									_map.erase(puid[i]);
+									_map.erase(puid[i]);  // delete first
+									ondisconnect(puid[i]);// you can reconnect in ondisconnect				
 									continue;
 								}
 #endif
@@ -283,11 +407,28 @@ namespace ec {
 								_bmodify_pool = true;
 								p[i].events = POLLIN;
 							}
+							else if (pi->sndbufsize()) {
+								if (pi->send_c() < 0) {
+									if (pi->_protoc & EC_PROTOC_CONNECTOUT) { // connect out session
+										_bmodify_pool = true;
+										_map.erase(puid[i]);  // delete first
+										ondisconnect(puid[i]);// you can reconnect in ondisconnect	
+									}
+									else //connect in session
+										closeucid(puid[i]);
+									if (_plog)
+										_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect error as send_c", _wport, puid[i]);
+									continue;
+								}
+							}
 						}
 					}
 					if (p[i].revents & POLLIN)
 						doread(puid[i], p[i].fd);
 					p[i].revents = 0;
+					psession ps = nullptr;
+					if (!_bmodify_pool && _map.get(puid[i], ps) && ps->sndbufsize())
+						_bmodify_pool = true;					
 				}
 			}
 		protected:
@@ -366,7 +507,7 @@ namespace ec {
 				_map.for_each([this](psession & v) {
 					pollfd t;
 					t.fd = v->_fd;
-					if ((EC_PROTOC_CONNECTOUT & v->_protoc) && !v->_status)
+					if (((EC_PROTOC_CONNECTOUT & v->_protoc) && !v->_status) || v->sndbufsize())
 						t.events = POLLOUT;
 					else
 						t.events = POLLIN;

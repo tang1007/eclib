@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_tlssrv.h
 \author kipway@outlook.com
-\update 2018.12.2
+\update 2019.1.4
 
 eclib TLS1.2 server class. easy to use, no thread , lock-free
 
@@ -37,7 +37,7 @@ namespace ec {
 				if (TLS_SESSION_ERR == nst || TLS_SESSION_OK == nst || TLS_SESSION_NONE == nst) {
 					nr = TLS_SESSION_ERR == nst ? -1 : 0;
 					if (pmsgout->size()) {
-						if (ec::netio_tcpsend(_fd, pmsgout->data(), (int)pmsgout->size(), 1000) < 0)
+						if (session::send(pmsgout->data(), (int)pmsgout->size()) < 0)
 							nr = -1;
 					}
 					pmsgout->clear();
@@ -46,7 +46,7 @@ namespace ec {
 				else if (TLS_SESSION_HKOK == nst) {
 					nr = 0;
 					if (pmsgout->size()) {
-						if (ec::netio_tcpsend(_fd, pmsgout->data(), (int)pmsgout->size(), 1000) < 0)
+						if (session::send(pmsgout->data(), (int)pmsgout->size()) < 0)
 							nr = -1;
 					}
 					pmsgout->clear();
@@ -58,10 +58,10 @@ namespace ec {
 				return nr;
 			}
 
-			virtual int send(const void* pdata, size_t size, int timeoutmsec = 1000) {
+			virtual int send(const void* pdata, size_t size) {
 				ec::vector<uint8_t> tlspkg(size + 1024 - size % 1024, _pmem);
 				if (MakeAppRecord(&tlspkg, pdata, size))
-					return ec::netio_tcpsend(_fd, tlspkg.data(), (int)tlspkg.size(), timeoutmsec);
+					return session::send(tlspkg.data(), (int)tlspkg.size());
 				return -1;
 			}
 		};
