@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_tcpsrv.h
 \author kipway@outlook.com
-\update 2019.1.4
+\update 2019.1.9
 
 eclib tcp server class. easy to use, no thread , lock-free
 
@@ -315,9 +315,21 @@ namespace ec {
 			}
 
 			bool closeucid(uint32_t ucid) {
-				ondisconnect(ucid);
-				_bmodify_pool = true;
-				return _map.erase(ucid);
+				psession pi = nullptr;
+				if (_map.get(ucid, pi)) {
+					if (pi->_protoc & EC_PROTOC_CONNECTOUT) {
+						_map.erase(ucid);
+						ondisconnect(ucid);
+						_bmodify_pool = true;
+					}
+					else {
+						ondisconnect(ucid);
+						_bmodify_pool = true;
+						_map.erase(ucid);
+					}
+					return true;
+				}				
+				return false;
 			}
 		protected:
 			uint16_t _wport;
@@ -379,9 +391,8 @@ namespace ec {
 						p[i].revents = 0;
 						continue;
 					}
-					if (p[i].revents & (POLLERR | POLLHUP | POLLNVAL)) { // error
-						closeucid(puid[i]);
-						if (_plog)
+					if (p[i].revents & (POLLERR | POLLHUP | POLLNVAL)) { // error						
+						if (closeucid(puid[i]) && _plog)
 							_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect", _wport, puid[i]);
 						p[i].revents = 0;
 						continue;
@@ -397,9 +408,8 @@ namespace ec {
 								socklen_t serrlen = sizeof(serr);
 								getsockopt(pi->_fd, SOL_SOCKET, SO_ERROR, (void *)&serr, &serrlen);
 								if (serr) {
-									_bmodify_pool = true;
-									_map.erase(puid[i]);  // delete first
-									ondisconnect(puid[i]);// you can reconnect in ondisconnect				
+									if (closeucid(puid[i]) && _plog)
+										_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u connect out failed.", _wport, puid[i]);
 									continue;
 								}
 #endif
@@ -409,15 +419,9 @@ namespace ec {
 							}
 							else if (pi->sndbufsize()) {
 								if (pi->send_c() < 0) {
-									if (pi->_protoc & EC_PROTOC_CONNECTOUT) { // connect out session
-										_bmodify_pool = true;
-										_map.erase(puid[i]);  // delete first
-										ondisconnect(puid[i]);// you can reconnect in ondisconnect	
-									}
-									else //connect in session
-										closeucid(puid[i]);
-									if (_plog)
+									if (closeucid(puid[i]) && _plog)
 										_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect error as send_c", _wport, puid[i]);
+									p[i].revents = 0;
 									continue;
 								}
 							}
