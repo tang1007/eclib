@@ -2,7 +2,7 @@
 \file c_str.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.11.16
+\update 2019.1.9
 
 eclib  string
 
@@ -598,7 +598,7 @@ namespace ec
 			return true;
 #ifdef _WIN32
 		wchar_t tmp[4096];
-		int i = MultiByteToWideChar(CP_ACP, 0, in, (int)sizein, tmp, (int)sizeof(tmp));
+		int i = MultiByteToWideChar(CP_ACP, 0, in, (int)sizein, tmp, (int)sizeof(tmp) / sizeof(wchar_t));
 		if (!i)
 		{
 			str_ncpy(out, in, sizeout - 1);
@@ -652,7 +652,7 @@ namespace ec
 			return true;
 #ifdef _WIN32
 		wchar_t tmp[4096];
-		int i = MultiByteToWideChar(CP_UTF8, 0, in, (int)sizein, tmp, (int)sizeof(tmp));
+		int i = MultiByteToWideChar(CP_UTF8, 0, in, (int)sizein, tmp, (int)sizeof(tmp) / sizeof(wchar_t));
 		if (!i)
 		{
 			str_ncpy(out, in, sizeout - 1);
