@@ -42,3 +42,8 @@ Partial file list:<br>
  c_guid.h     | GUID maker 
  c_xstorage.h | Composite file storage 
  c_udp.h      | UDP server 
+ ec_ipc.h     | Inter-Process Communication
+ ec_tcpsrv.h  | tcp server class. easy to use, no thread , lock-free
+ ec_tlssrv.h  | TLS1.2 server class. easy to use, no thread , lock-free
+ ec_wss.h     | websocket secret class. easy to use, no thread , lock-free
+ 
