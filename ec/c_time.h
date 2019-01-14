@@ -39,6 +39,13 @@ inline unsigned int GetTickCount()
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (unsigned int)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
+
+inline uint64_t GetTickCount64()
+{
+	struct timeval tv;
+	gettimeofday(&tv, nullptr);
+	return tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
 #endif
 
 /*!
