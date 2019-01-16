@@ -2,7 +2,7 @@
 \file c11_rpc.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.7.19
+\update 2019.1.16
 
 eclibe Asynchronous Remote Procedure Call  template class for windows & linux
 
@@ -235,7 +235,7 @@ namespace ec {
 			memset(_pswsha1, 0, sizeof(_pswsha1));
 			memset(_srandominfo, 0, sizeof(_srandominfo));
 		};
-		cRpcCon& operator = (cRpcCon& v)
+		cRpcCon& operator = (cRpcCon&& v)
 		{
 			_ucid = v._ucid;
 			_nstatus = v._nstatus;
