@@ -2,7 +2,7 @@
 \file c11_vector.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.12.20
+\update 2019.1.17
 
 eclib class vector with c++11. fast noexcept simple vector. members of a vector can only be simple types, pointers and structures
 
@@ -226,6 +226,11 @@ namespace ec
 		{
 			return _pbuf[pos];
 		}
+		inline value_type* at(size_t pos) {
+			if (pos >= _usize)
+				return nullptr;
+			return &_pbuf[pos];
+		}
 		inline iterator begin() noexcept
 		{
 			return _pbuf;
@@ -312,6 +317,11 @@ namespace ec
 			}
 		}
 		inline void sort(bool(*cmp)(const value_type& v1, const value_type& v2))
+		{
+			std::sort(begin(), end(), cmp);
+		}
+		
+		inline void sort(std::function<bool(const value_type& v1, const value_type& v2)> cmp)
 		{
 			std::sort(begin(), end(), cmp);
 		}
