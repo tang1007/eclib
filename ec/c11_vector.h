@@ -2,7 +2,7 @@
 \file c11_vector.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2019.1.17
+\update 2019.1.18
 
 eclib class vector with c++11. fast noexcept simple vector. members of a vector can only be simple types, pointers and structures
 
@@ -316,11 +316,6 @@ namespace ec
 				_usize -= size;
 			}
 		}
-		inline void sort(bool(*cmp)(const value_type& v1, const value_type& v2))
-		{
-			std::sort(begin(), end(), cmp);
-		}
-		
 		inline void sort(std::function<bool(const value_type& v1, const value_type& v2)> cmp)
 		{
 			std::sort(begin(), end(), cmp);
