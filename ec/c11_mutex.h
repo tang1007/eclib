@@ -49,7 +49,7 @@ namespace ec {
 	{
 	public:
 		spinlock() {
-			InitializeCriticalSectionAndSpinCount(&_v, UINT_MAX);
+			InitializeCriticalSectionAndSpinCount(&_v, UINT16_MAX);
 		}
 		~spinlock() {
 			DeleteCriticalSection(&_v);
