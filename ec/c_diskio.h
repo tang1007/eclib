@@ -3,7 +3,7 @@
 \file c_diskio.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.11.18
+\update 2019.1.20
 
 disk io tools
 
@@ -28,7 +28,6 @@ limitations under the License.
 #include <stdio.h>
 #include <stdlib.h>
 
-
 #ifdef _WIN32
 #include  <io.h>
 #include <windows.h>
@@ -43,7 +42,6 @@ limitations under the License.
 #include <fcntl.h>
 #endif
 #include "c_str.h"
-#include "c_array.h"
 #if (0 != USE_ECLIB_C11)
 #include "c11_vector.h"
 #endif
@@ -201,50 +199,6 @@ namespace ec
 		/*!
 		\brief lock read whole file for windows
 		*/
-		static bool	LckRead(const char* utf8file, tArray<char> *pout)
-		{
-			wchar_t sfile[1024];
-			int n = MultiByteToWideChar(CP_UTF8, 0, utf8file, -1, sfile, sizeof(sfile) / sizeof(wchar_t));
-			sfile[n] = 0;
-
-			HANDLE hFile = CreateFileW(sfile, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL); // 共享只读打开
-			if (hFile == INVALID_HANDLE_VALUE)
-				return false;
-
-			long long size = filesize(sfile);
-			if (size <= 0) {
-				CloseHandle(hFile);
-				pout->clear();
-				return false;
-			}
-
-			OVERLAPPED	 op;//!<
-			memset(&op, 0, sizeof(op));
-			op.Offset = 0;
-			op.OffsetHigh = 0;
-			if (!LockFileEx(hFile, 0, 0, (DWORD)-1, (DWORD)-1, &op))
-			{
-				CloseHandle(hFile);
-				return false;
-			}
-
-			pout->clear();
-			pout->set_grow((size_t)size);
-			char tmp[1024 * 32];
-			DWORD dwr = 0;
-			do
-			{
-				if (!ReadFile(hFile, tmp, sizeof(tmp), &dwr, NULL))
-					break;
-				pout->Add(tmp, dwr);
-			} while (dwr == sizeof(tmp));
-
-			UnlockFileEx(hFile, 0, (DWORD)-1, (DWORD)-1, &op);
-			CloseHandle(hFile);
-			return pout->GetSize() > 0;
-		}
-
-#if (0 != USE_ECLIB_C11)
 		static bool	LckRead(const char* utf8file, vector<char> *pout)
 		{
 			wchar_t sfile[1024];
@@ -286,7 +240,6 @@ namespace ec
 			CloseHandle(hFile);
 			return pout->size() > 0;
 		}
-#endif
 #else
 		static bool IsExist(const char* sfile)
 		{
@@ -429,40 +382,7 @@ namespace ec
 		S_IROTH  00004 others have read permission
 		S_IWOTH  00002 others have write permission
 		S_IXOTH  00001 others have execute permission
-
 		*/
-		static bool	LckRead(const char* utf8file, tArray<char> *pout)
-		{
-			int nfd = ::open(utf8file, O_RDONLY, S_IROTH | S_IRUSR | S_IRGRP);
-			if (nfd == -1)
-				return false;
-			long long  size = filesize(utf8file);
-			if (size <= 0) {
-				::close(nfd);
-				pout->clear();
-				return false;
-			}
-			pout->clear();
-			pout->set_grow((size_t)size);
-			char tmp[1024 * 32];
-			ssize_t nr;
-			if (!Lock(nfd, 0, 0, false))
-			{
-				::close(nfd);
-				return false;
-			}
-			while (1)
-			{
-				nr = ::read(nfd, tmp, sizeof(tmp));
-				if (nr <= 0)
-					break;
-				pout->Add(tmp, nr);
-			}
-			Unlock(nfd, 0, 0);
-			::close(nfd);
-			return pout->GetSize() > 0;
-		}
-#if (0 != USE_ECLIB_C11)
 		static bool	LckRead(const char* utf8file, vector<char> *pout)
 		{
 			int nfd = ::open(utf8file, O_RDONLY, S_IROTH | S_IRUSR | S_IRGRP);
@@ -494,7 +414,6 @@ namespace ec
 			::close(nfd);
 			return pout->size() > 0;
 		}
-#endif
 #endif
 	};
 	class cdir
