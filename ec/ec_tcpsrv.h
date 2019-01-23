@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_tcpsrv.h
 \author kipway@outlook.com
-\update 2019.1.9
+\update 2019.1.22
 
 eclib tcp server class. easy to use, no thread , lock-free
 
@@ -94,7 +94,7 @@ namespace ec {
 		{
 		public:
 			session(uint32_t ucid, SOCKET  fd, uint32_t protoc, uint32_t status, ec::memory* pmem, ec::cLog* plog) :
-				_protoc(protoc), _status(status), _fd(fd), _ucid(ucid), _u32(0), _u64(0), 
+				_protoc(protoc), _status(status), _fd(fd), _ucid(ucid), _u32(0), _u64(0),
 				_pssmem(pmem), _psslog(plog), _timesndblcok(0), _sndpos(0), _sbuf(1024 * 16, true, pmem) {
 				_ip[0] = 0;
 				_cid[0] = 0;
@@ -140,7 +140,7 @@ namespace ec {
 				return 0;
 			}; //read Raw byte stream from tcp
 
-			virtual int send(const void* pdata, size_t size) {				
+			virtual int send(const void* pdata, size_t size) {
 				return iosend(pdata, (int)size);// timeoutmsec No longer use 
 			}
 
@@ -166,9 +166,9 @@ namespace ec {
 				ns = send_non_block(_fd, pdata, (int)size);
 				if (_psslog)
 					_psslog->add(CLOG_DEFAULT_DBG, "iosend send_non_block ucid %u send size %d", _ucid, ns);
-				if(ns > 0)
+				if (ns > 0)
 					_timesndblcok = 0;
-				if (ns == (int)size || ns < 0)					
+				if (ns == (int)size || ns < 0)
 					return ns;
 				_sndpos = 0;
 				_sbuf.clear();
@@ -328,7 +328,7 @@ namespace ec {
 						_map.erase(ucid);
 					}
 					return true;
-				}				
+				}
 				return false;
 			}
 		protected:
@@ -398,41 +398,46 @@ namespace ec {
 						continue;
 					}
 					psession pi = nullptr;
-					if (p[i].revents & POLLOUT) {						
-						if (_map.get(puid[i], pi)) {
-							pi->_timelastio = ::time(0);
-							if ((pi->_protoc & EC_PROTOC_CONNECTOUT) && !pi->_status) { // connect out session
-								pi->_status |= EC_PROTOC_ST_CONNECT; //connected
+					if (!_map.get(puid[i], pi)) {
+						p[i].revents = 0;
+						continue;
+					}
+					if (p[i].revents & POLLOUT) {
+						pi->_timelastio = ::time(0);
+						if ((pi->_protoc & EC_PROTOC_CONNECTOUT) && !pi->_status) { // connect out session
+							pi->_status |= EC_PROTOC_ST_CONNECT; //connected
 #ifndef _WIN32
-								int serr = 0;
-								socklen_t serrlen = sizeof(serr);
-								getsockopt(pi->_fd, SOL_SOCKET, SO_ERROR, (void *)&serr, &serrlen);
-								if (serr) {
-									if (closeucid(puid[i]) && _plog)
-										_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u connect out failed.", _wport, puid[i]);
-									continue;
-								}
-#endif
-								onconnect(puid[i]);
-								_bmodify_pool = true;
-								p[i].events = POLLIN;
+							int serr = 0;
+							socklen_t serrlen = sizeof(serr);
+							getsockopt(pi->_fd, SOL_SOCKET, SO_ERROR, (void *)&serr, &serrlen);
+							if (serr) {
+								if (closeucid(puid[i]) && _plog)
+									_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u connect out failed.", _wport, puid[i]);
+								continue;
 							}
-							else if (pi->sndbufsize()) {
-								if (pi->send_c() < 0) {
-									if (closeucid(puid[i]) && _plog)
-										_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect error as send_c", _wport, puid[i]);
-									p[i].revents = 0;
-									continue;
-								}
+#endif
+							onconnect(puid[i]);
+						}
+						else if (pi->sndbufsize()) {
+							if (pi->send_c() < 0) {
+								if (closeucid(puid[i]) && _plog)
+									_plog->add(CLOG_DEFAULT_MSG, "port(%u) ucid %u disconnect error as send_c", _wport, puid[i]);
+								p[i].revents = 0;
+								continue;
 							}
 						}
 					}
 					if (p[i].revents & POLLIN)
 						doread(puid[i], p[i].fd);
 					p[i].revents = 0;
-					psession ps = nullptr;
-					if (!_bmodify_pool && _map.get(puid[i], ps) && ps->sndbufsize())
-						_bmodify_pool = true;					
+					if (!_bmodify_pool) {
+						if ((pi->_protoc & EC_PROTOC_CONNECTOUT) && !pi->_status)
+							p[i].events = POLLOUT;
+						else if (pi->sndbufsize())
+							p[i].events = POLLIN | POLLOUT;
+						else
+							p[i].events = POLLIN;
+					}
 				}
 			}
 		protected:
@@ -511,8 +516,10 @@ namespace ec {
 				_map.for_each([this](psession & v) {
 					pollfd t;
 					t.fd = v->_fd;
-					if (((EC_PROTOC_CONNECTOUT & v->_protoc) && !v->_status) || v->sndbufsize())
+					if ((EC_PROTOC_CONNECTOUT & v->_protoc) && !v->_status)
 						t.events = POLLOUT;
+					else if (v->sndbufsize())
+						t.events = POLLOUT | POLLIN;
 					else
 						t.events = POLLIN;
 					t.revents = 0;

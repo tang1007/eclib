@@ -2,7 +2,7 @@
 \file c11_websocket.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.12.8
+\update 2019.1.22
 
 eclib websocket protocol
 http protocol only support get and head. websocket protocol support Sec-WebSocket-Version:13
@@ -101,7 +101,8 @@ namespace ec
 	};
 
 #define SIZE_WSZLIBTEMP 32768
-	inline int ws_encode_zlib(const void *pSrc, size_t size_src, ec::vector<char>* pout)//pout first two byte x78 and x9c,the end  0x00 x00 xff xff, no  adler32
+	template<class _Tp>
+	inline int ws_encode_zlib(const void *pSrc, size_t size_src, ec::vector<_Tp>* pout)//pout first two byte x78 and x9c,the end  0x00 x00 xff xff, no  adler32
 	{
 		z_stream stream;
 		int err;
@@ -125,7 +126,7 @@ namespace ec
 			err = deflate(&stream, Z_SYNC_FLUSH);
 			if (err != Z_OK)
 				break;
-			if(!pout->add(outbuf, stream.total_out - uout)) {
+			if(!pout->add((_Tp*)outbuf, stream.total_out - uout)) {
 				err = Z_MEM_ERROR;
 				break;
 			}
@@ -133,44 +134,10 @@ namespace ec
 		}
 		deflateEnd(&stream);
 		return err;
-	}
+	}	
 
-	inline int ws_encode_zlib(const void *pSrc, size_t size_src, ec::vector<uint8_t>* pout)//pout first two byte x78 and x9c,the end  0x00 x00 xff xff, no  adler32
-	{
-		z_stream stream;
-		int err;
-		uint8_t outbuf[SIZE_WSZLIBTEMP];
-
-		stream.next_in = (z_const Bytef *)pSrc;
-		stream.avail_in = (uInt)size_src;
-
-		stream.zalloc = (alloc_func)0;
-		stream.zfree = (free_func)0;
-		stream.opaque = (voidpf)0;
-
-		err = deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15, 8, Z_DEFAULT_STRATEGY);
-		if (err != Z_OK)
-			return err;
-
-		uLong uout = 0;
-		stream.avail_out = 0;
-		while (!stream.avail_out) {
-			stream.next_out = (unsigned char*)outbuf;
-			stream.avail_out = (unsigned int)sizeof(outbuf);
-			err = deflate(&stream, Z_SYNC_FLUSH);
-			if (err != Z_OK)
-				break;
-			if (!pout->add(outbuf, stream.total_out - uout)) {
-				err = Z_MEM_ERROR;
-				break;
-			}
-			uout += stream.total_out - uout;
-		}
-		deflateEnd(&stream);
-		return err;
-	}
-
-	inline int ws_decode_zlib(const void *pSrc, size_t size_src, ec::vector<char>* pout)//pSrc begin with 0x78 x9c, has no end 0x00 x00 xff xff
+	template<class _Tp>
+	inline int ws_decode_zlib(const void *pSrc, size_t size_src, ec::vector<_Tp>* pout)//pSrc begin with 0x78 x9c, has no end 0x00 x00 xff xff
 	{
 		z_stream stream;
 		int err;
@@ -193,7 +160,7 @@ namespace ec
 			err = inflate(&stream, Z_SYNC_FLUSH);
 			if (err != Z_OK)
 				break;
-			if(!pout->add(outbuf, stream.total_out - uout)) {
+			if(!pout->add((_Tp*)outbuf, stream.total_out - uout)) {
 				err = Z_MEM_ERROR;
 				break;
 			}
@@ -203,7 +170,8 @@ namespace ec
 		return err;
 	}
 
-	inline bool ws_make_permsg(const void* pdata, size_t sizes, unsigned char wsopt, vector<uint8_t>* pout, int ncompress) //multi-frame,permessage_deflate
+	template<class _Tp>
+	inline bool ws_make_permsg(const void* pdata, size_t sizes, unsigned char wsopt, vector<_Tp>* pout, int ncompress) //multi-frame,permessage_deflate
 	{
 		unsigned char uc;
 		const char* pds = (const char*)pdata;
@@ -234,7 +202,7 @@ namespace ec
 				uc |= 0x80;
 				us = slen - ss;
 			}
-			pout->add(uc);
+			pout->add((_Tp)uc);
 			if (us < 126)
 			{
 				uc = (unsigned char)us;
@@ -244,26 +212,27 @@ namespace ec
 			{
 				uc = 126;
 				pout->add(uc);
-				pout->add((uint8_t)((us & 0xFF00) >> 8)); //high byte
-				pout->add((uint8_t)(us & 0xFF)); //low byte
+				pout->add((_Tp)((us & 0xFF00) >> 8)); //high byte
+				pout->add((_Tp)(us & 0xFF)); //low byte
 			}
 			else // < 4G
 			{
 				uc = 127;
-				pout->add((uint8_t)uc);
-				pout->add((uint8_t)0); pout->add((uint8_t)0); pout->add((uint8_t)0); pout->add((uint8_t)0);//high 4 bytes 0
-				pout->add((uint8_t)((us & 0xFF000000) >> 24));
-				pout->add((uint8_t)((us & 0x00FF0000) >> 16));
-				pout->add((uint8_t)((us & 0x0000FF00) >> 8));
-				pout->add((uint8_t)(us & 0xFF));
+				pout->add((_Tp)uc);
+				pout->add((_Tp)0); pout->add((_Tp)0); pout->add((_Tp)0); pout->add((_Tp)0);//high 4 bytes 0
+				pout->add((_Tp)((us & 0xFF000000) >> 24));
+				pout->add((_Tp)((us & 0x00FF0000) >> 16));
+				pout->add((_Tp)((us & 0x0000FF00) >> 8));
+				pout->add((_Tp)(us & 0xFF));
 			}
-			pout->add((const uint8_t*)(pds + ss), us);
+			pout->add((_Tp*)(pds + ss), us);
 			ss += us;
 		}
 		return true;
 	}
-
-	inline bool ws_make_perfrm(const void* pdata, size_t sizes, unsigned char wsopt, vector< uint8_t>* pout)//multi-frame,deflate-frame, for ios safari
+	
+	template<class _Tp>
+	inline bool ws_make_perfrm(const void* pdata, size_t sizes, unsigned char wsopt, vector< _Tp>* pout)//multi-frame,deflate-frame, for ios safari
 	{
 		const char* pds = (const char*)pdata;
 		char* pf;
@@ -286,7 +255,7 @@ namespace ec
 				uc |= 0x80;
 				us = slen - ss;
 			}
-			pout->add(uc);
+			pout->add((_Tp)uc);
 			if (uc & 0x40)
 			{
 				tmp.clear();
@@ -310,20 +279,20 @@ namespace ec
 			{
 				uc = 126;
 				pout->add(uc);
-				pout->add((uint8_t)((fl & 0xFF00) >> 8)); //high byte
-				pout->add((uint8_t)(fl & 0xFF)); //low byte
+				pout->add((_Tp)((fl & 0xFF00) >> 8)); //high byte
+				pout->add((_Tp)(fl & 0xFF)); //low byte
 			}
 			else // < 4G
 			{
 				uc = 127;
 				pout->add(uc);
-				pout->add((uint8_t)0); pout->add((uint8_t)0); pout->add((uint8_t)0); pout->add((uint8_t)0);//high 4 bytes 0
-				pout->add((uint8_t)((fl & 0xFF000000) >> 24));
-				pout->add((uint8_t)((fl & 0x00FF0000) >> 16));
-				pout->add((uint8_t)((fl & 0x0000FF00) >> 8));
-				pout->add((uint8_t)(fl & 0xFF));
+				pout->add((_Tp)0); pout->add((_Tp)0); pout->add((_Tp)0); pout->add((_Tp)0);//high 4 bytes 0
+				pout->add((_Tp)((fl & 0xFF000000) >> 24));
+				pout->add((_Tp)((fl & 0x00FF0000) >> 16));
+				pout->add((_Tp)((fl & 0x0000FF00) >> 8));
+				pout->add((_Tp)(fl & 0xFF));
 			}
-			pout->add((const uint8_t*)pf, fl);
+			pout->add((_Tp*)pf, fl);
 			ss += us;
 		}
 		return true;

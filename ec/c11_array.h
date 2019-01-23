@@ -2,7 +2,7 @@
 \file c11_array.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.5.27
+\update 2019.1.22
 
 eclib class stack array with c++11.
 
@@ -80,7 +80,7 @@ namespace ec {
 		{
 			return add(val);
 		}
-		inline void pop_back()
+		inline void pop_back() noexcept
 		{
 			if (_size > 0)
 				_size--;
@@ -194,18 +194,24 @@ namespace ec {
 			}
 			return false;
 		}
-		inline void sort(bool(*cmp)(const value_type& v1, const value_type& v2))
+		inline value_type* atptr(size_type pos) noexcept
+		{
+			if (pos < _size)
+				return &_data[pos];
+			return nullptr;
+		}
+		inline void sort(std::function<bool(const value_type& v1, const value_type& v2)> cmp)
 		{
 			std::sort(begin(), end(), cmp);
+		}
+		inline void sort(iterator istart, iterator iend, std::function<bool(const value_type& v1, const value_type& v2)> cmp)
+		{
+			std::sort(istart, iend, cmp);
 		}
 		void setsize(size_t size)
 		{
 			if (size <= _bufsize)
 				_size = size;
-		}
-		inline void sort(iterator istart, iterator iend, bool(*cmp)(const value_type& v1, const value_type& v2))
-		{
-			std::sort(istart, iend, cmp);
 		}
 		bool insert(size_type pos, const value_type *pval, size_t insize = 1) noexcept // insert before
 		{

@@ -2,7 +2,7 @@
 \file c11_vector.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2019.1.18
+\update 2019.1.22
 
 eclib class vector with c++11. fast noexcept simple vector. members of a vector can only be simple types, pointers and structures
 
@@ -111,22 +111,7 @@ namespace ec
 				_pmem->mem_free(p);
 			else
 				free(p);
-		}
-		inline void* mem_realloc(size_t size, size_t &sizeout) {
-			if (_pmem) {
-				void *pnew = _pmem->malloc(size, sizeout);
-				if (!pnew)
-					return nullptr;
-				if (_pbuf) {
-					if (_usize)
-						memcpy(pnew, _pbuf, ((_usize < size) ? _usize : size) * sizeof(value_type));
-					_pmem->mem_free(_pbuf);
-				}
-				return pnew;
-			}
-			sizeout = size;
-			return realloc(_pbuf, size);
-		}
+		}		
 	public:
 		inline size_type max_size() const noexcept
 		{
@@ -387,14 +372,17 @@ namespace ec
 					usizet += _ugrown - (usizet % _ugrown);
 			}
 			if (usizet > max_size())
-				return false;			
-			size_t sizeout = 0;
-			value_type	*pt = (value_type*)mem_realloc(usizet * sizeof(value_type), sizeout);
+				return false;
+			value_type	*pt = nullptr;
+			if (_pmem) 
+				pt = (value_type*)_pmem->mem_realloc(_pbuf, usizet * sizeof(value_type));
+			else
+				pt = (value_type*)realloc(_pbuf, usizet * sizeof(value_type));
 			if (!pt)
 				return false;
-			_pbuf = pt;			
-			_ubufsize = sizeout / sizeof(value_type);
-			return true;
+			_ubufsize = usizet;
+			_pbuf = pt;
+			return true;	
 		}
 	};
 }

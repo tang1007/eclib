@@ -2,7 +2,7 @@
 \file c11_memory.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.11.3
+\update 2019.1.22
 
 eclib class fast memory allocator with c++11.
 
@@ -60,10 +60,13 @@ namespace ec {
 			_stkl.clear();
 			if (_ps)
 				::free(_ps);
+			_ps = nullptr;
 			if (_pm)
 				::free(_pm);
+			_pm = nullptr;
 			if (_pl)
 				::free(_pl);
+			_pl = nullptr;
 		}
 		void *mem_malloc(size_t size)
 		{
@@ -258,19 +261,16 @@ namespace ec {
 	class auto_buffer
 	{
 	public:
-		auto_buffer(memory* pmem = nullptr) :_pmem(pmem), _pbuf(0), _size(0), _sizebuf(0) {
+		auto_buffer(memory* pmem = nullptr) :_pmem(pmem), _pbuf(0), _size(0) {
 		}
-		auto_buffer(size_t size, memory* pmem = nullptr) :_pmem(pmem), _size(size), _sizebuf(0){
+		auto_buffer(size_t size, memory* pmem = nullptr) :_pmem(pmem), _size(size){
 			if (_pmem)
-				_pbuf = _pmem->malloc(size, _sizebuf);
-			else {
+				_pbuf = _pmem->mem_realloc(nullptr, _size);
+			else 
 				_pbuf = ::malloc(_size);
-				_sizebuf = _size;
-			}
 			if (!_pbuf) {
 				_pbuf = nullptr;
 				_size = 0;
-				_sizebuf = 0;
 			}
 		}
 		~auto_buffer() {
@@ -280,7 +280,6 @@ namespace ec {
 		memory* _pmem;
 		void*   _pbuf;
 		size_t  _size;
-		size_t  _sizebuf;
 	public:
 		inline void *data() {
 			return _pbuf;
@@ -296,24 +295,21 @@ namespace ec {
 					::free(_pbuf);
 				_pbuf = nullptr;
 				_size = 0;
-				_sizebuf = 0;
 			}
 		}
 		inline void* resize(size_t rsz) {
-			_size = rsz;
-			if (_size > _sizebuf) {
-				clear();
-				if (_pmem)
-					_pbuf = _pmem->malloc(rsz, _sizebuf);
-				else {
-					_pbuf = ::malloc(_size);
-					_sizebuf = _size;
+			if (rsz > _size) {
+				void* pt = nullptr;
+				if (_pmem) 
+					pt = _pmem->mem_realloc(_pbuf, rsz);
+				else
+					pt = ::realloc(_pbuf, rsz);
+				if (!pt) {
+					clear();
+					return nullptr;
 				}
-				if (!_pbuf) {
-					_pbuf = nullptr;
-					_size = 0;
-					_sizebuf = 0;
-				}
+				_pbuf = pt;
+				_size = rsz;
 			}
 			return _pbuf;
 		}

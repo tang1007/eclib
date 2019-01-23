@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_wss.h
 \author kipway@outlook.com
-\update 2019.1.4
+\update 2019.1.22
 
 eclib websocket secret class. easy to use, no thread , lock-free
 
@@ -203,7 +203,7 @@ namespace ec {
 				pout->add((_Tp)((us & 0x0000FF00) >> 8));
 				pout->add((_Tp)(us & 0xFF));
 			}
-			pout->add(pds + ss, us);
+			pout->add((_Tp*)pds + ss, us);
 			ss += us;
 		}
 		return true;
@@ -270,7 +270,7 @@ namespace ec {
 				pout->add((_Tp)((fl & 0x0000FF00) >> 8));
 				pout->add((_Tp)(fl & 0xFF));
 			}
-			pout->add(pf, fl);
+			pout->add((_Tp*)pf, fl);
 			ss += us;
 		}
 		return true;
