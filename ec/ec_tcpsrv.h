@@ -430,6 +430,8 @@ namespace ec {
 					if (p[i].revents & POLLIN)
 						doread(puid[i], p[i].fd);
 					p[i].revents = 0;
+					if (!_map.get(puid[i], pi)) 						
+						continue;					
 					if (!_bmodify_pool) {
 						if ((pi->_protoc & EC_PROTOC_CONNECTOUT) && !pi->_status)
 							p[i].events = POLLOUT;
