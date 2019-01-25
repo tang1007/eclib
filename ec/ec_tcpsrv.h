@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_tcpsrv.h
 \author kipway@outlook.com
-\update 2019.1.22
+\update 2019.1.25
 
 eclib tcp server class. easy to use, no thread , lock-free
 
@@ -52,6 +52,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 #define EC_PROTOC_ST_PRE     0x00
 #define EC_PROTOC_ST_CONNECT 0x01
 #define EC_PROTOC_ST_WORK    0x02
+#define EC_UID_LISTEN        1
 
 #ifndef TCP_PKG_MAXSIZE
 #	define TCP_PKG_MAXSIZE (1024 * 1024 * 64)
@@ -232,7 +233,7 @@ namespace ec {
 		class listen_session : public session
 		{
 		public:
-			listen_session(SOCKET  fd) : session(1, fd, EC_PROTOC_LISTEN, EC_PROTOC_ST_WORK, nullptr, nullptr) {
+			listen_session(SOCKET  fd) : session(EC_UID_LISTEN, fd, EC_PROTOC_LISTEN, EC_PROTOC_ST_WORK, nullptr, nullptr) {
 			}
 
 			virtual int onrecvbytes(const void* pdata, size_t size, ec::vector<uint8_t>* pmsgout) {
@@ -383,7 +384,7 @@ namespace ec {
 				pollfd* p = _pollfd.data();
 				uint32_t* puid = _pollkey.data();
 				for (auto i = 0u; i < _pollfd.size(); i++) {
-					if (puid[i] == 1) { //listen
+					if (puid[i] == EC_UID_LISTEN) { //listen
 						if (p[i].revents & POLLIN) {
 							if (acp())
 								_bmodify_pool = true;
@@ -430,9 +431,9 @@ namespace ec {
 					if (p[i].revents & POLLIN)
 						doread(puid[i], p[i].fd);
 					p[i].revents = 0;
-					if (!_map.get(puid[i], pi)) 						
-						continue;					
 					if (!_bmodify_pool) {
+						if (!_map.get(puid[i], pi))
+							continue;
 						if ((pi->_protoc & EC_PROTOC_CONNECTOUT) && !pi->_status)
 							p[i].events = POLLOUT;
 						else if (pi->sndbufsize())
@@ -585,7 +586,7 @@ namespace ec {
 				return true;
 			}
 
-			bool doread(uint32_t ucid, SOCKET fd) {
+			bool doread(uint32_t ucid, SOCKET fd) { // return true need remake pollfds
 				char rbuf[1024 * 32];
 #ifdef _WIN32
 				int nr = ::recv(fd, rbuf, (int)sizeof(rbuf), 0);
