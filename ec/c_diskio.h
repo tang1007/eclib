@@ -3,7 +3,7 @@
 \file c_diskio.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2019.1.20
+\update 2019.1.27
 
 disk io tools
 
@@ -199,7 +199,7 @@ namespace ec
 		/*!
 		\brief lock read whole file for windows
 		*/
-		static bool	LckRead(const char* utf8file, vector<char> *pout)
+		static bool	LckRead(const char* utf8file, vector<char> *pout, long long offset = 0, long long lsize = 0)
 		{
 			wchar_t sfile[1024];
 			int n = MultiByteToWideChar(CP_UTF8, 0, utf8file, -1, sfile, sizeof(sfile) / sizeof(wchar_t));
@@ -216,11 +216,18 @@ namespace ec
 				return false;
 			}
 
+			uint64_t uoff = (uint64_t)offset, usize = (uint64_t)lsize;
 			OVERLAPPED	 op;
 			memset(&op, 0, sizeof(op));
-			op.Offset = 0;
-			op.OffsetHigh = 0;
-			if (!LockFileEx(hFile, 0, 0, (DWORD)-1, (DWORD)-1, &op))
+			op.Offset = (DWORD)(uoff & 0xFFFFFFFF);
+			op.OffsetHigh = (DWORD)((uoff >> 32) & 0xFFFFFFFF);
+
+			DWORD dwll = (DWORD)-1, dwlh = (DWORD)-1;
+			if (usize) {
+				dwll = (DWORD)(usize & 0xFFFFFFFF);
+				dwlh = (DWORD)((usize >> 32) & 0xFFFFFFFF);
+			}
+			if (!LockFileEx(hFile, 0, 0, dwll, dwlh, &op))
 			{
 				CloseHandle(hFile);
 				return false;
@@ -229,14 +236,25 @@ namespace ec
 			pout->set_grow((size_t)size);
 			char tmp[1024 * 32];
 			DWORD dwr = 0;
-			do
-			{
-				if (!ReadFile(hFile, tmp, sizeof(tmp), &dwr, NULL))
+			if (offset) {
+				LARGE_INTEGER liOff;
+				liOff.QuadPart = offset;
+				liOff.LowPart = ::SetFilePointer(hFile, liOff.LowPart, &liOff.HighPart, 0);
+				if (liOff.LowPart == 0xFFFFFFFF)
+					if (::GetLastError() != NO_ERROR)
+						return false;
+			}
+			do {
+				if (lsize && pout->size() + sizeof(tmp) > (size_t)lsize)
+					dwr = (DWORD)((size_t)lsize - pout->size());
+				else
+					dwr = (DWORD)sizeof(tmp);
+				if (!ReadFile(hFile, tmp, dwr, &dwr, NULL))
 					break;
 				pout->add(tmp, dwr);
 			} while (dwr == sizeof(tmp));
 
-			UnlockFileEx(hFile, 0, (DWORD)-1, (DWORD)-1, &op);
+			UnlockFileEx(hFile, 0, dwll, dwlh, &op);
 			CloseHandle(hFile);
 			return pout->size() > 0;
 		}
@@ -383,7 +401,7 @@ namespace ec
 		S_IWOTH  00002 others have write permission
 		S_IXOTH  00001 others have execute permission
 		*/
-		static bool	LckRead(const char* utf8file, vector<char> *pout)
+		static bool	LckRead(const char* utf8file, vector<char> *pout, long long offset = 0, long long lsize = 0)
 		{
 			int nfd = ::open(utf8file, O_RDONLY, S_IROTH | S_IRUSR | S_IRGRP);
 			if (nfd == -1)
@@ -398,19 +416,25 @@ namespace ec
 			pout->set_grow((size_t)size);
 			char tmp[1024 * 32];
 			ssize_t nr;
-			if (!Lock(nfd, 0, 0, false))
+			if (!Lock(nfd, offset, lsize, false))
 			{
 				::close(nfd);
 				return false;
 			}
-			while (1)
+			if (offset)
+				::lseek64(nfd, offset, 0);
+			size_t szr;
+			do
 			{
-				nr = ::read(nfd, tmp, sizeof(tmp));
-				if (nr <= 0)
-					break;
-				pout->add(tmp, nr);
-			}
-			Unlock(nfd, 0, 0);
+				if (lsize && pout->size() + sizeof(tmp) > (size_t)lsize)
+					szr = ((size_t)lsize - pout->size());
+				else
+					szr = sizeof(tmp);
+				nr = ::read(nfd, tmp, szr);
+				if (nr > 0)
+					pout->add(tmp, nr);
+			} while (nr == (int)sizeof(tmp));
+			Unlock(nfd, offset, lsize);
 			::close(nfd);
 			return pout->size() > 0;
 		}

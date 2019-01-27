@@ -1,7 +1,7 @@
 ﻿/*!
 \file ec_wss.h
 \author kipway@outlook.com
-\update 2019.1.22
+\update 2019.1.27
 
 eclib websocket secret class. easy to use, no thread , lock-free
 
@@ -670,9 +670,9 @@ namespace ec {
 			}
 		public:
 			virtual int send(const void* pdata, size_t size) {
-				return ws_send(pdata, size, WS_OP_TXT);				
+				return ws_send(pdata, size, WS_OP_TXT);
 			}
-			
+
 			int ws_send(const void* pdata, size_t size, unsigned char wsopt = WS_OP_TXT) {
 				if (_protocol == PROTOCOL_HTTP)
 					return tls_session::send(pdata, size);
@@ -879,19 +879,41 @@ namespace ec {
 				return _httppkg.HasKeepAlive();
 			}
 
+			bool parserange(const char* stxt, size_t txtlen, int64_t &lpos, int64_t &lsize) {
+				char suints[8] = { 0 }, spos[16] = { 0 }, ssize[8] = { 0 };
+				size_t pos = 0;
+				if (!ec::str_getnext("=", stxt, txtlen, pos, suints, sizeof(suints)) || !ec::str_ieq("bytes", suints))
+					return false;
+				if (!ec::str_getnext("-", stxt, txtlen, pos, spos, sizeof(spos)))
+					return false;
+				lpos = atoll(spos);
+				if (!ec::str_getnext(",", stxt, txtlen, pos, ssize, sizeof(ssize)))
+					lsize = 0;
+				else
+					lsize = atoll(ssize);
+				return true;
+			}
+
 			bool DoGetAndHead(const char* sroot, uint32_t ucid, http_pkg* pPkg, bool bGet = true)
 			{
+#ifdef _DEBUG
+				int i, nk = pPkg->_headers.countrecs();
+				char skey[80] = { 0 }, sval[4096] = { 0 }, stmp[4096] = { 0 };
+				_plog->add(CLOG_DEFAULT_DBG, "%s,%s", pPkg->_method, pPkg->_request);
+				for (i = 0; i < nk; i++) {
+					if (pPkg->_headers.get(i, skey, sizeof(skey), sval, sizeof(sval))) {
+						sprintf(stmp, "    %s:%s\n", skey, sval);
+						_plog->addstr(CLOG_DEFAULT_DBG, stmp, strlen(stmp));
+					}
+				}
+#endif
 				char sfile[1024], tmp[4096];
-				const char* sc;
 				sfile[0] = '\0';
 				tmp[0] = '\0';
 
 				strcpy(sfile, sroot);
-
-				url2utf8(pPkg->_request, tmp, (int)sizeof(tmp));
-
+				ec::url2utf8(pPkg->_request, tmp, (int)sizeof(tmp));
 				strcat(sfile, tmp);
-
 				size_t n = strlen(sfile);
 				if (n && (sfile[n - 1] == '/' || sfile[n - 1] == '\\'))
 					strcat(sfile, "index.html");
@@ -899,80 +921,33 @@ namespace ec {
 					httpreterr(ucid, http_sret404, 400);
 					return pPkg->HasKeepAlive();
 				}
+
 				long long flen = ec::IO::filesize(sfile);
 				if (flen < 0) {
 					httpreterr(ucid, http_sret404, 404);
 					return pPkg->HasKeepAlive();
 				}
-				if (flen > MAX_FILESIZE_HTTP_DOWN) {
-					httpreterr(ucid, http_sret404outsize, 404);
-					return pPkg->HasKeepAlive();
-				}
+				if (!bGet) // head
+					return DoHead(ucid, sfile, pPkg);
 
-				vector<char> answer(1024 * 32, true, _pmem);
-				sc = "HTTP/1.1 200 ok\r\n";
-				answer.add(sc, strlen(sc));
-
-				sc = "Server: rdb5 websocket server\r\n";
-				answer.add(sc, strlen(sc));
-
-				if (pPkg->HasKeepAlive()) {
-					sc = "Connection: keep-alive\r\n";
-					answer.add(sc, strlen(sc));
-				}
-				const char* sext = file_extname(sfile);
-				if (sext && *sext && getmime(sext, tmp, sizeof(tmp))) {
-					answer.add("Content-type: ", 13);
-					answer.add(tmp, strlen(tmp));
-					answer.add("\r\n", 2);
-				}
-				else {
-					sc = "Content-type: application/octet-stream\r\n";
-					answer.add(sc, strlen(sc));
-				}
-
-				int necnode = 0;
-				if (pPkg->GetHeadFiled("Accept-Encoding", tmp, sizeof(tmp))) {
-					char sencode[16] = { 0 };
-					size_t pos = 0;
-					while (ec::str_getnext(";,", tmp, strlen(tmp), pos, sencode, sizeof(sencode))) {
-						if (!ec::str_icmp("deflate", sencode)) {
-							sc = "Content-Encoding: deflate\r\n";
-							answer.add(sc, strlen(sc));
-							necnode = HTTPENCODE_DEFLATE;
-							break;
-						}
+				int64_t rangpos = 0, rangsize = 0;
+				if (pPkg->GetHeadFiled("Range", tmp, sizeof(tmp))) { // "Range: bytes=0-1023"
+					if (!parserange(tmp, strlen(tmp), rangpos, rangsize)) {
+						httpreterr(ucid, http_sret404outsize, 404);
+						return pPkg->HasKeepAlive();
 					}
 				}
-				vector<char>	filetmp(1024 * 16, true, _pmem);
-				if (!IO::LckRead(sfile, &filetmp)) {
-					httpreterr(ucid, http_sret404, 404);
-					return pPkg->HasKeepAlive();
-				}
-				size_t poslen = answer.size(), sizehead;
-				sprintf(tmp, "Content-Length: %9d\r\n\r\n", (int)filetmp.size());
-				answer.add(tmp, strlen(tmp));
-				sizehead = answer.size();
-				if (HTTPENCODE_DEFLATE == necnode) {
-					if (Z_OK != ec::ws_encode_zlib(filetmp.data(), filetmp.size(), &answer)) {
-						if (_plog)
-							_plog->add(CLOG_DEFAULT_ERR, "ucid %u ws_encode_zlib failed", ucid);
-						return false;
+				if (rangsize > EC_MAX_WSMSG_SIZE)
+					rangsize = EC_MAX_WSMSG_SIZE;
+				if (!rangpos && !rangsize) { // get all
+					if (flen > EC_MAX_WSMSG_SIZE) {
+						httpreterr(ucid, http_sret404outsize, 404);
+						return pPkg->HasKeepAlive();
 					}
-					filetmp.~vector();
-					sprintf(tmp, "Content-Length: %9d\r\n\r\n", (int)(answer.size() - sizehead));
-					memcpy(answer.data() + poslen, tmp, strlen(tmp));	// reset Content-Length	
-					if (!bGet)
-						answer.set_size(sizehead);
+					else
+						return DoGet(ucid, _pmime, sfile, pPkg);
 				}
-				else {
-					if (bGet)
-						answer.add(filetmp.data(), filetmp.size());
-				}
-
-				if (_plog)
-					_plog->add(CLOG_DEFAULT_MSG, "write ucid %u size %zu", ucid, answer.size());
-				return sendbyucid(ucid, answer.data(), answer.size()) > 0;
+				return DoGetRang(ucid, _pmime, sfile, pPkg, rangpos, rangsize, flen);
 			}
 
 			void httpreterr(unsigned int ucid, const char* sret, int errcode)
@@ -1088,9 +1063,177 @@ namespace ec {
 				pws->_status |= EC_PROTOC_ST_WORK;
 				return ns > 0;
 			}
+		private:
+			bool DoHead(uint32_t ucid, const char* sfile, http_pkg* pPkg)
+			{
+				char tmp[4096];
+				const char* sc;
+				tmp[0] = '\0';
+				long long flen = ec::IO::filesize(sfile);
+				if (flen < 0) {
+					httpreterr(ucid, http_sret404, 404);
+					return pPkg->HasKeepAlive();
+				}
+				vector<char> answer(1024 * 32, true, _pmem);
+				sc = "HTTP/1.1 200 ok\r\n";
+				answer.add(sc, strlen(sc));
+
+				sc = "Server: eclib websocket server\r\n";
+				answer.add(sc, strlen(sc));
+
+				if (pPkg->HasKeepAlive()) {
+					sc = "Connection: keep-alive\r\n";
+					answer.add(sc, strlen(sc));
+				}
+
+				sc = "Accept-Ranges: bytes\r\n";
+				answer.add(sc, strlen(sc));
+
+				sprintf(tmp, "Content-Length: %lld\r\n\r\n", flen);
+				answer.add(tmp, strlen(tmp));
+				if (_plog) {
+					_plog->add(CLOG_DEFAULT_DBG, "http head write ucid %u size %zu", ucid, answer.size());
+					_plog->addstr(CLOG_DEFAULT_DBG, answer.data(), answer.size());
+				}
+				return sendbyucid(ucid, answer.data(), answer.size()) > 0;
+			}
+
+			static bool iszipfile(const char *sext) {
+				const char* s[] = { ".zip",".rar",".tar",".7z",".gz" };
+				size_t i = 0;
+				for (i = 0; i < sizeof(s) / sizeof(const char*); i++) {
+					if (ec::str_ieq(sext, s[i]))
+						return true;
+				}
+				return false;
+			}
+
+			bool DoGet(uint32_t ucid, ec::mimecfg* pmine, const char* sfile, http_pkg* pPkg)
+			{
+				char tmp[4096];
+				const char* sc;
+				tmp[0] = '\0';
+
+				vector<char> answer(1024 * 32, true, _pmem);
+				sc = "HTTP/1.1 200 ok\r\n";
+				answer.add(sc, strlen(sc));
+
+				sc = "Server: eclib websocket server\r\n";
+				answer.add(sc, strlen(sc));
+
+				if (pPkg->HasKeepAlive()) {
+					sc = "Connection: keep-alive\r\n";
+					answer.add(sc, strlen(sc));
+				}
+				char sminetype[32] = { 0 };
+				const char* sext = file_extname(sfile);
+				if (sext && *sext && pmine->getmime(sext, tmp, sizeof(tmp))) {
+					answer.add("Content-type: ", 13);
+					answer.add(tmp, strlen(tmp));
+					answer.add("\r\n", 2);
+					size_t ipos = 0;
+					ec::str_getnextstring('/', tmp, strlen(tmp), ipos, sminetype, sizeof(sminetype));
+				}
+				else {
+					sc = "Content-type: application/octet-stream\r\n";
+					answer.add(sc, strlen(sc));
+				}
+				vector<char>	filetmp(1024 * 16, true, _pmem);
+				if (!IO::LckRead(sfile, &filetmp)) {
+					httpreterr(ucid, http_sret404, 404);
+					return pPkg->HasKeepAlive();
+				}
+				int necnode = HTTPENCODE_NONE;
+				if (filetmp.size() > 1024 && (ec::str_ieq(sminetype, "text") || (ec::str_ieq(sminetype, "application") && !iszipfile(sext)))
+					&& pPkg->GetHeadFiled("Accept-Encoding", tmp, sizeof(tmp))) {
+					char sencode[16] = { 0 };
+					size_t pos = 0;
+					while (ec::str_getnext(";,", tmp, strlen(tmp), pos, sencode, sizeof(sencode))) {
+						if (!ec::str_icmp("deflate", sencode)) {
+							sc = "Content-Encoding: deflate\r\n";
+							answer.add(sc, strlen(sc));
+							necnode = HTTPENCODE_DEFLATE;
+							break;
+						}
+					}
+				}
+				if (HTTPENCODE_DEFLATE == necnode) {
+					size_t poslen = answer.size(), sizecl;
+					sprintf(tmp, "Content-Length: %9zu\r\n\r\n", filetmp.size());
+					sizecl = strlen(tmp);
+					answer.add(tmp, sizecl);
+
+					if (Z_OK != ec::ws_encode_zlib(filetmp.data(), filetmp.size(), &answer)) {
+						if (_plog)
+							_plog->add(CLOG_DEFAULT_ERR, "ucid %u ws_encode_zlib failed", ucid);
+						return false;
+					}
+					filetmp.~vector();
+					sprintf(tmp, "Content-Length: %9zu\r\n\r\n", (answer.size() - poslen - sizecl));
+					size_t z1 = strlen(tmp);
+					while (z1 < sizecl) {
+						tmp[z1] = '\x20';
+						z1++;
+						tmp[z1] = '\0';
+					}
+					memcpy(answer.data() + poslen, tmp, sizecl);	// reset Content-Length
+				}
+				else {
+					sprintf(tmp, "Content-Length: %zu\r\n\r\n", filetmp.size());
+					answer.add(tmp, strlen(tmp));
+					answer.add(filetmp.data(), filetmp.size());
+				}
+				if (_plog)
+					_plog->add(CLOG_DEFAULT_DBG, "http write ucid %u size %zu", ucid, answer.size());
+				return sendbyucid(ucid, answer.data(), answer.size()) > 0;
+			}
+
+			bool DoGetRang(uint32_t ucid, ec::mimecfg* pmine, const char* sfile, http_pkg* pPkg, int64_t lpos, int64_t lsize, int64_t lfilesize)
+			{
+				char tmp[4096];
+				const char* sc;
+				tmp[0] = '\0';
+
+				vector<char> answer(1024 * 32, true, _pmem);
+				sc = "HTTP/1.1 206 Partial Content\r\n";
+				answer.add(sc, strlen(sc));
+
+				sc = "Server: eclib websocket server\r\n";
+				answer.add(sc, strlen(sc));
+
+				if (pPkg->HasKeepAlive()) {
+					sc = "Connection: keep-alive\r\n";
+					answer.add(sc, strlen(sc));
+				}
+				sc = "Accept-Ranges: bytes\r\n";
+				answer.add(sc, strlen(sc));
+
+				const char* sext = file_extname(sfile);
+				if (sext && *sext && pmine->getmime(sext, tmp, sizeof(tmp))) {
+					answer.add("Content-type: ", 13);
+					answer.add(tmp, strlen(tmp));
+					answer.add("\r\n", 2);
+				}
+				else {
+					sc = "Content-type: application/octet-stream\r\n";
+					answer.add(sc, strlen(sc));
+				}
+				vector<char>	filetmp(1024 * 32, true, _pmem);
+				if (!IO::LckRead(sfile, &filetmp, lpos, lsize)) {
+					httpreterr(ucid, http_sret404, 404);
+					return pPkg->HasKeepAlive();
+				}
+
+				snprintf(tmp, sizeof(tmp), "Content-Range: bytes %lld-%lld/%lld\r\n", (long long)lpos, (long long)(lpos + filetmp.size() - 1), (long long)lfilesize);
+				answer.add(tmp, strlen(tmp));
+				snprintf(tmp, sizeof(tmp), "Content-Length: %zu\r\n\r\n", filetmp.size());
+				answer.add(tmp, strlen(tmp));
+
+				answer.add(filetmp.data(), filetmp.size());
+				if (_plog)
+					_plog->add(CLOG_DEFAULT_DBG, "http write rang rang %lld-%lld/%lld", (long long)lpos, (long long)(lpos + filetmp.size() - 1), (long long)lfilesize);
+				return sendbyucid(ucid, answer.data(), answer.size()) > 0;
+			}
 		};
 	}//tcp
 }// ec
-
-
-
