@@ -291,7 +291,7 @@ namespace ec
 				ps->ucid = p->ucid;
 				ps->fd = p->fd;
 				ps->upos = p->uhead;
-				ps->usendsize = p->usendsize;
+				ps->usendsize = p->pkg[p->uhead].sizedone;
 				ps->pd = p->pkg[p->uhead].pd;
 				ps->usize = p->pkg[p->uhead].size;
 				return true;
@@ -340,9 +340,9 @@ namespace ec
 				pi->errnum = 0;// reset error counter
 				if (ps->usendsize == ps->usize)//complete
 				{
-					pi->uhead = (pi->uhead + 1) % XPOLL_SEND_PKG_NUM;//next
 					pi->lasterr = 0;
-					pi->usendsize = 0;
+					reset_xpoll_pkgitem(&(pi->pkg[pi->uhead]));
+					pi->uhead = (pi->uhead + 1) % XPOLL_SEND_PKG_NUM;//next
 					_slock.unlock();
 					add_event(ps->ucid, XPOLL_EVT_OPT_SEND, XPOLL_EVT_ST_OK, ps->pd, ps->usendsize);
 					if (pi->uhead != pi->utail)
@@ -350,7 +350,7 @@ namespace ec
 					return nret;
 				}
 				else {
-					pi->usendsize = ps->usendsize;
+					pi->pkg[pi->uhead].sizedone = ps->usendsize;
 					nret = 1;
 				}
 			}
@@ -472,11 +472,9 @@ namespace ec
 		}
 		inline void close_ucid(uint32_t ucid) // close ucid graceful,send all unsend messages
 		{
-			tcp_post(ucid, nullptr, 0, 100);
+			_ppoll->close_ucid(ucid);
 		}
-		inline void disconnect(uint32_t ucid) {
-			_ppoll->remove(ucid);
-		}
+
 	protected:
 		memory * _pmem;
 		xpoll * _ppoll;
@@ -564,6 +562,10 @@ namespace ec
 		ec::Array<_THREAD*, MAX_XPOLLTCPSRV_THREADS> _workers;
 		int     _nerr_emfile_count;
 	public:
+		void LogReadMemeInfo(const char* swho) {
+			if (_plog)
+				_poll.logmeminfo(swho);
+		}
 		bool start(uint16_t port, int workthreadnum, const char* sip = nullptr)
 		{
 			if (IsRun())

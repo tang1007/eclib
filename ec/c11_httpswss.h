@@ -87,11 +87,11 @@ namespace ec {
 			static_cast<_CLS*>(this)->onwsread(ucid, bFinal, wsopcode, pdata, size);
 		}
 		void dodisconnect(uint32_t ucid) {
-			base_::disconnect(ucid);
+			base_::close_ucid(ucid);
 		};
 		int  dosend(uint32_t ucid, vector<uint8_t>* pvd, int timeovermsec = 100)
 		{
-			if (!base_::tls_post(ucid, pvd->data(), pvd->size(), timeovermsec))
+			if (!base_::tls_send(ucid, pvd->data(), pvd->size(), timeovermsec))
 				return -1;
 			return (int)pvd->size();
 		}

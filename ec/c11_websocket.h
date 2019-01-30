@@ -1194,7 +1194,7 @@ namespace ec
 						_plog->add(CLOG_DEFAULT_ERR, "ucid %u ws_encode_zlib failed", ucid);
 					return false;
 				}
-				filetmp.~vector();
+				filetmp.clear(true);
 				sprintf(tmp, "Content-Length: %9d\r\n\r\n", (int)(answer.size() - sizehead));
 				memcpy(answer.data() + poslen, tmp, strlen(tmp));	// reset Content-Length	
 				if (!bGet)
@@ -1204,7 +1204,7 @@ namespace ec
 				if (bGet)
 					answer.add((const uint8_t*)filetmp.data(), filetmp.size());
 			}
-									
+
 			if (_plog)
 				_plog->add(CLOG_DEFAULT_MSG, "write ucid %u size %zu", ucid, answer.size());
 			return http_send(ucid, &answer) > 0;			

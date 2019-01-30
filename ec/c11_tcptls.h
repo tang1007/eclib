@@ -108,7 +108,7 @@ namespace ec {
 		tls_srvca * _pca;
 		sessiontlsmap* _psss;
 	public:
-		bool tls_post(uint32_t ucid, const void* pdata, size_t size, int waitmsec = 100)
+		bool tls_send(uint32_t ucid, const void* pdata, size_t size, int waitmsec = 100)
 		{
 			ec::unique_spinlock lck(_psss->getcs());
 			vector<uint8_t> pkg(128 * (size / TLS_CBCBLKSIZE) + size + 256 - size % 128, base_::_pmem);
@@ -161,7 +161,7 @@ namespace ec {
 		void onsend(uint32_t ucid, int nstatus, void* pdata, size_t size) //send complete event
 		{
 			if (pdata)
-				base_::_pmem->mem_free(pdata);
+				base_::_pmem->mem_free(pdata, true);
 			static_cast<_CLS*>(this)->onsendcomplete(ucid, nstatus);
 		}
 		inline void onself(uint32_t ucid, int optcode, void* pdata, size_t size) {

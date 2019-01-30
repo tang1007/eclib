@@ -639,6 +639,7 @@ namespace ec
 				p += (int)ulen + 5;
 			}
 			_pkgtcp.erase(0, _pkgtcp.size() - nl);
+			_pkgtcp.shrink(0);
 			return nret;
 		}
 	protected:
@@ -967,8 +968,7 @@ namespace ec
 				p += (int)ulen + 4;
 			}
 			_pkgm.erase(0, _pkgm.size() - nl);
-			if (!_pkgm.size())
-				_pkgm.clear(size_t(0));
+			_pkgm.shrink(0);
 			return nret;
 		}
 	};
@@ -1335,7 +1335,7 @@ namespace ec
 						return -1;
 					}
 					_bhandshake_finished = true;
-					return TLS_SESSION_HKOK;
+					nret = TLS_SESSION_HKOK;
 					break;
 				default:
 					if (_plog)
@@ -1346,8 +1346,7 @@ namespace ec
 				p += (int)ulen + 4;
 			}
 			_pkgm.erase(0, _pkgm.size() - nl);
-			if (!_pkgm.size())
-				_pkgm.clear(size_t(0));
+			_pkgm.shrink(0);			
 			return nret;
 		}
 	};

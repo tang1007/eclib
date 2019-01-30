@@ -34,7 +34,8 @@ namespace ec {
 			size_t mblksize = 0, size_t mblknum = 0,
 			size_t lblksize = 0, size_t lblknum = 0,
 			spinlock* pmutex = nullptr
-		) : _ps(nullptr), _pm(nullptr), _pl(nullptr), _pmutex(pmutex), _stks(sblknum), _stkm(mblknum), _stkl(lblknum)
+		) : _ps(nullptr), _pm(nullptr), _pl(nullptr), _pmutex(pmutex), _stks(sblknum), _stkm(mblknum), _stkl(lblknum),
+			_uerr_s(0), _uerr_m(0), _uerr_l(0)
 		{
 			_sz_s = sblksize;// small memory blocks,Pre-allocation
 			if (_sz_s % (sizeof(size_t) * 2))
@@ -71,29 +72,77 @@ namespace ec {
 		void *mem_malloc(size_t size)
 		{
 			unique_spinlock lck(_pmutex);
-			return _malloc(size);
+			size_t sizeout = 0;
+			return _malloc(size, sizeout);
 		}
-		void mem_free(void *pmem)
+		void mem_free(void *pmem, bool bsafe = false)
 		{
-			if (!pmem)
-				return;
 			unique_spinlock lck(_pmutex);
-			size_t pa = (size_t)pmem;
-			if (_ps && pa >= (size_t)_ps  && pa < (size_t)_ps + _sz_s * _blk_s)
-				_stks.push(pmem);
-			else if (_pm &&  pa >= (size_t)_pm  && pa < (size_t)_pm + _sz_m * _blk_m)
-				_stkm.push(pmem);
-			else if (_pl &&  pa >= (size_t)_pl  && pa < (size_t)_pl + _sz_l * _blk_l)
-				_stkl.push(pmem);
-			else {
-				free(pmem);
-				_nsys_malloc--;
-			}
+			return _free(pmem, bsafe);
 		}
 
 		void *malloc(size_t size, size_t &outsize)
 		{
 			unique_spinlock lck(_pmutex);
+			return _malloc(size, outsize);
+		}
+
+		void* mem_calloc(size_t count, size_t size) {
+			void* p = mem_malloc(count * size);
+			if (p)
+				memset(p, 0, count * size);
+			return p;
+		}
+
+		struct t_mem_info {
+			int sysblks, err_s, err_m, err_l;
+			int sz_s, sz_m, sz_l;    // blocks size
+			int blk_s, blk_m, blk_l; // blocks number
+			int stk_s, stk_m, stk_l; // not use in stacks
+		};
+
+		void getinfo(t_mem_info *pinfo) {
+			pinfo->sysblks = _nsys_malloc;
+			pinfo->err_s = _uerr_s;
+			pinfo->err_m = _uerr_m;
+			pinfo->err_l = _uerr_l;
+			pinfo->sz_s = (int)_sz_s;
+			pinfo->sz_m = (int)_sz_m;
+			pinfo->sz_l = (int)_sz_l;
+			pinfo->blk_s = (int)_blk_s;
+			pinfo->blk_m = (int)_blk_m;
+			pinfo->blk_l = (int)_blk_l;
+			pinfo->stk_s = (int)_stks.size();
+			pinfo->stk_m = (int)_stkm.size();
+			pinfo->stk_l = (int)_stkl.size();
+		}
+	private:
+		void *_ps, *_pm, *_pl;
+		spinlock* _pmutex;
+		size_t _sz_s, _sz_m, _sz_l;  //blocks size
+		size_t _blk_s, _blk_m, _blk_l; // blocks number
+		ec::stack<void*> _stks;     // small memory blocks
+		ec::stack<void*> _stkm; // medium memory blocks
+		ec::stack<void*> _stkl; // large memory blocks		
+		int _nsys_malloc; //malloc memery blocks
+		int _uerr_s, _uerr_m, _uerr_l;// free error
+
+		bool malloc_block(size_t blksize, size_t blknum, void * &ph, ec::stack<void*> &stk)
+		{
+			if (!blknum || !blksize)
+				return false;
+			size_t i;
+			ph = ::malloc(blksize * blknum);
+			if (ph) {
+				uint8_t *p = (uint8_t *)ph;
+				for (i = 0; i < blknum; i++)
+					stk.add(p + (blknum - 1 - i) * blksize);
+			}
+			return ph != nullptr;
+		}
+
+		void *_malloc(size_t size, size_t &outsize)
+		{
 			void* pr = nullptr;
 			if (size <= _sz_s) {
 				if (_stks.pop(pr)) {
@@ -134,127 +183,38 @@ namespace ec {
 			return pr;
 		}
 
-		void* mem_realloc(void *pmem, size_t size)
+		void _free(void *pmem, bool bsafe = false)
 		{
 			if (!pmem)
-				return mem_malloc(size);
-			if (!size) {
-				mem_free(pmem);
-				return nullptr;
-			}
-			if (1) {
-				unique_spinlock lck(_pmutex);
-				size_t pa = (size_t)pmem;
-				if (_ps && pa >= (size_t)_ps  && pa < (size_t)_ps + _sz_s * _blk_s) {
-					if (size <= _sz_s)
-						return pmem;
-					void* p = _malloc(size);
-					if (!p)
-						return nullptr;
-					memcpy(p, pmem, _sz_s);
+				return;
+			size_t pa = (size_t)pmem;
+			if (_ps && pa >= (size_t)_ps  && pa < (size_t)_ps + _sz_s * _blk_s) {
+				if (!bsafe || !isExist(&_stks, pmem))
 					_stks.push(pmem);
-					return p;
-				}
-				else if (_pm &&  pa >= (size_t)_pm  && pa < (size_t)_pm + _sz_m * _blk_m) {
-					if (size <= _sz_m)
-						return pmem;
-					void* p = _malloc(size);
-					if (!p)
-						return nullptr;
-					memcpy(p, pmem, _sz_m);
+				else _uerr_s++;
+			}
+			else if (_pm &&  pa >= (size_t)_pm  && pa < (size_t)_pm + _sz_m * _blk_m) {
+				if (!bsafe || !isExist(&_stkm, pmem))
 					_stkm.push(pmem);
-					return p;
-				}
-				else if (_pl &&  pa >= (size_t)_pl  && pa < (size_t)_pl + _sz_l * _blk_l) {
-					if (size <= _sz_l)
-						return pmem;
-					void* p = _malloc(size);
-					if (!p)
-						return nullptr;
-					memcpy(p, pmem, _sz_l);
+				else _uerr_m++;
+			}
+			else if (_pl &&  pa >= (size_t)_pl  && pa < (size_t)_pl + _sz_l * _blk_l) {
+				if (!bsafe || !isExist(&_stkl, pmem))
 					_stkl.push(pmem);
-					return p;
-				}
-				else
-					return ::realloc(pmem, size);
+				else _uerr_l++;
 			}
-			return nullptr;
+			else {
+				::free(pmem);
+				_nsys_malloc--;
+			}
 		}
-
-		void* mem_calloc(size_t count, size_t size) {
-			void* p = mem_malloc(count * size);
-			if (p)
-				memset(p, 0, count * size);
-			return p;
-		}
-		bool info(int idx, size_t *left, size_t *bufsize) {
-			switch (idx) {
-			case 0:*left = _stks.size(); *bufsize = _ps ? _stks.capacity() : 0; break;
-			case 1:*left = _stkm.size(); *bufsize = _pm ? _stkm.capacity() : 0; break;
-			case 2:*left = _stkl.size(); *bufsize = _pl ? _stkl.capacity() : 0; break;
-			default:
-				*left = 0;
-				*bufsize = 0;
-				return false;
+		bool isExist(ec::stack<void*> *pstk, void* p) {
+			size_t i, n = pstk->size();
+			for (i = 0u; i < n; i++) {
+				if (pstk->at(i) == p)
+					return true;
 			}
-			return true;
-		}
-		inline int get_sys_mlloc() {
-			return _nsys_malloc;
-		}
-	private:
-		void *_ps, *_pm, *_pl;
-		spinlock* _pmutex;
-		size_t _sz_s, _sz_m, _sz_l;  //blocks size
-		size_t _blk_s, _blk_m, _blk_l; // blocks number
-		ec::stack<void*> _stks;     // small memory blocks
-		ec::stack<void*> _stkm; // medium memory blocks
-		ec::stack<void*> _stkl; // large memory blocks		
-		int _nsys_malloc; //malloc memery blocks
-
-		bool malloc_block(size_t blksize, size_t blknum, void * &ph, ec::stack<void*> &stk)
-		{
-			if (!blknum || !blksize)
-				return false;
-			size_t i;
-			ph = ::malloc(blksize * blknum);
-			if (ph) {
-				uint8_t *p = (uint8_t *)ph;
-				for (i = 0; i < blknum; i++)
-					stk.add(p + (blknum - 1 - i) * blksize);
-			}
-			return ph != nullptr;
-		}
-		void *_malloc(size_t size)
-		{
-			void* pr = nullptr;
-			if (size <= _sz_s) {
-				if (_stks.pop(pr))
-					return pr;
-			}
-			if (size <= _sz_m) {
-				if (!_pm)
-					malloc_block(_sz_m, _blk_m, _pm, _stkm);
-				if (_stkm.pop(pr))
-					return pr;
-				if (!_pl)
-					malloc_block(_sz_l, _blk_l, _pl, _stkl);
-				if (_pl && _stkl.size() > _stkl.capacity() / 2u) {
-					if (_stkl.pop(pr))
-						return pr;
-				}
-			}
-			else if (size <= _sz_l) {
-				if (!_pl)
-					malloc_block(_sz_l, _blk_l, _pl, _stkl);
-				if (_stkl.pop(pr))
-					return pr;
-			}
-
-			pr = ::malloc(size);
-			if (pr)
-				_nsys_malloc++;
-			return pr;
+			return false;
 		}
 	};
 
@@ -263,15 +223,13 @@ namespace ec {
 	public:
 		auto_buffer(memory* pmem = nullptr) :_pmem(pmem), _pbuf(0), _size(0) {
 		}
-		auto_buffer(size_t size, memory* pmem = nullptr) :_pmem(pmem), _size(size){
+		auto_buffer(size_t size, memory* pmem = nullptr) :_pmem(pmem), _size(size) {
 			if (_pmem)
-				_pbuf = _pmem->mem_realloc(nullptr, _size);
-			else 
+				_pbuf = _pmem->mem_malloc(_size);
+			else
 				_pbuf = ::malloc(_size);
-			if (!_pbuf) {
-				_pbuf = nullptr;
-				_size = 0;
-			}
+			if (!_pbuf)				
+				_size = 0;			
 		}
 		~auto_buffer() {
 			clear();
@@ -298,19 +256,18 @@ namespace ec {
 			}
 		}
 		inline void* resize(size_t rsz) {
-			if (rsz > _size) {
-				void* pt = nullptr;
-				if (_pmem) 
-					pt = _pmem->mem_realloc(_pbuf, rsz);
-				else
-					pt = ::realloc(_pbuf, rsz);
-				if (!pt) {
-					clear();
-					return nullptr;
-				}
-				_pbuf = pt;
-				_size = rsz;
-			}
+			clear();
+			if (!rsz) 
+				return nullptr;			
+			void* pt = nullptr;
+			if (_pmem)
+				pt = _pmem->mem_malloc(rsz);
+			else
+				pt = ::malloc(rsz);
+			if (!pt)
+				return nullptr;
+			_pbuf = pt;
+			_size = rsz;
 			return _pbuf;
 		}
 	};

@@ -2,7 +2,7 @@
 \file c11_xpoll.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.5.28
+\update 2019.1.29
 
 eclibe xpoll for windows & linux, send data with zero copy
 
@@ -181,17 +181,24 @@ namespace ec {
 #endif		
 		uint32_t uflag; //d0=1:read event not done; 0：done ,can read continue
 		uint32_t uhead; // get position, point first data and current send message
-		uint32_t usendsize;//current send bytes
+		bool     bdel;  // true delete 
 		uint32_t utail; //add position, point empty
 		time_t	 lasterr; //last time send failed
 		time_t   timeconnect; // TCP connect time
 		time_t   timelastcom; //
 		char     sinfo[64];// '\n' seperate, now just has "ip:192.168.1.41\n"
 		struct t_pkg {
-			uint32_t size; //message bytes size
-			uint8_t  *pd;  //message
-		} pkg[XPOLL_SEND_PKG_NUM]; //FIFO buffer
+			uint32_t sizedone;//current send bytes
+			uint32_t size;    //message bytes size
+			uint8_t  *pd;     //message
+		} pkg[XPOLL_SEND_PKG_NUM]; //FIFO buffer		
 	};
+
+	inline void reset_xpoll_pkgitem(t_xpoll_item::t_pkg* p) {
+		p->sizedone = 0;
+		p->size = 0;
+		p->pd = nullptr;
+	}
 
 	struct t_xpoll_send // send item
 	{
@@ -216,6 +223,7 @@ namespace ec {
 		uint8_t  res[2];//res,set 0
 		void*    pdata; //if ucopt==read,pdata is xpoll buffer,else is user buffer
 	};
+
 #if (!defined _WIN32) || (_WIN32_WINNT >= 0x0600)
 	template<>
 	struct key_equal<uint32_t, t_xpoll_item>
@@ -225,6 +233,7 @@ namespace ec {
 			return key == val.ucid;
 		}
 	};
+
 	class xpoll : public cThread
 	{
 	public:
@@ -245,7 +254,6 @@ namespace ec {
 		ec::memory _memmap;// memory for _map 
 		bool _fdchanged;   //fds changed lock with _map
 		ec::map<uint32_t, t_xpoll_item> _map;
-		ec::map<uint32_t, t_xpoll_item>::iterator _posnext;
 
 		ec::vector<pollfd> _pollfd;
 		ec::vector<uint32_t> _pollkey;
@@ -255,14 +263,13 @@ namespace ec {
 		cLog* _plog;
 	public:
 		xpoll(uint32_t maxconnum, cLog* plog = nullptr) :
-			_cpevt(maxconnum * 5, &_cpevtlock),
-			_memread(XPOLL_READ_BLK_SIZE, 16 + maxconnum / 8, 0, 0, 0, 0, &_memread_lock),
-			_memmap(ec::map<uint32_t, t_xpoll_item>::size_node(), maxconnum),
+			_cpevt(maxconnum * 4, &_cpevtlock),
+			_memread(XPOLL_READ_BLK_SIZE, 16 + maxconnum / 16, 0, 0, 0, 0, &_memread_lock),
+			_memmap(ec::map<uint32_t, t_xpoll_item>::size_node(), maxconnum / 4),
 			_map(11 + (uint32_t)(maxconnum / 3), &_memmap),
-			_pollfd(maxconnum),
-			_pollkey(maxconnum), _unextid(100), _umaxconnects(maxconnum), _plog(plog)
+			_pollfd(maxconnum / 4, true),
+			_pollkey(maxconnum / 4, true), _unextid(100), _umaxconnects(maxconnum), _plog(plog)
 		{
-			_posnext = 0;
 			_fdchanged = false;
 		}
 		bool open()
@@ -306,7 +313,7 @@ namespace ec {
 					t.ucid = v.ucid;
 					t.timelastcom = v.timelastcom;
 					pout->add(t);
-				}				
+				}
 			});
 			_maplock.unlock();
 			return pout->size();
@@ -323,18 +330,17 @@ namespace ec {
 			add_evt_wait(evt);
 			_evtiocp.SetEvent();
 		}
+
 		bool add_fd(SOCKET fd, const char* sinfo) //add to pool
 		{
-			_maplock.lock();
+			ec::unique_spinlock lck(&_maplock);
 			uint32_t ucid = alloc_ucid();
-			if (!ucid) {
-				_maplock.unlock();
-				return false; // return false if full
-			}
-			_maplock.unlock();
+			if (!ucid)
+				return false; // return false if full			
 			void *pinfo = _memread.mem_malloc(XPOLL_READ_BLK_SIZE);
 			if (!pinfo)
-				return false;			
+				return false;
+
 			t_xpoll_item t; //add to map
 			memset(&t, 0, sizeof(t));
 			t.ucid = ucid;
@@ -342,51 +348,67 @@ namespace ec {
 			t.uflag = 1; //set read event not done,can't read continue
 			t.timeconnect = ::time(0);
 			t.timelastcom = t.timeconnect;
-			_maplock.lock();
+
 			if (!_map.set(ucid, t)) {
-				_maplock.unlock();				
-				return false; 
-			}			
-			_maplock.unlock();
-			str_ncpy((char*)pinfo, sinfo, XPOLL_READ_BLK_SIZE - 1);
+				_memread.mem_free(pinfo);
+				return false;
+			}
+			str_lcpy((char*)pinfo, sinfo, XPOLL_READ_BLK_SIZE);
 			add_event(ucid, XPOLL_EVT_OPT_READ, XPOLL_EVT_ST_CONNECT, pinfo, strlen((char*)pinfo) + 1);//add one connect event
 			_fdchanged = true;
 			_udpevt.set_event();
 			return true;
 		}
-		inline void remove(uint32_t ucid) // remove from pool
+
+		inline void close_ucid(uint32_t ucid) // remove from pool, just set flag
 		{
-			do_delete(ucid, XPOLL_EVT_ST_CLOSE);
+			ec::unique_spinlock lck(&_maplock);
+			t_xpoll_item* pi = _map.get(ucid);
+			if (pi) {
+				pi->bdel = true;
+				_fdchanged = true;
+				_udpevt.set_event();
+			}
 		}
+
 		int post_msg(uint32_t ucid, void *pd, size_t size)//post message,return -1:error  0:full ; 1:one message post
 		{
 			ec::unique_spinlock lck(&_maplock);
 			t_xpoll_item* pi = _map.get(ucid);
-			if (!pi)
+			if (!pi || pi->bdel)
 				return -1;
+			if (!size) { // delete
+				pi->bdel = true;
+				_udpevt.set_event();
+				return 1;
+			}
 			if ((pi->utail + 1) % XPOLL_SEND_PKG_NUM == pi->uhead) //full
 				return 0;
+			pi->pkg[pi->utail].sizedone = 0;
 			pi->pkg[pi->utail].size = (uint32_t)size;
 			pi->pkg[pi->utail].pd = (uint8_t*)pd;
 			pi->utail = (pi->utail + 1) % XPOLL_SEND_PKG_NUM;
 			_udpevt.set_event();
 			return 1;
 		}
+
 		int post_msg(uint32_t ucid, vector<uint8_t> *pvd)//post message,return -1:error  0:full ; 1:one message post
 		{
 			ec::unique_spinlock lck(&_maplock);
 			t_xpoll_item* pi = _map.get(ucid);
-			if (!pi)
+			if (!pi || pi->bdel)
 				return -1;
 			if ((pi->utail + 1) % XPOLL_SEND_PKG_NUM == pi->uhead) //full
 				return 0;
+			pi->pkg[pi->utail].sizedone = 0;
 			pi->pkg[pi->utail].size = (uint32_t)pvd->size();
 			pi->pkg[pi->utail].pd = (uint8_t*)pvd->detach_buf();
 			pi->utail = (pi->utail + 1) % XPOLL_SEND_PKG_NUM;
 			_udpevt.set_event();
 			return 1;
 		}
-		int sendnodone(uint32_t ucid)
+
+		int sendnodone(uint32_t ucid)// get the no send pkgs number
 		{
 			ec::unique_spinlock lck(&_maplock);
 			t_xpoll_item* pi = _map.get(ucid);
@@ -399,6 +421,7 @@ namespace ec {
 			}
 			return (int)n;
 		}
+
 		bool get_event(t_xpoll_event *pout)// get one complete event
 		{
 			_evtiocp.Wait(100);
@@ -409,6 +432,7 @@ namespace ec {
 			}
 			return false;
 		}
+
 		void free_event(t_xpoll_event *pi)// when done event by get_event,must call free_event
 		{
 			if (pi->opt != XPOLL_EVT_OPT_READ)
@@ -418,10 +442,10 @@ namespace ec {
 			if (p)
 				p->uflag &= ~(0x01); //set read done 
 			_maplock.unlock();
-			_memread.mem_free(pi->pdata);//recycle read memory			
+			_memread.mem_free(pi->pdata);//recycle read memory
 		}
-		inline bool has_event()
-		{
+
+		inline bool has_event() {
 			return !_cpevt.empty();
 		}
 
@@ -432,14 +456,14 @@ namespace ec {
 			t_xpoll_item* p = _map.get(ucid);
 			if (p) {
 				if (bset)
-					p->uflag |=  0x01 << nbit;
+					p->uflag |= 0x01 << nbit;
 				else
 					p->uflag &= ~(0x01 << nbit);
 			}
 			_maplock.unlock();
 		}
 
-		void get_ucid_byflag(time_t ltime, int nbit, int ntimeoversec,ec::vector<uint32_t> *pout)
+		void get_ucid_byflag(time_t ltime, int nbit, int ntimeoversec, ec::vector<uint32_t> *pout)
 		{
 			pout->clear();
 			if (nbit <= 0 || nbit > 31)
@@ -456,12 +480,27 @@ namespace ec {
 			}
 			_maplock.unlock();
 		}
+
 		size_t  size() {
 			size_t n = 0;
 			_maplock.lock();
 			n = _map.size();
 			_maplock.unlock();
 			return n;
+		}
+
+		void logmeminfo(const char* swho) {
+			if (!_plog)
+				return;
+			ec::memory::t_mem_info info;
+			memset(&info, 0, sizeof(info));
+			_memread.getinfo(&info);
+			if (info.err_s || info.err_m || info.err_l)
+				_plog->add(CLOG_DEFAULT_ERR, "% error,sysblks=%d,s=%d,m=%d,l=%d", swho, info.sysblks, info.err_s, info.err_m, info.err_l);
+			else
+				_plog->add(CLOG_DEFAULT_DBG, "%s infos,sysblks=%d,s=%d,m=%d,l=%d", swho, info.sysblks, info.err_s, info.err_m, info.err_l);
+			_plog->add(CLOG_DEFAULT_DBG, "%s:\n  s  %8d:%6d/%6d\n  m  %8d:%6d/%6d\n  l  %8d:%6d/%6d\n", swho, info.sz_s, info.stk_s, info.blk_s,
+				info.sz_m, info.stk_m, info.blk_m, info.sz_l, info.stk_l, info.blk_l);
 		}
 	private:
 		void make_pollfd()
@@ -492,14 +531,14 @@ namespace ec {
 			});
 			_fdchanged = false;
 		}
+
 		bool add_evt_wait(t_xpoll_event &evt)
 		{
 			bool bfull = false;
 			int i, nr = _cpevt.add(evt, &bfull);
-			if (nr > 0)
-			{
+			if (nr > 0) {
 				if (!bfull)
-					_evtcanadd.SetEvent();				
+					_evtcanadd.SetEvent();
 				return true;
 			}
 			else if (nr < 0)
@@ -508,8 +547,7 @@ namespace ec {
 				_evtiocp.SetEvent();
 				_evtcanadd.Wait(100);
 				nr = _cpevt.add(evt, &bfull);
-				if (nr > 0)
-				{
+				if (nr > 0) {
 					if (!bfull)
 						_evtcanadd.SetEvent();
 					return true;
@@ -517,6 +555,7 @@ namespace ec {
 			}
 			return false;
 		}
+
 		void add_close_event(uint32_t ucid, int status)
 		{
 			t_xpoll_event evt;
@@ -528,234 +567,6 @@ namespace ec {
 			_evtiocp.SetEvent();
 		}
 
-		bool get_send(uint32_t ucid, t_xpoll_send* ps)
-		{
-			ec::unique_spinlock lck(&_maplock);
-			t_xpoll_item* p = nullptr;
-			p = _map.get(ucid);
-			if (!p)
-				return false;
-			if (p->uhead != p->utail) //not empty
-			{
-				ps->ucid = p->ucid;
-				ps->fd = p->fd;
-				ps->upos = p->uhead;
-				ps->usendsize = p->usendsize;
-				ps->pd = p->pkg[p->uhead].pd;
-				ps->usize = p->pkg[p->uhead].size;
-				p->timelastcom = ::time(0);
-				return true;
-			}
-			return false;
-		}
-		int sendts(t_xpoll_send* ps) // return -1:error; 0:no send ; >0 send byte
-		{
-			int nret, ns = (int)(ps->usize - ps->usendsize);
-			if (ns < 0 || ps->usendsize > ps->usize) {
-				do_sendbyte(ps, -1);
-				return -1;
-			}
-			if (ns > 1024 * 64)
-				ns = 1024 * 64;
-#ifdef _WIN32            
-			nret = ::send(ps->fd, (char*)ps->pd + ps->usendsize, ns, 0);
-			if (-1 == nret) {
-				int nerr = WSAGetLastError();
-				if (WSAEWOULDBLOCK == nerr || WSAENOBUFS == nerr) {  // nonblocking  mode
-					do_sendbyte(ps, 0);
-					return 0;
-				}
-				if (_plog)
-					_plog->add(CLOG_DEFAULT_ERR, "ucid %u send error =%d", ps->ucid, nerr);
-			}
-#else
-			nret = ::send(ps->fd, (char*)ps->pd + ps->usendsize, ns, MSG_DONTWAIT | MSG_NOSIGNAL);
-			if (-1 == nret) {
-				if (errno == EAGAIN || errno == EWOULDBLOCK) { // nonblocking  mode
-					do_sendbyte(ps, 0);
-					return 0;
-				}
-				if (_plog)
-					_plog->add(CLOG_DEFAULT_ERR,"ucid %u send error =%d", ps->ucid, errno);				
-			}
-#endif
-			if (nret > 0)
-				ps->usendsize += nret; //add to send bytes
-			do_sendbyte(ps, nret);
-			return nret;
-		}
-
-		void do_delete(uint32_t ucid, uint8_t status)
-		{
-			t_xpoll_item t;
-			_maplock.lock();
-			t_xpoll_item* pi = _map.get(ucid);
-			if (!pi) {
-				_maplock.unlock();
-				return;
-			}
-
-			if (INVALID_SOCKET != pi->fd) {
-#ifdef _WIN32
-				shutdown(pi->fd, SD_BOTH);
-				::closesocket(pi->fd);
-#else
-				shutdown(pi->fd, SHUT_WR);
-				::close(pi->fd);
-#endif
-				pi->fd = INVALID_SOCKET;
-				add_close_event(ucid, status);
-			}
-
-			t = *pi;
-			_map.erase(ucid);// delete from map
-			_maplock.unlock();
-			t_xpoll_event evt;
-			while (t.uhead != t.utail) {
-				evt.ucid = ucid;
-				evt.ubytes = 0;
-				evt.opt = XPOLL_EVT_OPT_SEND;
-				evt.status = status;
-				evt.pdata = t.pkg[t.uhead].pd;
-				add_evt_wait(evt);
-				_evtiocp.SetEvent();
-				t.uhead = (t.uhead + 1) % XPOLL_SEND_PKG_NUM;
-			}
-			_fdchanged = true;
-		}
-		int  do_sendbyte(t_xpoll_send* ps, int nerr) //return 0:no more send data;  >0：has more send data
-		{
-			int nret = 0;
-			_maplock.lock();
-			t_xpoll_item* pi = _map.get(ps->ucid);
-			if (!pi) {
-				_maplock.unlock();
-				return 0;
-			}
-			if (nerr > 0) //success
-			{
-				pi->errnum = 0;// reset error counter
-				if (ps->usendsize == ps->usize)//complete
-				{
-					pi->uhead = (pi->uhead + 1) % XPOLL_SEND_PKG_NUM;//next
-					pi->lasterr = 0;
-					pi->usendsize = 0;
-					_maplock.unlock();
-					t_xpoll_event evt;
-					evt.ucid = ps->ucid;
-					evt.ubytes = ps->usendsize;
-					evt.opt = XPOLL_EVT_OPT_SEND;
-					evt.status = XPOLL_EVT_ST_OK;
-					evt.pdata = ps->pd;
-					add_evt_wait(evt);
-					_evtiocp.SetEvent();
-					if (pi->uhead != pi->utail)
-						nret = 1;
-					return nret;
-				}
-				else {
-					pi->usendsize = ps->usendsize;
-					nret = 1;
-				}
-			}
-			else if (nerr == 0)
-			{
-				pi->errnum++;
-				if (pi->errnum == 1)
-					pi->lasterr = ::time(0);
-				else if (pi->errnum > 2) {
-					time_t tcur = ::time(0);
-					if (pi->lasterr && (tcur - pi->lasterr) > 5) {
-						_maplock.unlock();
-						do_delete(ps->ucid, XPOLL_EVT_ST_ERR);
-						if (_plog)
-							_plog->add(CLOG_DEFAULT_ERR, "ucid %u send timeout", ps->ucid);
-						return 0;
-					}
-				}
-			}
-			else if (nerr < 0) {
-				_maplock.unlock();
-				do_delete(ps->ucid, XPOLL_EVT_ST_ERR);
-				return 0;
-			}
-			_maplock.unlock();
-			return nret;
-		}
-		void set_read_data_flag(uint32_t ucid, bool bhasdata)
-		{
-			ec::unique_spinlock lck(&_maplock);
-			t_xpoll_item* p = _map.get(ucid);
-			if (!p || (p->uflag & 0x01)) {
-				_maplock.unlock();
-				return;
-			}
-			if (bhasdata)
-				p->uflag |= 0x01; // set bit 0				
-			else
-				p->uflag &= ~(0x01);// clear bit0				
-		}
-#ifdef _WIN32
-		void do_read(uint32_t ucid, SOCKET fd)
-#else
-		void do_read(uint32_t ucid, int fd)
-#endif
-		{
-			_maplock.lock();
-			t_xpoll_item* p = _map.get(ucid);
-			if (!p || (p->uflag & 0x01)) {
-				_maplock.unlock();
-				return;
-			}
-			p->timelastcom = ::time(0);
-			_maplock.unlock();
-
-			t_xpoll_event evt;//读
-			evt.ucid = ucid;
-			evt.ubytes = 0;
-			evt.opt = XPOLL_EVT_OPT_READ;
-			evt.status = XPOLL_EVT_ST_OK;
-			evt.pdata = _memread.mem_malloc(XPOLL_READ_BLK_SIZE);
-			if (!evt.pdata)
-				return;
-#ifdef _WIN32
-			int nr = ::recv(fd, (char*)evt.pdata, XPOLL_READ_BLK_SIZE, 0);
-#else
-			int nr = ::recv(fd, (char*)evt.pdata, XPOLL_READ_BLK_SIZE, MSG_DONTWAIT);
-#endif
-			if (nr == 0) //close gracefully 
-			{
-				_memread.mem_free(evt.pdata);
-				do_delete(ucid, XPOLL_EVT_ST_CLOSE);
-				return;
-			}
-			else if (nr < 0) {
-#ifdef _WIN32
-				if (WSAEWOULDBLOCK == WSAGetLastError())
-					_memread.mem_free(evt.pdata);
-#else
-				if (errno == EAGAIN || errno == EWOULDBLOCK)
-					_memread.mem_free(evt.pdata);
-#endif
-				else {
-					_memread.mem_free(evt.pdata);
-					do_delete(ucid, XPOLL_EVT_ST_ERR);
-				}
-				return;
-			}
-			else //read event
-			{
-				evt.ubytes = nr;
-				set_read_data_flag(ucid, true);
-				if (add_evt_wait(evt))
-					_evtiocp.SetEvent();
-				else
-				{
-					set_read_data_flag(ucid, false);
-					_memread.mem_free(evt.pdata);//free memory
-				}
-			}
-		}
 		unsigned int alloc_ucid()
 		{
 			if (_map.size() >= _umaxconnects)
@@ -766,12 +577,12 @@ namespace ec {
 			}
 			return _unextid;// not 0
 		}
+
 	protected:
 		virtual	void dojob()
 		{
 			size_t i = 0;
 			int n;
-			t_xpoll_send ts;
 			make_pollfd();
 #ifdef _WIN32
 			n = WSAPoll(_pollfd.data(), (ULONG)_pollfd.size(), 200);
@@ -792,20 +603,16 @@ namespace ec {
 					continue;
 				}
 				if (p[i].revents & (POLLERR | POLLHUP | POLLNVAL)) { // error
-					do_delete(puid[i], XPOLL_EVT_ST_ERR);
+					_maplock.lock();
+					t_xpoll_item* p = _map.get(puid[i]);
+					if (p)
+						closexi(p);
+					_maplock.unlock();
 					continue;
 				}
-				nevtout = 0;
-				if (get_send(puid[i], &ts)) { //send first		
-					if (!ts.usize)
-						do_delete(puid[i], XPOLL_EVT_ST_CLOSE);// zero size msg will disconenct
-					else {
-						if (sendts(&ts) > 0) // not send complete 
-							nevtout = 1;
-					}
-				}
+				nevtout = do_send(puid[i]);
 				if (p[i].revents & POLLIN)  //read
-					do_read(puid[i], p[i].fd);
+					do_read(puid[i]);
 				if (nevtout)
 					p[i].events = POLLIN | POLLOUT;
 				else
@@ -813,6 +620,175 @@ namespace ec {
 				p[i].revents = 0;
 			}
 		};
+	private:
+		void do_read(uint32_t ucid)
+		{
+			ec::unique_spinlock lck(&_maplock);
+			t_xpoll_item* p = _map.get(ucid);
+			if (!p || (p->uflag & 0x01) || p->bdel)
+				return;
+			p->timelastcom = ::time(0);
+
+			t_xpoll_event evt;//读
+			evt.ucid = ucid;
+			evt.ubytes = 0;
+			evt.opt = XPOLL_EVT_OPT_READ;
+			evt.status = XPOLL_EVT_ST_OK;
+			evt.pdata = _memread.mem_malloc(XPOLL_READ_BLK_SIZE);
+			if (!evt.pdata)
+				return;
+#ifdef _WIN32
+			int nr = ::recv(p->fd, (char*)evt.pdata, XPOLL_READ_BLK_SIZE, 0);
+#else
+			int nr = ::recv(p->fd, (char*)evt.pdata, XPOLL_READ_BLK_SIZE, MSG_DONTWAIT);
+#endif
+			if (nr == 0) { //close gracefully 			
+				_memread.mem_free(evt.pdata);
+				closexi(p);
+				return;
+			}
+			else if (nr < 0) {
+#ifdef _WIN32
+				if (WSAEWOULDBLOCK == WSAGetLastError())
+					_memread.mem_free(evt.pdata);
+#else
+				if (errno == EAGAIN || errno == EWOULDBLOCK)
+					_memread.mem_free(evt.pdata);
+#endif
+				else {
+					_memread.mem_free(evt.pdata);
+					closexi(p);
+				}
+				return;
+			}
+
+			evt.ubytes = nr;//read event
+			p->uflag |= 0x01;
+			if (add_evt_wait(evt))
+				_evtiocp.SetEvent();
+			else {
+				p->uflag &= ~(0x01);
+				_memread.mem_free(evt.pdata);//free memory
+			}
+		}
+		int do_send(uint32_t ucid)// 返回 1 表示要继续发送
+		{
+			ec::unique_spinlock lck(&_maplock);
+			t_xpoll_item* p = nullptr;
+			p = _map.get(ucid);
+			if (!p)
+				return 0;
+			if (p->uhead == p->utail) { //empty
+				if (p->bdel)
+					closexi(p);
+				return 0;
+			}
+			if (p->pkg[p->uhead].size == 0) {
+				closexi(p);
+				return 0;
+			}
+			t_xpoll_item::t_pkg* ps = &(p->pkg[p->uhead]);
+			p->timelastcom = ::time(0);
+			int nret, ns = (int)(ps->size - ps->sizedone);
+			if (ns < 0 || ps->sizedone > ps->size) {
+				closexi(p);
+				return 0;
+			}
+#ifdef _WIN32
+			if (ns > 1024 * 64)
+				ns = 1024 * 64;
+			nret = ::send(p->fd, (char*)ps->pd + ps->sizedone, ns, 0);
+			if (-1 == nret) {
+				int nerr = WSAGetLastError();
+				if (WSAEWOULDBLOCK == nerr || WSAENOBUFS == nerr) {  // nonblocking  mode
+					dosendzero(p);
+					return 0;
+				}
+				if (_plog)
+					_plog->add(CLOG_DEFAULT_ERR, "ucid %u send error =%d", p->ucid, nerr);
+				closexi(p);
+				return 0;
+			}
+#else
+			nret = ::send(p->fd, (char*)ps->pd + ps->sizedone, ns, MSG_DONTWAIT | MSG_NOSIGNAL);
+			if (-1 == nret) {
+				if (errno == EAGAIN || errno == EWOULDBLOCK) { // nonblocking  mode
+					dosendzero(p);
+					return 0;
+				}
+				if (_plog)
+					_plog->add(CLOG_DEFAULT_ERR, "ucid %u send error =%d", p->ucid, errno);
+				closexi(p);
+				return 0;
+			}
+#endif
+			ps->sizedone += nret; //add to send bytes
+			p->errnum = 0;// reset error counter
+			if (ps->sizedone == ps->size) {//complete					
+				t_xpoll_event evt;
+				evt.ucid = p->ucid;
+				evt.ubytes = ps->size;
+				evt.opt = XPOLL_EVT_OPT_SEND;
+				evt.status = XPOLL_EVT_ST_OK;
+				evt.res[0] = 0;
+				evt.res[1] = 0;
+				evt.pdata = ps->pd;
+				add_evt_wait(evt);
+				_evtiocp.SetEvent();
+
+				p->lasterr = 0;
+				reset_xpoll_pkgitem(ps);
+
+				p->uhead = (p->uhead + 1) % XPOLL_SEND_PKG_NUM;//next
+				if (p->uhead != p->utail)
+					return 1;
+				return 0;
+			}
+			return 1;
+		}
+
+		void closexi(t_xpoll_item* pi) {
+			t_xpoll_event evt;
+			memset(&evt, 0, sizeof(evt));
+			while (pi->uhead != pi->utail) {
+				evt.ucid = pi->ucid;
+				evt.ubytes = pi->pkg[pi->uhead].size;
+				evt.opt = XPOLL_EVT_OPT_SEND;
+				evt.status = XPOLL_EVT_ST_CLOSE;
+				evt.pdata = pi->pkg[pi->uhead].pd;
+				add_evt_wait(evt);
+				_evtiocp.SetEvent();
+				pi->uhead = (pi->uhead + 1) % XPOLL_SEND_PKG_NUM;
+			}
+			if (INVALID_SOCKET != pi->fd) {
+#ifdef _WIN32
+				shutdown(pi->fd, SD_BOTH);
+				::closesocket(pi->fd);
+#else
+				shutdown(pi->fd, SHUT_WR);
+				::close(pi->fd);
+#endif
+				pi->fd = INVALID_SOCKET;
+				add_close_event(pi->ucid, XPOLL_EVT_ST_CLOSE);
+			}
+
+			_map.erase(pi->ucid);
+			_fdchanged = true;
+		}
+
+		void dosendzero(t_xpoll_item* pi) {
+			pi->errnum++;
+			if (pi->errnum == 1)
+				pi->lasterr = ::time(0);
+			else if (pi->errnum > 2) {
+				time_t tcur = ::time(0);
+				if (pi->lasterr && (tcur - pi->lasterr) > 5) {
+					if (_plog)
+						_plog->add(CLOG_DEFAULT_ERR, "ucid %u send timeout", pi->ucid);
+					closexi(pi);
+				}
+			}
+		}
 	};
 #endif
 }

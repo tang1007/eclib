@@ -1168,7 +1168,7 @@ namespace ec {
 							_plog->add(CLOG_DEFAULT_ERR, "ucid %u ws_encode_zlib failed", ucid);
 						return false;
 					}
-					filetmp.~vector();
+					filetmp.clear(true);
 					sprintf(tmp, "Content-Length: %9zu\r\n\r\n", (answer.size() - poslen - sizecl));
 					size_t z1 = strlen(tmp);
 					while (z1 < sizecl) {

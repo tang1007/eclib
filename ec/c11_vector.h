@@ -104,14 +104,14 @@ namespace ec
 			if (_pmem)
 				return _pmem->malloc(size, sizeout);
 			sizeout = size;
-			return malloc(size);
+			return ::malloc(size);
 		}
 		inline void mem_free(void* p) {
 			if (_pmem)
 				_pmem->mem_free(p);
 			else
-				free(p);
-		}		
+				::free(p);
+		}
 	public:
 		inline size_type max_size() const noexcept
 		{
@@ -312,11 +312,11 @@ namespace ec
 			if (!size && !_usize)
 			{
 				mem_free(_pbuf);
-				_pbuf = 0;
+				_pbuf = nullptr;
 				_ubufsize = 0;
 				return;
 			}
-			if (_usize >= size)
+			if (_usize >= size || size >= _ubufsize)
 				return;
 			size_t sizeout = 0;
 			value_type* pnew = (value_type*)mem_malloc(size * sizeof(value_type), sizeout);
@@ -368,21 +368,24 @@ namespace ec
 			}
 			else {
 				usizet = _usize + usize;
-				if(usizet % _ugrown)
+				if (usizet % _ugrown)
 					usizet += _ugrown - (usizet % _ugrown);
 			}
 			if (usizet > max_size())
 				return false;
 			value_type	*pt = nullptr;
-			if (_pmem) 
-				pt = (value_type*)_pmem->mem_realloc(_pbuf, usizet * sizeof(value_type));
-			else
-				pt = (value_type*)realloc(_pbuf, usizet * sizeof(value_type));
+			size_t sizeout = 0;
+			pt = (value_type*)mem_malloc(usizet * sizeof(value_type), sizeout);
 			if (!pt)
 				return false;
-			_ubufsize = usizet;
+			if (_pbuf) {
+				if (_usize)
+					memcpy(pt, _pbuf, _usize * sizeof(value_type));
+				mem_free(_pbuf);
+			}
+			_ubufsize = sizeout / sizeof(value_type);
 			_pbuf = pt;
-			return true;	
+			return true;
 		}
 	};
 }

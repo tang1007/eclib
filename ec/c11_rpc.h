@@ -246,6 +246,7 @@ namespace ec {
 			memcpy(_sip, v._sip, sizeof(_sip));
 			memcpy(_srandominfo, v._srandominfo, sizeof(_srandominfo));
 			_rbuf = std::move(v._rbuf);
+			_pmem = v._pmem;
 			return *this;
 		}
 		~cRpcCon() {};
@@ -660,7 +661,7 @@ namespace ec {
 			base_::_ppoll->get_ucid_byflag(ltime, XPOLL_RPCLOGIN_BIT, 60, &ids);
 			size_t i, n = ids.size();
 			for (i = 0; i < n; i++)
-				base_::_ppoll->remove(ids[i]);
+				base_::_ppoll->close_ucid(ids[i]);
 		}
 	private:
 		bool SendRpcMsg(uint32_t ucid, const void* pd, size_t size, RPCMSGTYPE msgtype, RPCCOMPRESS compress,
@@ -828,7 +829,7 @@ namespace ec {
 		void onsend(uint32_t ucid, int nstatus, void* pdata, size_t size) //send complete event
 		{
 			if (pdata)
-				base_::_pmem->mem_free(pdata);
+				base_::_pmem->mem_free(pdata, true);
 			static_cast<_CLS*>(this)->onsendcomplete(ucid, nstatus);
 		}
 		inline void onself(uint32_t ucid, int optcode, void* pdata, size_t size) {

@@ -87,7 +87,7 @@ namespace ec {
 			static_cast<_CLS*>(this)->onwsread(ucid, bFinal, wsopcode, pdata, size);
 		}
 		inline void dodisconnect(uint32_t ucid) {
-			base_::disconnect(ucid);
+			base_::close_ucid(ucid);
 		};
 		int  dosend(uint32_t ucid, vector<uint8_t> *pvd, int timeovermsec = 100)
 		{
@@ -114,7 +114,7 @@ namespace ec {
 		void onsend(uint32_t ucid, int nstatus, void* pdata, size_t size)//send complete event
 		{
 			if (pdata)
-				basews_::_pmem->mem_free(pdata);
+				basews_::_pmem->mem_free(pdata, true);
 			static_cast<_CLS*>(this)->onsendcomplete(ucid, nstatus);
 		}
 		inline void onself(uint32_t ucid, int optcode, void* pdata, size_t size)
