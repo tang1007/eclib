@@ -2,7 +2,7 @@
 \file c11_memory.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2019.1.22
+\update 2019.1.31
 
 eclib class fast memory allocator with c++11.
 
@@ -94,6 +94,11 @@ namespace ec {
 			return p;
 		}
 
+		void *mem_realloc(void *ptr, size_t size) {
+			unique_spinlock lck(_pmutex);
+			return _realloc(ptr, size);
+		}
+
 		struct t_mem_info {
 			int sysblks, err_s, err_m, err_l;
 			int sz_s, sz_m, sz_l;    // blocks size
@@ -183,6 +188,47 @@ namespace ec {
 			return pr;
 		}
 
+		void *_realloc(void *ptr, size_t size) {
+			if (!ptr && !size)
+				return nullptr;
+			if (!size) {
+				_free(ptr);
+				return nullptr;
+			}
+			size_t pa = (size_t)ptr, st = 0;
+			if (_ps && pa >= (size_t)_ps  && pa < (size_t)_ps + _sz_s * _blk_s) {
+				if (size <= _sz_s)
+					return ptr;
+				void* p = _malloc(size, st);
+				if (!p)
+					return nullptr;
+				memcpy(p, ptr, _sz_s);
+				_stks.push(ptr);
+				return p;
+			}
+			else if (_pm &&  pa >= (size_t)_pm  && pa < (size_t)_pm + _sz_m * _blk_m) {
+				if (size <= _sz_m)
+					return ptr;
+				void* p = _malloc(size, st);
+				if (!p)
+					return nullptr;
+				memcpy(p, ptr, _sz_m);
+				_stkm.push(ptr);
+				return p;
+			}
+			else if (_pl &&  pa >= (size_t)_pl  && pa < (size_t)_pl + _sz_l * _blk_l) {
+				if (size <= _sz_l)
+					return ptr;
+				void* p = _malloc(size, st);
+				if (!p)
+					return nullptr;
+				memcpy(p, ptr, _sz_l);
+				_stkl.push(ptr);
+				return p;
+			}
+			return ::realloc(ptr, size);
+		}
+
 		void _free(void *pmem, bool bsafe = false)
 		{
 			if (!pmem)
@@ -208,6 +254,7 @@ namespace ec {
 				_nsys_malloc--;
 			}
 		}
+
 		bool isExist(ec::stack<void*> *pstk, void* p) {
 			size_t i, n = pstk->size();
 			for (i = 0u; i < n; i++) {
@@ -228,8 +275,8 @@ namespace ec {
 				_pbuf = _pmem->mem_malloc(_size);
 			else
 				_pbuf = ::malloc(_size);
-			if (!_pbuf)				
-				_size = 0;			
+			if (!_pbuf)
+				_size = 0;
 		}
 		~auto_buffer() {
 			clear();
@@ -257,8 +304,8 @@ namespace ec {
 		}
 		inline void* resize(size_t rsz) {
 			clear();
-			if (!rsz) 
-				return nullptr;			
+			if (!rsz)
+				return nullptr;
 			void* pt = nullptr;
 			if (_pmem)
 				pt = _pmem->mem_malloc(rsz);
