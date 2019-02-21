@@ -1,7 +1,7 @@
 ﻿/*!
 \file minimsgsrv.h
 \author	kipway@outlook.com
-\update 2018.3.13
+\update 2018.9.28  delete log
 
 eclib class mini message server and auto reconnect client
 
@@ -102,8 +102,8 @@ namespace ec
 			ss > &h.sync;
 			ss > &h.flag;
 			ss > &h.msglen;
-			if (h.sync != MINI_PKG_FLAG || h.flag != 0x10 || h.msglen > MINI_MSG_MAXSIZE)
-				return -1;
+			if (h.sync != MINI_PKG_FLAG || h.flag != 0x10 || h.msglen > MINI_MSG_MAXSIZE) 				
+				return -1;			
 			if (h.msglen + 6 > _rbuf.size())
 			{
 				if (_rbuf.capacity() < h.msglen + 6)
@@ -121,9 +121,9 @@ namespace ec
 	class cMiniMsgSrv : public cMiniSrv
 	{
 	public:
-		cMiniMsgSrv() : _msgr(1024 * 16)
+		cMiniMsgSrv(cLog* plog = 0) : _msgr(1024 * 16)
 		{
-		}
+		}		
 	public:
 		int send_msg(t_id *pid, const void* pd, size_t size)
 		{
@@ -147,8 +147,8 @@ namespace ec
 	protected:
 		virtual bool onreadbytes(t_id* pid, const uint8_t* pd, size_t size)
 		{			
-			if (!pid->pcls)
-				return false;
+			if (!pid->pcls) 
+				return false;			
 			minipkg* pi = (minipkg*)pid->pcls;
 			int nr = pi->parse(pd, size, &_msgr);
 			while (1 == nr)
@@ -161,7 +161,7 @@ namespace ec
 				_msgr.clear();
 				_msgr.shrink(1024 * 32);
 				nr = pi->parse(nullptr, 0, &_msgr);
-			}
+			}			
 			return -1 != nr;
 		}
 		virtual void onclose(t_id* pid) // return false diconnect

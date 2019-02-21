@@ -1,7 +1,7 @@
 /*!
 \file c_tls12.h
 \author	kipway@outlook.com
-\update 2018.4.3 fix RSA_private_decrypt multithread safety
+\update 2018.8.2 
 
 eclib TLS1.2(rfc5246) server and client class
 support:
@@ -91,7 +91,7 @@ namespace tls
 #define TLSVER_MAJOR        3
 #define TLSVER_NINOR        3
 
-#define TLS_CBCBLKSIZE  16303 // (16384-16-32-1-32)
+#define TLS_CBCBLKSIZE  16292   // (16384-16-32-32 - 8)
 
 #define TLS_SESSION_NONE    (-2) 
 #define TLS_SESSION_ERR		(-1) //´íÎó
@@ -192,6 +192,12 @@ namespace ec
         */
         bool decrypt_record(const unsigned char*pd, size_t len, unsigned char* pout, int *poutsize)
         {
+			size_t maclen = 32;
+			if (_cipher_suite == TLS_RSA_WITH_AES_128_CBC_SHA || _cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA)
+				maclen = 20;
+			if (len <  53) // 5 + pading16(IV + maclen + datasize)
+				return false;
+
             int i;
             unsigned char sout[1024 * 20], iv[AES_BLOCK_SIZE], *pkey = _key_sw, *pkmac = _key_swmac;
             AES_KEY aes_d;
@@ -212,10 +218,11 @@ namespace ec
             unsigned int ufsize = sout[len - 5 - AES_BLOCK_SIZE - 1];//verify data MAC
             if (ufsize > 15)
                 return false;
-            size_t maclen = 32;
-            if (_cipher_suite == TLS_RSA_WITH_AES_128_CBC_SHA || _cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA)
-                maclen = 20;
+            
             size_t datasize = len - 5 - AES_BLOCK_SIZE - 1 - ufsize - maclen;
+			if (datasize > tls_rec_fragment_len)
+				return false;
+
             unsigned char mac[32], macsrv[32];
             memcpy(macsrv, &sout[datasize], maclen);
             if (!caldatahmac(pd[0], _seqno_read, sout, datasize, pkmac, mac))
@@ -347,7 +354,7 @@ namespace ec
             s[2] = TLSVER_NINOR;
             while (pos < size)
             {
-                ss = tls_rec_fragment_len;
+                ss = TLS_CBCBLKSIZE;
                 if (pos + ss > size)
                     ss = size - pos;
                 s[3] = (uint8)((ss >> 8) & 0xFF);
@@ -594,13 +601,8 @@ namespace ec
                 ulen = p[3];
                 ulen = (ulen << 8) + p[4];
                 if (uct < (uint8)tls::rec_change_cipher_spec || uct >(uint8)tls::rec_application_data ||
-                    _pkgtcp[1] != TLSVER_MAJOR || ulen > tls_rec_fragment_len + 2048)
-                {
-                    if (_pkgtcp[1] != TLSVER_MAJOR)
-                    {
-                        ECTRACE("not support Ver %d.%d\n", _pkgtcp[1], _pkgtcp[2]);
-                        Alert(2, 70, OnData, pParam);//protocol_version(70)
-                    }
+                    _pkgtcp[1] != TLSVER_MAJOR || ulen > tls_rec_fragment_len + 48 || _pkgtcp[2] > TLSVER_NINOR)
+                {                    
                     return -1;
                 }
                 if (ulen + 5 > nl)
@@ -609,7 +611,7 @@ namespace ec
                 {
                     if (!decrypt_record(p, ulen + 5, tmp, &ndl))
                     {
-                        Alert(2, 50, OnData, pParam);//decode_error(50)						
+                       // Alert(2, 50, OnData, pParam);//decode_error(50)						
                         return -1;
                     }
                     if (dorecord(tmp, ndl, OnData, pParam) < 0)
@@ -1003,6 +1005,8 @@ namespace ec
                 uint32 ulen = p[1];
                 ulen = (ulen << 8) + p[2];
                 ulen = (ulen << 8) + p[3];
+				if (ulen > 1024 * 16)
+					return -1;
                 if ((int)ulen + 4 > nl)
                     break;
                 switch (p[0])
@@ -1072,6 +1076,9 @@ namespace ec
         virtual ~cTlsSession_srv()
         {
         }
+		inline bool is_handshake_ok() {
+			return _bhandshake_finished;
+		}
     protected:
         bool  _bhandshake_finished;
         cCritical* _pRsaLck;
@@ -1171,7 +1178,7 @@ namespace ec
             ulen = (ulen << 8) + puc[2];
             ulen = (ulen << 8) + puc[3];
 
-            if (size != ulen + 4 || size < 12 + 32)
+            if (size != ulen + 4 || size < 12 + 32 || ulen > 1024)
             {
                 Alert(2, 10, OnData, pParam);//unexpected_message(10)
                 return false;
@@ -1381,6 +1388,8 @@ namespace ec
                 uint32 ulen = p[1];
                 ulen = (ulen << 8) + p[2];
                 ulen = (ulen << 8) + p[3];
+				if (ulen > 8192)
+					return -1;
                 if ((int)ulen + 4 > nl)
                     break;
                 switch (p[0])
@@ -1723,13 +1732,29 @@ namespace ec
             return -1;
         }
         bool mkr_appdata(unsigned int ucid, ec::tArray<unsigned char>*po, const void* pd, size_t len)
-        {
-            cSafeLock lck(_css[ucid%_ugroups]);
+        {           
             t_tlsse* pv = _maps[ucid%_ugroups]->Lookup(ucid);
             if (pv)
                 return pv->Pss->MakeAppRecord(po, pd, len);
             return false;
         }
+		cCritical *getcs(unsigned int ucid) {
+			return _css[ucid%_ugroups];
+		}
+		void get_nohandshake_ucids(ec::vector<uint32_t> *pout) {
+			pout->clear();
+			uint32_t i;
+			t_tlsse* p;
+			for (i = 0; i < _ugroups; i++) {
+				cSafeLock lck(_css[i]);
+				int npos = 0, nlist = 0;
+				while (_maps[i]->GetNext(npos, nlist, p)) {
+					if (!p->Pss->is_handshake_ok()) 
+						pout->add(p->ucid);					
+				}
+			}
+
+		}
     };
 
     class cTlsSrvThread : public cTcpSvrWorkThread
@@ -1760,14 +1785,16 @@ namespace ec
         virtual bool	OnReadBytes(unsigned int ucid, const void* pdata, unsigned int usize) //return false will disconnect
         {
             _tlsdata.ClearData();
+			_threadstcode = 1001;
             int nr = _psss->OnTcpRead(ucid, pdata, usize, OnData, this);
             if (nr < 0)
                 return false;
             else if (_tlsdata.GetSize())
             {
+				_threadstcode = 1002;
                 if (!OnAppData(ucid, _tlsdata.GetBuf(), (unsigned int)_tlsdata.GetSize()))
                     return false;
-                _tlsdata.ClearData();
+                _tlsdata.ClearData();				
             }
             return true;
 
@@ -1804,6 +1831,7 @@ namespace ec
     protected:
         bool SendAppData(unsigned ucid, const void* pd, size_t len, bool bAddCount = false, unsigned int uSendOpt = TCPIO_OPT_SEND)
         {
+			cSafeLock lck(_psss->getcs(ucid));
 			_tlsrectmp.set_grow(len + 264 - len % 8 + (len / 16384) * 256);            
 			if (!_psss->mkr_appdata(ucid, &_tlsrectmp, pd, len)) {
 				_tlsrectmp.clear();
@@ -1826,6 +1854,7 @@ namespace ec
             _pRsaPrivate = 0;
             _pevppk = 0;
             _px509 = 0;
+			_lastchktime = ::time(0);
         }
         virtual ~cTlsServer()
         {
@@ -1856,6 +1885,7 @@ namespace ec
 
         cTlsSession_srvMap _sss;
 		cCritical _csRsa;
+		time_t _lastchktime;
     public:
         bool InitCert(const char* filecert, const char* filerootcert, const char* fileprivatekey)
         {
@@ -1935,6 +1965,17 @@ namespace ec
         };
         virtual void    CheckNotLogin() //chech not login 
         {
+			time_t t = ::time(0);
+			if (t == _lastchktime)
+				return;
+			_lastchktime = t;
+			ec::vector<uint32_t> ids(1024 * 8, true);
+			_sss.get_nohandshake_ucids(&ids);
+			ec::vector<uint32_t> delids(1024, true);
+			m_ConPool.get_timeout(t, &ids, &delids);
+			delids.for_each([&](uint32_t &v){
+				m_ConPool.DelAndCloseSocket(v);
+			});
         }
     };
 };

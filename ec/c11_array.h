@@ -1,7 +1,8 @@
 /*!
 \file c11_array.h
-\author	kipway@outlook.com
-\update 2018.5.27
+\author	jiangyong
+\email  kipway@outlook.com
+\update 2019.1.22
 
 eclib class stack array with c++11.
 
@@ -21,6 +22,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 #pragma once
+#include <memory.h>
 #include <algorithm> // std::sort
 #include <functional>
 namespace ec {
@@ -78,7 +80,7 @@ namespace ec {
 		{
 			return add(val);
 		}
-		inline void pop_back()
+		inline void pop_back() noexcept
 		{
 			if (_size > 0)
 				_size--;
@@ -148,6 +150,7 @@ namespace ec {
 			}
 			return false;
 		}
+
 		bool erase(size_type pos) noexcept
 		{
 			if (pos >= _size)
@@ -158,7 +161,20 @@ namespace ec {
 			}
 			_size--;
 			return true;
-		}					
+		}
+
+		void erase(size_type pos, size_type size) noexcept
+		{
+			if ( pos >= _size)
+				return;
+			if (pos + size >= _size)
+				_size = pos;
+			else {
+				memmove(&_data[pos], &_data[pos + size], (_size - (pos + size)) * sizeof(value_type));
+				_size -= size;
+			}
+		}
+
 		value_type* find(std::function <bool(value_type& val)> fun) {
 			for (size_type i = 0; i < _size; i++) {
 				if (fun(_data[i]))
@@ -178,9 +194,35 @@ namespace ec {
 			}
 			return false;
 		}
-		inline void sort(bool(*cmp)(const value_type& v1, const value_type& v2))
+		inline value_type* atptr(size_type pos) noexcept
+		{
+			if (pos < _size)
+				return &_data[pos];
+			return nullptr;
+		}
+		inline void sort(std::function<bool(const value_type& v1, const value_type& v2)> cmp)
 		{
 			std::sort(begin(), end(), cmp);
+		}
+		inline void sort(iterator istart, iterator iend, std::function<bool(const value_type& v1, const value_type& v2)> cmp)
+		{
+			std::sort(istart, iend, cmp);
+		}
+		void setsize(size_t size)
+		{
+			if (size <= _bufsize)
+				_size = size;
+		}
+		bool insert(size_type pos, const value_type *pval, size_t insize = 1) noexcept // insert before
+		{
+			if (_size + insize > _bufsize || !insize || !pval)
+				return false;
+			if (_size >= _size)
+				return add(pval, insize);
+			memmove(&_data[pos] + insize, &_data[pos], (_size - pos) * sizeof(value_type));
+			memcpy(&_data[pos], pval, insize * sizeof(value_type));
+			_size += insize;
+			return true;
 		}
 	};
 }

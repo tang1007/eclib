@@ -1,7 +1,8 @@
 ﻿/*!
 \file c11_vector.h
-\author	kipway@outlook.com
-\update 2018.5.27 add fast memory allocator
+\author	jiangyong
+\email  kipway@outlook.com
+\update 2019.1.22
 
 eclib class vector with c++11. fast noexcept simple vector. members of a vector can only be simple types, pointers and structures
 
@@ -34,58 +35,82 @@ namespace ec
 		typedef _Tp		value_type;
 		typedef size_t	size_type;
 		typedef _Tp*	iterator;
-		vector(size_type ugrownsize, ec::memory* pmem = nullptr) : _pbuf(nullptr), _usize(0), _ubufsize(0), _pmem(pmem)
+		vector(size_type ugrownsize, ec::memory* pmem = nullptr) : _pbuf(nullptr), _usize(0), _ubufsize(0), _doublegrown(false), _pmem(pmem)
 		{
 			set_grow(ugrownsize);
 		};
-		vector(size_type ugrownsize, const value_type& val, ec::memory* pmem = nullptr) : _pbuf(nullptr), _usize(0), _ubufsize(0), _pmem(pmem)
+		vector(size_type ugrownsize, const value_type& val, ec::memory* pmem = nullptr) : _pbuf(nullptr), _usize(0), _ubufsize(0), _doublegrown(false), _pmem(pmem)
 		{
 			set_grow(ugrownsize);
 			push_back(val);
 		};
-		vector(size_type ugrownsize, const value_type* pval, size_type size, ec::memory* pmem = nullptr) : _pbuf(nullptr), _usize(0), _ubufsize(0), _pmem(pmem)
+		vector(size_type ugrownsize, const value_type* pval, size_type size, ec::memory* pmem = nullptr) : _pbuf(nullptr), _usize(0), _ubufsize(0), _doublegrown(false), _pmem(pmem)
 		{
 			set_grow(ugrownsize);
 			add(pval, size);
 		};
+		vector(size_type initsize, bool doublegrown, ec::memory* pmem = nullptr) : _pbuf(nullptr), _usize(0), _ubufsize(0), _doublegrown(doublegrown), _pmem(pmem)
+		{
+			set_grow(initsize);
+		}
+		vector(vector &&v)
+		{
+			_pbuf = v._pbuf;
+			_usize = v._usize;
+			_ubufsize = v._ubufsize;
+			_ugrown = v._ugrown;
+			_pmem = v._pmem;
+			_doublegrown = v._doublegrown;
+			v._pbuf = nullptr;
+			v._usize = 0;
+			v._ubufsize = 0;
+		}
 		~vector()
 		{
-			if (_pbuf != nullptr)
-			{
+			if (_pbuf != nullptr) {
 				mem_free(_pbuf);
+				_pbuf = nullptr;
+				_usize = 0;
+				_ubufsize = 0;
+				_pmem = nullptr;
 			}
 		};
+		vector& operator = (vector&& v)
+		{
+			this->~vector();
+			_pbuf = v._pbuf;
+			_usize = v._usize;
+			_ubufsize = v._ubufsize;
+			_ugrown = v._ugrown;
+			_pmem = v._pmem;
+			_doublegrown = v._doublegrown;
+			v._pbuf = nullptr;
+			v._usize = 0;
+			v._ubufsize = 0;
+			return *this;
+		}
+		inline ec::memory* get_mem_allocator() {
+			return _pmem;
+		}
 	protected:
-		value_type*	_pbuf;
+		value_type * _pbuf;
 		size_type	_usize;
 		size_type	_ubufsize;
 		size_type	_ugrown;
+		bool		_doublegrown; //auto double grown
 	private:
 		ec::memory *_pmem;
-		inline void *mem_malloc(size_t size) {
+		inline void *mem_malloc(size_t size, size_t &sizeout) {
 			if (_pmem)
-				return _pmem->mem_malloc(size);
-			return malloc(size);
+				return _pmem->malloc(size, sizeout);
+			sizeout = size;
+			return ::malloc(size);
 		}
 		inline void mem_free(void* p) {
 			if (_pmem)
 				_pmem->mem_free(p);
 			else
-				free(p);
-		}
-		inline void* mem_realloc(size_t size) {
-			if (_pmem) {
-				void *pnew = _pmem->mem_malloc(size);
-				if (!pnew)
-					return nullptr;
-				if (_pbuf) {
-					if (_usize)
-						memcpy(pnew, _pbuf, ((_usize < size)? _usize : size) * sizeof(value_type));
-					_pmem->mem_free(_pbuf);
-				}
-				return pnew;				
-			}
-			return realloc(_pbuf,size);
+				::free(p);
 		}
 	public:
 		inline size_type max_size() const noexcept
@@ -95,6 +120,8 @@ namespace ec
 		void set_grow(size_type ugrowsize) noexcept
 		{
 			_ugrown = ugrowsize;
+			if (!_ugrown)
+				_ugrown = 4;
 			if (_ugrown % 4)
 				_ugrown += 4 - (_ugrown % 4);
 			if (_ugrown > max_size())
@@ -184,6 +211,11 @@ namespace ec
 		{
 			return _pbuf[pos];
 		}
+		inline value_type* at(size_t pos) {
+			if (pos >= _usize)
+				return nullptr;
+			return &_pbuf[pos];
+		}
 		inline iterator begin() noexcept
 		{
 			return _pbuf;
@@ -205,7 +237,7 @@ namespace ec
 		{
 			while (first != last)
 				fun(*first++);
-		}		
+		}
 		inline value_type* data() noexcept
 		{
 			return _pbuf;
@@ -269,7 +301,7 @@ namespace ec
 				_usize -= size;
 			}
 		}
-		inline void sort(bool(*cmp)(const value_type& v1, const value_type& v2))
+		inline void sort(std::function<bool(const value_type& v1, const value_type& v2)> cmp)
 		{
 			std::sort(begin(), end(), cmp);
 		}
@@ -280,52 +312,79 @@ namespace ec
 			if (!size && !_usize)
 			{
 				mem_free(_pbuf);
-				_pbuf = 0;
+				_pbuf = nullptr;
 				_ubufsize = 0;
 				return;
 			}
-			if (_usize >= size)
+			if (_usize >= size || size >= _ubufsize)
 				return;
-			value_type* pnew = (value_type*)mem_malloc(size * sizeof(value_type));
+			size_t sizeout = 0;
+			value_type* pnew = (value_type*)mem_malloc(size * sizeof(value_type), sizeout);
 			if (!pnew)
 				return;
 			if (_usize)
 				memcpy(pnew, _pbuf, _usize * sizeof(value_type));
 			mem_free(_pbuf);
 			_pbuf = pnew;
-			_ubufsize = size;
+			_ubufsize = sizeout / sizeof(value_type);
 		}
 		bool expand(size_type size) noexcept
 		{
 			if (_ubufsize >= size)
 				return true;
-			value_type* pnew = (value_type*)mem_malloc(size * sizeof(value_type));
+			size_t sizeout = 0;
+			value_type* pnew = (value_type*)mem_malloc(size * sizeof(value_type), sizeout);
 			if (!pnew)
 				return false;
 			if (_pbuf)
 			{
-				if(_usize)
+				if (_usize)
 					memcpy(pnew, _pbuf, _usize * sizeof(value_type));
 				mem_free(_pbuf);
 			}
 			_pbuf = pnew;
-			_ubufsize = size;
+			_ubufsize = sizeout / sizeof(value_type);
 			return true;
+		}
+		void* detach_buf() {
+			void* p = (void*)_pbuf;
+			_usize = 0;
+			_ubufsize = 0;
+			_pbuf = nullptr;
+			return p;
 		}
 	private:
 		bool _grown(size_type usize = 1) noexcept
-		{			
+		{
 			if (_usize + usize <= _ubufsize || !usize)
-				return true;						
-			size_type usizet = _usize + usize;
+				return true;
+			size_type usizet;
+			if (_doublegrown) {
+				usizet = _ubufsize;
+				if (!usizet)
+					usizet = _ugrown;
+				while (usizet < _usize + usize)
+					usizet *= 2;
+			}
+			else {
+				usizet = _usize + usize;
+				if (usizet % _ugrown)
+					usizet += _ugrown - (usizet % _ugrown);
+			}
 			if (usizet > max_size())
 				return false;
-			usizet += _ugrown - (usizet % _ugrown);
-			value_type	*pt = (value_type*)mem_realloc(usizet * sizeof(value_type));
+			value_type	*pt = nullptr;
+			size_t sizeout = 0;
+			pt = (value_type*)mem_malloc(usizet * sizeof(value_type), sizeout);
 			if (!pt)
 				return false;
+			if (_pbuf) {
+				if (_usize)
+					memcpy(pt, _pbuf, _usize * sizeof(value_type));
+				mem_free(_pbuf);
+			}
+			_ubufsize = sizeout / sizeof(value_type);
 			_pbuf = pt;
-			_ubufsize = usizet;			
 			return true;
 		}
 	};

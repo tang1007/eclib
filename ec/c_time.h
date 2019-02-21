@@ -1,18 +1,36 @@
 /*
 \file c_time.h
-\brief time class
+\author	jiangyong
+\email	kipway@outlook.com
+\update 2018.11.16
 
-ec library is free C++ library.
+InterProcess Communication with socket AF_UNIX(Linux), AF_INET(windows)
 
-\author	 kipway@outlook.com
+eclib Copyright (c) 2017-2018, kipway
+source repository : https://github.com/kipway/eclib
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 #ifndef C_TIME_H
 #define C_TIME_H
 #ifdef _WIN32
 #pragma warning (disable : 4996)
+#else
+#include <sys/time.h>
 #endif
 #include <time.h>
+#include <stdint.h>
 #include "c_str.h"
 #ifndef _WIN32
 inline unsigned int GetTickCount()
@@ -21,9 +39,53 @@ inline unsigned int GetTickCount()
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (unsigned int)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
+
+inline uint64_t GetTickCount64()
+{
+	struct timeval tv;
+	gettimeofday(&tv, nullptr);
+	return tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
 #endif
+
+/*!
+\param pMicrosecond [out] microsecond,1000000 microseconds = 1 second
+\return seconds from 1970/01/01
+*/
+inline time_t nstime(int *pMicrosecond)
+{
+#ifdef _WIN32
+	FILETIME ft;
+	GetSystemTimeAsFileTime(&ft);
+	ULARGE_INTEGER ul;
+	ul.LowPart = ft.dwLowDateTime;
+	ul.HighPart = ft.dwHighDateTime;
+	if (pMicrosecond)
+		*pMicrosecond = (int)((ul.QuadPart % 10000000LL) / 10);
+	return (time_t)(ul.QuadPart / 10000000LL) - 11644473600LL;
+#else
+	struct timeval tv;
+	gettimeofday(&tv, nullptr);
+	if (pMicrosecond)
+		*pMicrosecond = (int)tv.tv_usec;
+	return tv.tv_sec;
+#endif
+}
+
 namespace ec
 {
+	/*!
+	\param lfiletime [in] 100 nanoseconds from 1601/01/01
+	\param pMicrosecond [out] microsecond,1000000 microseconds = 1 second
+	\return seconds from 1970/01/01
+	*/
+	inline int64_t ftime2timet(int64_t lfiletime, int *pMicrosecond)
+	{
+		if (pMicrosecond)
+			*pMicrosecond = (int)((lfiletime % 10000000LL) / 10);
+		return (lfiletime / 10000000LL) - 11644473600LL;
+	}
+
 	class cTime
 	{
 	public:
@@ -113,6 +175,24 @@ namespace ec
 			}
 			return *this;
 		}
+		void tostring(char* sout, size_t sizeout,bool hastime = true) {
+			if (hastime)
+				snprintf(sout, sizeout, "%d/%d/%d %d:%d:%d", _year, _mon, _day, _hour, _min, _sec);
+			else
+				snprintf(sout, sizeout, "%d/%d/%d", _year, _mon, _day);
+		}
+		void tostring_ag(char* sout, size_t sizeout, bool hastime = true) {
+			if (hastime)
+				snprintf(sout, sizeout, "%d/%02d/%02d %02d:%02d:%02d", _year, _mon, _day, _hour, _min, _sec);
+			else
+				snprintf(sout, sizeout, "%d/%02d/%02d", _year, _mon, _day);
+		}
+
+		int weekday() { // 1=monday,..., 7=sunday, 0:error
+			if (!_gmt)
+				return 0;
+			return ((_gmt / 86400) % 7 + 3) % 7 + 1;// 1970/1/1 is Thursday
+		}
 	protected:
 		time_t _gmt; // GMT time
 	public:
@@ -122,18 +202,18 @@ namespace ec
 	/*!
 	\brief date time
 	fmt:
-	yyyy/mm/dd HH:MM:SS
-	yyyy-mm-dd HH:MM:SS
+	yyyy/mm/dd HH:MM:SS  or yyyy/mm/dd HH:MM:SS.mmm
+	yyyy-mm-dd HH:MM:SS  or yyyy-mm-dd HH:MM:SS.mmm
 	*/
 	class cDatetime
 	{
 	public:
-		cDatetime() :_nyear(0), _nmon(0), _nday(0), _nhour(0), _nmin(0), _nsec(0), _gmt(-1) { };
+		cDatetime() :_nyear(0), _nmon(0), _nday(0), _nhour(0), _nmin(0), _nsec(0), _nmsec(0), _gmt(-1) { };
 		cDatetime(const char *s) :_nyear(0), _nmon(0), _nday(0), _nhour(0), _nmin(0), _nsec(0), _gmt(-1) {
 			parse(s);
 		}
 	public:
-		int _nyear, _nmon, _nday, _nhour, _nmin, _nsec;
+		int _nyear, _nmon, _nday, _nhour, _nmin, _nsec, _nmsec;
 		time_t _gmt;
 		inline bool IsOk() {
 			return _gmt > 0;
@@ -150,7 +230,7 @@ namespace ec
 			char *sp = sd;
 			while (*sp)
 			{
-				if (*sp == '/' || *sp == '-' || *sp == '.') {
+				if (*sp == '/' || *sp == '-') {
 					sf[n++] = 0;
 					np++;
 					if (np > 2)
@@ -174,7 +254,10 @@ namespace ec
 				return false;
 			sf[n] = 0;
 			_nday = atoi(sf);
-
+			_nhour = 0;
+			_nmin = 0;
+			_nsec = 0;
+			_nmsec = 0;
 			if (st[0]) //has time filed
 			{
 				np = 0;  n = 0;
@@ -192,6 +275,16 @@ namespace ec
 							_nmin = atoi(sf);
 						n = 0;
 					}
+					else if (*sp == '.') {
+						sf[n++] = 0;
+						np++;
+						if (np == 3) {
+							_nsec = atoi(sf);
+							if(_nsec > 59 || _nsec < 0)
+								return false;
+						}
+						n = 0;
+					}
 					else if (*sp < '0' || *sp > '9')
 						return false;
 					else {
@@ -201,10 +294,15 @@ namespace ec
 					}
 					sp++;
 				}
-				if (np != 2 || !n)
+				if (np < 2 || !n)
 					return false;
 				sf[n] = 0;
-				_nsec = atoi(sf);
+				if (np == 2)
+					_nsec = atoi(sf);
+				else if (np == 3)
+					_nmsec = atoi(sf);
+				if (_nmsec < 0 || _nmsec > 999)
+					return false;
 			}
 			if (_nyear < 1970 || _nmon > 12 || _nmon < 1 || _nday >31 || _nday < 1
 				|| _nhour>23 || _nhour < 0 || _nmin < 0 || _nmin > 59 || _nsec < 0 || _nsec > 59)
@@ -228,6 +326,11 @@ namespace ec
 				return false;
 			memcpy(st, s, len);
 			return parse(st);
+		}
+		int weekday() { // 1=monday,..., 7=sunday, 0:error
+			if (!_gmt)
+				return 0;
+			return ((_gmt / 86400) % 7 + 3) % 7 + 1; // 1970/1/1 is Thursday
 		}
 	};
 

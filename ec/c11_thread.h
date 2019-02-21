@@ -1,6 +1,7 @@
 ﻿/*!
 \file c11_thread.h
-\author kipway@outlook.com
+\author	jiangyong
+\email  kipway@outlook.com
 \update 2018.1.3
 
 eclib class cThread with c++11 . Adapt for c_thread.h
@@ -31,13 +32,16 @@ namespace ec
 	class cThread
 	{
 	public:
-		cThread():_bRuning(0),_bKilling(0)
+		cThread() :_watchdog(0), _threadstcode(0), _bRuning(0), _bKilling(0)
 		{
 		}
 		virtual ~cThread() {
 			StopThread();
 		}
+		std::atomic_uint _watchdog;
+		int _threadstcode; // thread status code
 	protected:
+
 		std::atomic_int	_bRuning;
 		std::atomic_int	_bKilling;
 
@@ -83,6 +87,7 @@ namespace ec
 			_bKilling = 0;
 			_bRuning = 1;
 			while (!_bKilling) {
+				_watchdog = 0;
 				if (!_pevt || _pevt->Wait(200)) {
 					if (!_pdojob)
 						dojob();
@@ -113,11 +118,13 @@ namespace ec
 	class cThread
 	{
 	public:
-		cThread() :_bRuning(0), _bKilling(0) {
+		cThread() : _watchdog(0), _threadstcode(0), _bRuning(0), _bKilling(0) {
 		};
 		virtual ~cThread() {
 			StopThread();
 		}
+		std::atomic_uint _watchdog;
+		int _threadstcode; // thread status code
 	protected:
 		std::atomic_int	_bRuning;
 		std::atomic_int	_bKilling;

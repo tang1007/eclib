@@ -169,9 +169,10 @@ namespace ec
                     return -1;
                 if (ftruncate(m_nlockfile, 0))
                     return -1;
-                sprintf(buf, "%d", getpid());
-                if (write(m_nlockfile, buf, strlen(buf)))
-                    return 0;
+                lseek(m_nlockfile,0,SEEK_SET);
+				sprintf(buf, "%ld\n", (long)getpid());
+				if (write(m_nlockfile, buf, strlen(buf)) <= 0)
+					return -1;
                 return 0;
             }
             static  int GetLockPID(const char *spidfile)//get lock PID,ret  -1:err; 0:not lock; >0 PID;
@@ -231,6 +232,10 @@ namespace ec
         {
             return _sDaemon;
         }
+		inline const char* version()
+		{
+			return _sVer;
+		}
         static void CloseIO()
         {
             int fd = open("/dev/null", O_RDWR);
@@ -284,8 +289,10 @@ namespace ec
                     {
                         printf("%s", smsg);
                         fflush(stdout);
-                        if (!strcasecmp("finished", smsg))
-                            break;
+						if (!strcasecmp("finished", smsg)) {
+							printf("\n");
+							break;
+						}
                         nm++;
                     }
                     if (!nm && i > 5)

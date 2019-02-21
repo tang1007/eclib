@@ -67,6 +67,7 @@ namespace ec
 
 		unsigned int		ubytes_r[2]; //read
 		unsigned int		tick_r[2];   //
+		time_t timelastcom;//last read or send time
 	};
 
 	template<>	inline bool	tMap< unsigned int, T_CONITEM>::ValueKey(unsigned int key, T_CONITEM* pcls)
@@ -84,6 +85,11 @@ namespace ec
 	class cConnectPool //connect pool
 	{
 	public:
+		struct t_idle {
+			unsigned int ucid;
+			time_t   timelastcom;
+		};
+
 		cConnectPool() : _csucid(4000), _mapucid(16384) {
 			m_uNextID = 0;
 			m_uMaxConnect = 1024;
@@ -235,6 +241,7 @@ namespace ec
 			it.uID = AllocUcid();
 			it.llLoginTime = ::time(NULL);
 			it.Socket = s;
+			it.timelastcom = (time_t)it.llLoginTime;
 			_Locks[it.uID % CPL_SOCKET_GROUPS].Lock();
 			_maps[it.uID % CPL_SOCKET_GROUPS].SetAt(it.uID, it);
 			_Locks[it.uID % CPL_SOCKET_GROUPS].Unlock();
@@ -269,8 +276,9 @@ namespace ec
 			cSafeLock	lock(&_Locks[uID % CPL_SOCKET_GROUPS]);
 			T_CONITEM* pi = _maps[uID % CPL_SOCKET_GROUPS].Lookup(uID);
 			if (pi) {
-				pi->u64Read += usize;
+				pi->u64Read += usize;				
 				SetBps(pi, usize, true);
+				pi->timelastcom = ::time(0);
 				return true;
 			}
 			return false;
@@ -285,6 +293,7 @@ namespace ec
 				if (bDecCount)
 					pi->nSendNoDone--;
 				SetBps(pi, usize, false);
+				pi->timelastcom = ::time(0);
 				return true;
 			}
 			return false;
@@ -389,6 +398,46 @@ namespace ec
 				_Locks[i].Unlock();
 			}
 			return pa->GetSize();
+		}
+		void get_timeout(time_t ltime, ec::vector<uint32_t> * pin, ec::vector<uint32_t> * pout) {
+			
+			pout->clear();
+			uint32_t *p,ump;
+			T_CONITEM* pi = 0;
+			size_t i,n = pin->size();
+			p = pin->data();
+			for (i = 0; i < n; i++) {				
+				ump = p[i] % CPL_SOCKET_GROUPS;
+				_Locks[ump].Lock();
+				pi = _maps[ump].Lookup(p[i]);
+				if (pi && ltime - pi->llLoginTime > 60 )
+					pout->add(p[i]);				
+				_Locks[ump].Unlock();
+			}			
+		}
+
+		size_t getidleovertime(int nseconds, ec::vector< t_idle> *pout) {
+			unsigned int i;
+			int npos, nlist;
+			T_CONITEM* pi;
+			pout->clear();
+			t_idle t;
+			time_t tcur = ::time(0);
+			for (i = 0; i < CPL_SOCKET_GROUPS; i++)
+			{
+				_Locks[i].Lock();
+				npos = 0;
+				nlist = 0;
+				while (_maps[i].GetNext(npos, nlist, pi)) {
+					if (tcur - pi->timelastcom >= nseconds) {
+						t.ucid = pi->uID;
+						t.timelastcom = pi->timelastcom;
+						pout->add(t);
+					}
+				}
+				_Locks[i].Unlock();
+			}
+			return pout->size();
 		}
 	};
 

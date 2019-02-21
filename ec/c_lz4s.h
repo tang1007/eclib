@@ -43,6 +43,7 @@ You can contact the author at :
 #ifdef __cplusplus
 extern "C" {
 #endif
+	int LZ4_compressBound(int isize);
 	int LZ4_compress_default(const char* source, char* dest, int sourceSize, int maxDestSize);
 	int LZ4_decompress_safe(const char* source, char* dest, int compressedSize, int maxDecompressedSize);
 #ifdef __cplusplus

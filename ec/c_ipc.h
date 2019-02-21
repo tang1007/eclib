@@ -1,9 +1,9 @@
 ﻿/*!
 \file c_ipc.h
 \author	kipway@outlook.com
-\update 2018.2.5
+\update 2018.11.1
 
-InterProcess Communication with socket
+InterProcess Communication with 127.0.0.1 TCP, this is Deprecated, recommended to use c11_ipc.h
 
 eclib Copyright (c) 2017-2018, kipway
 source repository : https://github.com/kipway/eclib
@@ -70,18 +70,32 @@ namespace ec
 		{
 			if (sizemsg > IPCMSG_MAXSIZE)
 				return ECIPC_ST_SEND_PKGERR;
-			unsigned char head[8]; //sync(1),flag(1),pkglen(4)
-			ec::cStream ss(head, sizeof(head));
-			ss < (uint8_t)0xF5;		
-			ss < (uint8_t)0x10;		
-			ss < (uint32_t)(sizemsg);
-			int ns = tcp_send(sock, head, 6);
-			if (ns < 0)
-				return ECIPC_ST_SEND_ERR;
-			ns = tcp_send(sock, pmsg, (int)sizemsg);
-			if (ns < 0)
-				return ECIPC_ST_SEND_ERR;
-			return ns;
+			if (sizemsg < 1024 * 4u) {
+				unsigned char head[1024 * 4 + 8]; //sync(1),flag(1),pkglen(4)
+				ec::cStream ss(head, sizeof(head));
+				ss < (uint8_t)0xF5;
+				ss < (uint8_t)0x10;
+				ss < (uint32_t)(sizemsg);
+				ss.write(pmsg, sizemsg);
+				int ns = tcp_send(sock, head, (int)sizemsg + 6);
+				if (ns < 0)
+					return ECIPC_ST_SEND_ERR;
+				return ns - 6;
+			}
+			else {
+				unsigned char head[8]; //sync(1),flag(1),pkglen(4)
+				ec::cStream ss(head, sizeof(head));
+				ss < (uint8_t)0xF5;
+				ss < (uint8_t)0x10;
+				ss < (uint32_t)(sizemsg);
+				int ns = tcp_send(sock, head, 6);
+				if (ns < 0)
+					return ECIPC_ST_SEND_ERR;
+				ns = tcp_send(sock, pmsg, (int)sizemsg);
+				if (ns < 0)
+					return ECIPC_ST_SEND_ERR;
+				return ns;
+			}			
 		}
 	protected:
 		ec::vector<uint8_t>	_rbuf;
@@ -154,6 +168,8 @@ namespace ec
 				_sclient = acp();
 				if (INVALID_SOCKET == _sclient)
 					continue;
+				SetTcpNoDelay(_sclient);
+				SetSocketKeepAlive(_sclient,true);
 				while (!_bKilling)//read
 				{
 					nr = tcp_read(_sclient, buf, (int)sizeof(buf), 100);
@@ -426,6 +442,8 @@ namespace ec
 				_sclient = tcp_connect("127.0.0.1", _port, 2);
 				if (INVALID_SOCKET == _sclient)
 					continue;
+				SetTcpNoDelay(_sclient);
+				SetSocketKeepAlive(_sclient, true);
 				nr = _pkg.send(_sclient, _psw, (int)strlen(_psw) + 1);//send login message
 				if (SOCKET_ERROR == nr)
 				{

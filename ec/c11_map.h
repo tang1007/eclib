@@ -1,7 +1,8 @@
 ﻿/*!
 \file c11_map.h
-\author	kipway@outlook.com
-\update 2018.5.26  add fast memory allocator
+\author	jiangyong
+\email  kipway@outlook.com
+\update 2018.12.6
 
 eclib class map with c++11. fast noexcept unordered hashmap with safety iterator
 
@@ -27,7 +28,7 @@ limitations under the License.
 #include "c11_hash.h"
 
 namespace ec
-{	
+{
 	template<class _Kty, class _Ty> // is _Kty is equal to the key in class _Ty
 	struct key_equal
 	{
@@ -63,24 +64,33 @@ namespace ec
 		};
 
 	protected:
-		t_node**	_ppv;
+		t_node * *	_ppv;
 		size_type   _uhashsize;
 		size_type	_usize;
 	private:
 		ec::memory* _pmem;
+		spinlock* _pmutex;
 		inline t_node* new_node() {
+			t_node* pnode = nullptr;
 			if (_pmem)
-				return (t_node*)_pmem->mem_malloc(sizeof(t_node));
-			return (t_node*)malloc(sizeof(t_node));
+				pnode = (t_node*)_pmem->mem_malloc(sizeof(t_node));
+			else
+				pnode = (t_node*)malloc(sizeof(t_node));
+			if (pnode)
+				new(&pnode->value)value_type();
+			return pnode;
 		}
 		inline void free_node(t_node* p) {
+			if (p)
+				p->value.~value_type();
 			if (_pmem)
 				_pmem->mem_free(p);
 			else
-				 free(p);
+				free(p);
 		}
 	public:
-		map(unsigned int uhashsize = 1024, ec::memory* pmem  = nullptr) : _ppv(nullptr), _uhashsize(uhashsize), _usize(0), _pmem(pmem)
+		map(unsigned int uhashsize = 1024, ec::memory* pmem = nullptr, spinlock* pmutex = nullptr)
+			: _ppv(nullptr), _uhashsize(uhashsize), _usize(0), _pmem(pmem), _pmutex(pmutex)
 		{
 			_ppv = new t_node*[_uhashsize];
 			if (nullptr == _ppv)
@@ -91,7 +101,7 @@ namespace ec
 		{
 			clear();
 		};
-		inline static size_t size_node(){
+		inline static size_t size_node() {
 			return sizeof(t_node);
 		}
 		inline size_type size() const noexcept
@@ -102,8 +112,9 @@ namespace ec
 		{
 			return !_ppv || !_usize;
 		}
-		iterator begin() noexcept
+		iterator begin() noexcept //Multi-thread safe if _pmutex not null
 		{
+			unique_spinlock lck(_pmutex);
 			iterator ir = 0;
 			if (nullptr == _ppv || !_usize)
 				return ~ir;
@@ -121,15 +132,16 @@ namespace ec
 		{
 			return ~0;
 		}
-		bool set(key_type key, value_type& Value) noexcept
+		bool set(key_type key, value_type& Value) noexcept //Multi-thread safe if _pmutex not null
 		{
+			unique_spinlock lck(_pmutex);
 			if (nullptr == _ppv)
 			{
 				_ppv = new t_node*[_uhashsize];
 				if (nullptr == _ppv)
 					return false;
 				memset(_ppv, 0, sizeof(t_node*) * _uhashsize);
-			}			
+			}
 			size_type upos = _Hasher()(key) % _uhashsize;
 			t_node* pnode;
 			for (pnode = _ppv[upos]; pnode != nullptr; pnode = pnode->pNext)
@@ -150,6 +162,36 @@ namespace ec
 			_usize++;
 			return true;
 		};
+		bool set(key_type key, value_type&& Value) noexcept //Multi-thread safe if _pmutex not null
+		{
+			unique_spinlock lck(_pmutex);
+			if (nullptr == _ppv)
+			{
+				_ppv = new t_node*[_uhashsize];
+				if (nullptr == _ppv)
+					return false;
+				memset(_ppv, 0, sizeof(t_node*) * _uhashsize);
+			}
+			size_type upos = _Hasher()(key) % _uhashsize;
+			t_node* pnode;
+			for (pnode = _ppv[upos]; pnode != nullptr; pnode = pnode->pNext)
+			{
+				if (_Keyeq()(key, pnode->value))
+				{
+					_DelVal()(pnode->value);
+					pnode->value = std::move(Value);
+					return true;
+				}
+			}
+			pnode = new_node();
+			if (pnode == nullptr)
+				return false;
+			pnode->value = std::move(Value);
+			pnode->pNext = _ppv[upos];
+			_ppv[upos] = pnode;
+			_usize++;
+			return true;
+		};
 		value_type* get(key_type key) noexcept
 		{
 			if (nullptr == _ppv || !_usize)
@@ -162,16 +204,31 @@ namespace ec
 			}
 			return nullptr;
 		}
-		bool get(key_type key, value_type& Value) noexcept
+		bool get(key_type key, value_type& Value) noexcept //Multi-thread safe if _pmutex not null
 		{
+			unique_spinlock lck(_pmutex);
 			value_type* pv = get(key);
 			if (nullptr == pv)
 				return false;
 			Value = *pv;
 			return true;
 		}
-		void clear() noexcept
+		bool has(key_type key) noexcept
 		{
+			unique_spinlock lck(_pmutex);
+			if (nullptr == _ppv || !_usize)
+				return false;
+			size_type upos = _Hasher()(key) % _uhashsize;
+			t_node* pnode;
+			for (pnode = _ppv[upos]; pnode != nullptr; pnode = pnode->pNext) {
+				if (_Keyeq()(key, pnode->value))
+					return true;
+			}
+			return false;
+		}
+		void clear() noexcept //Multi-thread safe if _pmutex not null
+		{
+			unique_spinlock lck(_pmutex);
 			if (!_ppv)
 				return;
 			if (_usize)
@@ -193,8 +250,9 @@ namespace ec
 			_ppv = nullptr;
 			_usize = 0;
 		};
-		bool erase(key_type key) noexcept
+		bool erase(key_type key) noexcept //Multi-thread safe if _pmutex not null
 		{
+			unique_spinlock lck(_pmutex);
 			if (nullptr == _ppv || !_usize)
 				return false;
 			size_type upos = _Hasher()(key) % _uhashsize;
@@ -251,24 +309,32 @@ namespace ec
 			pv = next(i);
 			return pv != nullptr;
 		}
-		bool next(iterator& i, value_type &rValue) noexcept
+		bool next(iterator& i, value_type &rValue) noexcept //Multi-thread safe if _pmutex not null
 		{
+			if (_pmutex)
+				_pmutex->lock();
 			value_type* pv = nullptr;
 			bool bret = next(i, pv);
 			if (bret)
 				rValue = *pv;
+			if (_pmutex)
+				_pmutex->unlock();
 			return bret;
 		};
-		void for_each(std::function<void(value_type& val)> fun) noexcept
-		{
+		void for_each(std::function<void(value_type& val)> fun) noexcept //Multi-thread safe if _pmutex not null
+		{			
 			iterator i = begin();
+			if (_pmutex)
+				_pmutex->lock();
 			value_type* pv = next(i);
 			while (pv)
 			{
 				fun(*pv);
 				pv = next(i);
 			}
-		}		
+			if (_pmutex)
+				_pmutex->unlock();
+		}
 	private:
 		iterator _nexti(unsigned int ih, unsigned int il) noexcept
 		{
@@ -295,24 +361,60 @@ namespace ec
 		}
 	};
 }
-/*
-//usage and test
 
-struct t_item
+
+/* // ec::map examples
+
+#include "ec/c11_system.h"
+#include "ec/c_command.h"
+
+class ctst
 {
-	char name[32];
-	int v;
-	int *pv;
+public:
+	ctst() {
+		_nid = 0;
+		printf("construct\n");
+	}
+	ctst(int n) {
+		_nid = n;
+	}
+	~ctst() {
+		printf("destruct %d\n", _nid);
+	}
+	int _nid;
 };
 
-namespace ec
-{
+namespace ec {
 	template<>
-	struct key_equal<const char*, t_item>
+	struct key_equal<int, ctst>
 	{
-		bool operator()(const char* key, const t_item& val)
+		bool operator()(int key, const ctst& val)
 		{
-			return !strcmp(key, val.name);
+			return key == val._nid;
+		}
+	};
+	template<>
+	struct del_node<ctst>
+	{
+		void operator()(ctst& val)
+		{
+			printf("del_node delete %d\n", val._nid);
+		}
+	};
+}
+
+
+struct t_item {
+	int nid;
+};
+
+namespace ec {
+	template<>
+	struct key_equal<int, t_item>
+	{
+		bool operator()(int key, const t_item& val)
+		{
+			return key == val.nid;
 		}
 	};
 
@@ -321,72 +423,146 @@ namespace ec
 	{
 		void operator()(t_item& val)
 		{
-			if (val.pv)
+			printf("del_node delete %d\n", val.nid);
+		}
+	};
+}
+
+void testclsmap()
+{
+	printf("test class map-----------------\n");
+	ec::map<int, ctst> map;
+	ctst cls1(1), cls2(2);
+
+	map.set(cls1._nid, cls1);
+	map.set(cls2._nid, cls2);
+
+	printf("for each\n");
+	map.for_each([](ctst& v) {
+		printf("nid=%d\n", v._nid);
+	});
+	printf("clear,remove all items\n");
+	map.clear();
+	printf("clear,complete\n");
+}
+
+void teststructmap()
+{
+	printf("test struct map-----------------\n");
+	ec::map<int, t_item> map;
+	t_item it;
+
+	it.nid = 1;
+	map.set(it.nid, it);
+
+	it.nid = 2;
+	map.set(it.nid, it);
+
+	it.nid = 3;
+	map.set(it.nid, it);
+
+	map.for_each([](t_item& v) {
+		printf("nid=%d\n", v.nid);
+	});
+}
+
+typedef int* intptr;
+namespace ec {
+	template<>
+	struct key_equal<int, intptr>
+	{
+		bool operator()(int key, const intptr &val)
+		{
+			return key == *val;
+		}
+	};
+	template<>
+	struct del_node<intptr>
+	{
+		void operator()(intptr& val)
+		{
+			if (val)
 			{
-				printf("delete %s.pv,*pv = %d\n", val.name, *(val.pv));
-				delete val.pv;
-				val.pv = nullptr;
+				printf("del_node delete %d\n", *val);
+				delete val;
+				val = nullptr;
 			}
 		}
 	};
 }
-void tstecmap()
+
+void testptrmap()
 {
-	ec::memory mem_allocator(ec::map<const char*, t_item>::size_node(), 1024);
-	ec::map<const char*, t_item> map1(1024,&mem_allocator);
+	printf("test pointer map-----------------\n");
+	int *p;
+	ec::map<int, int*> map;
 
-	t_item it;
-	strcpy(it.name, "1");
-	it.v = 1;
-	it.pv = new int;
-	*it.pv = 1;
-	map1.set(it.name, it);
+	p = new int(1);
+	map.set(*p, p);
 
-	strcpy(it.name, "2");
-	it.v = 2;
-	it.pv = new int;
-	*it.pv = 2;
-	map1.set(it.name, it);
+	p = new int(2);
+	map.set(*p, p);
 
-	map1.for_each([](t_item& v)
-	{
-		printf("key=%s:v=%d,*pv=%d\n", v.name, v.v, *v.pv);
+	p = new int(3);
+	map.set(*p, p);
+
+	map.for_each([](int*& v) {
+		printf("nid=%d\n", *v);
 	});
-
-	if (map1.get("1", it))
-		printf("key=%s:v=%d,*pv=%d\n", it.name, it.v, *it.pv);
-
-	if (map1.get("2", it))
-		printf("key=%s:v=%d,*pv=%d\n", it.name, it.v, *it.pv);
-
-	ec::map<const char*, t_item, ec::key_equal<const char*, t_item>>::iterator i;
-	i = map1.begin();
-	while (i != map1.end())
-	{
-		t_item* pit = 0;
-		if (map1.next(i, pit))
-			printf("key=%s:v=%d,*pv=%d\n", pit->name, pit->v, *(pit->pv));
-	}
-
-	i = map1.begin();
-	while (i != map1.end())
-	{
-		if (map1.next(i, it))
-			printf("key=%s:v=%d,*pv=%d\n", it.name, it.v, *(it.pv));
-	}
-
-	strcpy(it.name, "1");//replace old
-	it.v = 1;
-	it.pv = new int;
-	*it.pv = 11;
-	map1.set(it.name, it); // first del_node ,then replace
-
-	map1.clear();
 }
 
-int main(int argc, char*argv[])
+namespace ec {
+	template<>
+	struct key_equal<const char*, std::string>
+	{
+		bool operator()(const char* key, const std::string &val)
+		{
+			return !strcmp(key, val.c_str());
+		}
+	};
+	template<>
+	struct del_node<std::string>
+	{
+		void operator()(std::string& val)
+		{
+			printf("del_node delete %s\n", val.c_str());
+		}
+	};
+}
+#include <string>
+void tststdstrmap()
 {
-	tstecmap();
+	printf("test std::string map-----------------\n");
+	ec::map<const char*, std::string> map;
+
+	std::string str1("str1"), str2("str2"), str3("str3");
+	map.set("str1", str1);
+	map.set("str2", str2);
+	map.set("str3", str3);
+
+	map.for_each([](std::string & v) {
+		printf("%s\n", v.c_str());
+	});
+}
+#define CMDOD_LEN 1024
+int main(int argc, char* argv[])
+{
+	char sod[CMDOD_LEN];
+	memset(sod, 0, sizeof(sod));
+	testclsmap();
+	teststructmap();
+	testptrmap();
+	tststdstrmap();
+	printf("type 'exit' to exit\n");
+	while (1) {
+		if (fgets(sod, CMDOD_LEN - 1, stdin)) {
+			ec::cCommandLine cmd(sod);
+			if (!strcmp(cmd["command"], "exit"))
+				break;
+			else
+				printf("error cmd\n");
+		}
+	}
 	return 0;
 }
 */
