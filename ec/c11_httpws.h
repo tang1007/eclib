@@ -2,7 +2,7 @@
 \file c11_httpws.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.6.24
+\update 2019.2.23
 
 eclibe Asynchronous HTTP and websocket server template class for windows & linux
 
@@ -114,7 +114,7 @@ namespace ec {
 		void onsend(uint32_t ucid, int nstatus, void* pdata, size_t size)//send complete event
 		{
 			if (pdata)
-				basews_::_pmem->mem_free(pdata, true);
+				basews_::_pmem->mem_free(pdata);
 			static_cast<_CLS*>(this)->onsendcomplete(ucid, nstatus);
 		}
 		inline void onself(uint32_t ucid, int optcode, void* pdata, size_t size)

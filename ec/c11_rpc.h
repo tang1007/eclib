@@ -2,7 +2,7 @@
 \file c11_rpc.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2019.1.16
+\update 2019.2.23
 
 eclibe Asynchronous Remote Procedure Call  template class for windows & linux
 
@@ -829,7 +829,7 @@ namespace ec {
 		void onsend(uint32_t ucid, int nstatus, void* pdata, size_t size) //send complete event
 		{
 			if (pdata)
-				base_::_pmem->mem_free(pdata, true);
+				base_::_pmem->mem_free(pdata);
 			static_cast<_CLS*>(this)->onsendcomplete(ucid, nstatus);
 		}
 		inline void onself(uint32_t ucid, int optcode, void* pdata, size_t size) {
