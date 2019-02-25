@@ -450,6 +450,26 @@ namespace ec {
 				uint32_t klen;
 				uint32_t vlen;
 			};
+			static int vtoint(const t_i* pi)
+			{
+				char s[32];
+				if (!pi->vlen || !pi->val)
+					return 0;
+				int n = pi->vlen > 31 ? 31 : pi->vlen;
+				memcpy(s, pi->val, n);
+				s[n] = 0;
+				return atoi(s);
+			}
+			static long long vtol(const t_i* pi)
+			{
+				char s[32];
+				if (!pi->vlen || !pi->val)
+					return 0;
+				int n = pi->vlen > 31 ? 31 : pi->vlen;
+				memcpy(s, pi->val, n);
+				s[n] = 0;
+				return atoll(s);
+			}
 		private:
 			ec::memory *_pmem;
 			ec::vector<t_i> _kvs;
