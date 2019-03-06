@@ -245,7 +245,11 @@ namespace ec
 		inline const char* getlogpath() {
 			return _slogpath;
 		}
+#ifdef _WIN32
         void	AddLog(const char * format, ...)
+#else
+		void	AddLog(const char * format, ...) __attribute__((format(printf, 2, 3)))
+#endif
         {
             cSafeLock lock(&_cs);
             if (!_pstr)
@@ -287,8 +291,11 @@ namespace ec
             _pstr[_nsize] = 0;
             OnNewLog(_slog);
         }
-
+#ifdef _WIN32
         void DebugLog(const char * format, ...)
+#else
+		void DebugLog(const char * format, ...) __attribute__((format(printf, 2, 3)))
+#endif
         {
 #ifdef _DEBUG
             cSafeLock lock(&_cs);
@@ -329,8 +336,11 @@ namespace ec
 
 #endif
         }
-
-        void		AddLog2(const char * format, ...)
+#ifdef _WIN32
+        void	AddLog2(const char * format, ...)
+#else
+		void	AddLog2(const char * format, ...) __attribute__((format(printf, 2, 3)))
+#endif
         {
             cSafeLock lock(&_cs);
             if (!_pstr)
