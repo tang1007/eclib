@@ -247,7 +247,11 @@ namespace ec
 		inline const char* getlogpath() {
 			return _slogpath;
 		}
+#ifdef _WIN32
 		void	add(int level, const char * format, ...)
+#else
+		void	add(int level, const char * format, ...) __attribute__((format(printf, 3, 4)))
+#endif		
 		{
 			if (level > _cfg._outleval)
 				return;
@@ -283,7 +287,11 @@ namespace ec
 			_buf.add(_slog, nbytes);
 		}
 
-		void		append(int level, const char * format, ...)
+#ifdef _WIN32
+		void	append(int level, const char * format, ...)
+#else		
+		void	append(int level, const char * format, ...)  __attribute__((format(printf, 3, 4)))
+#endif
 		{
 			if (level > _cfg._outleval)
 				return;
