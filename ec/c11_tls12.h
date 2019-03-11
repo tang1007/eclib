@@ -602,11 +602,11 @@ namespace ec
 				ulen = p[3];
 				ulen = (ulen << 8) + p[4];
 				if (uct < (uint8_t)tls::rec_change_cipher_spec || uct >(uint8_t)tls::rec_application_data ||
-					_pkgtcp[1] != TLSVER_MAJOR || ulen > tls_rec_fragment_len + 48 || _pkgtcp[2] > TLSVER_NINOR)
+					p[1] != TLSVER_MAJOR || ulen > tls_rec_fragment_len + 48 || p[2] > TLSVER_NINOR)
 				{
 					if (_plog)
 						_plog->add(CLOG_DEFAULT_DBG, "ucid %u protocol error(RECTYPE=%u,TLSVER_MAJOR=%u,TLSVER_NINOR=%u,LEN=%u)!", _ucid,
-							uct, _pkgtcp[1], _pkgtcp[2], ulen);
+							uct, p[1], p[2], ulen);
 					if (!_breadcipher)
 						Alert(2, 70, pout);//protocol_version(70)
 					return TLS_SESSION_ERR;

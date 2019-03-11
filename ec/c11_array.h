@@ -165,7 +165,7 @@ namespace ec {
 
 		void erase(size_type pos, size_type size) noexcept
 		{
-			if ( pos >= _size)
+			if (!size || pos >= _size)
 				return;
 			if (pos + size >= _size)
 				_size = pos;
