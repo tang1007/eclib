@@ -1112,7 +1112,7 @@ namespace ec
 				ss.setpos(6).read(_clientrand, 32) >> uct; //session id len
 				if (uct > 0)
 					ss.setpos(ss.getpos() + uct);
-				ss > &cipherlen;
+				ss > cipherlen;
 			}
 			catch (int) { return false; }
 			if (ss.getpos() + cipherlen > size) {

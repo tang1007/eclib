@@ -1,7 +1,7 @@
 ﻿/*!
 \file c_ipc.h
 \author	kipway@outlook.com
-\update 2018.11.1
+\update 2019.3.15
 
 InterProcess Communication with 127.0.0.1 TCP, this is Deprecated, recommended to use c11_ipc.h
 
@@ -119,9 +119,9 @@ namespace ec
 				return 0;
 			ec::cStream ss((void*)pu, _rbuf.size());
 			t_head h;
-			ss > &h.sync;
-			ss > &h.flag;
-			ss > &h.msglen;
+			ss > h.sync;
+			ss > h.flag;
+			ss > h.msglen;
 			if (h.sync != 0xF5 || h.flag != 0x10 || h.msglen > IPCMSG_MAXSIZE)
 				return -1;
 			if (h.msglen + 6 > _rbuf.size())

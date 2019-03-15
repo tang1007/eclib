@@ -1,7 +1,7 @@
 /*!
 \file c_stream.h
 \author kipway@outlook.com
-\update 2019.3.14
+\update 2019.3.15
 
 eclib class memery stream
 
@@ -23,6 +23,13 @@ limitations under the License.
 
 #pragma once
 #include <memory.h>
+#ifdef _MSC_VER
+#define bswap_16(x) _byteswap_ushort(x)
+#define bswap_32(x) _byteswap_ulong(x)
+#define bswap_64(x) _byteswap_uint64(x)
+#else
+#include <byteswap.h>
+#endif
 namespace ec
 {
 	/*!
@@ -63,47 +70,25 @@ namespace ec
 		{
 			if (_pos + sizeof(T) > _size)
 				throw (int)1;
-			if (!isbig()) { // little_endian,direct copy
-				memcpy(&v, _ps + _pos, sizeof(T)); // Let the compiler optimize
-				_pos += sizeof(T);
-				return *this;
-			}
-			int c = sizeof(T);
-			switch (c) {
-			case 1:
-				v = (T)_ps[_pos++];
-				break;
-			case 2:
-			{
-				uint16_t uv;
-				uv = _ps[_pos++];
-				uv = uv | ((uint16_t)_ps[_pos++]) << 8;
-				v = (T)uv;
-			}break;
-			case 4:
-			{
-				uint32_t uv;
-				uv = _ps[_pos++];
-				uv = uv | ((uint32_t)_ps[_pos++]) << 8;
-				uv = uv | ((uint32_t)_ps[_pos++]) << 16;
-				uv = uv | ((uint32_t)_ps[_pos++]) << 24;
-				v = (T)uv;
-			}break;
-			case 8:
-			{
-				uint64_t uv;
-				uv = _ps[_pos++];
-				uv = uv | ((uint64_t)_ps[_pos++]) << 8;
-				uv = uv | ((uint64_t)_ps[_pos++]) << 16;
-				uv = uv | ((uint64_t)_ps[_pos++]) << 24;
-				uv = uv | ((uint64_t)_ps[_pos++]) << 32;
-				uv = uv | ((uint64_t)_ps[_pos++]) << 40;
-				uv = uv | ((uint64_t)_ps[_pos++]) << 48;
-				uv = uv | ((uint64_t)_ps[_pos++]) << 56;
-				v = (T)uv;
-			}break;
-			default:
-				throw (int)2;
+			memcpy(&v, _ps + _pos, sizeof(T)); // Let the compiler optimize unaligned memory
+			_pos += sizeof(T);
+			if (isbig()) { // big_endian, swap
+				int c = sizeof(T);
+				switch (c) {
+				case 1:
+					break;
+				case 2:
+					v = (T)bswap_16((uint16_t)v);
+					break;
+				case 4:
+					v = (T)bswap_32((uint32_t)v);
+					break;
+				case 8:
+					v = (T)bswap_64((uint64_t)v);
+					break;
+				default:
+					throw (int)2;
+				}
 			}
 			return *this;
 		};
@@ -112,39 +97,26 @@ namespace ec
 		{
 			if (_pos + sizeof(T) > _size)
 				throw (int)1;
-			if (!isbig()) { //little_endian,direct copy
-				memcpy(_ps + _pos, &v, sizeof(T)); // Let the compiler optimize
-				_pos += sizeof(T);
-				return *this;
+			if (isbig()) { // big_endian, swap
+				int c = sizeof(T);
+				switch (c) {
+				case 1:
+					break;
+				case 2:
+					v = (T)bswap_16((uint16_t)v);
+					break;
+				case 4:
+					v = (T)bswap_32((uint32_t)v);
+					break;
+				case 8:
+					v = (T)bswap_64((uint64_t)v);
+					break;
+				default:
+					throw (int)2;
+				}
 			}
-			int c = sizeof(T);
-			switch (c) {
-			case 1:
-				_ps[_pos++] = (uint8_t)v;
-				break;
-			case 2:
-				_ps[_pos++] = (((uint16_t)v) & 0xFF);
-				_ps[_pos++] = (((uint16_t)v) >> 8) & 0xFF;
-				break;
-			case 4:
-				_ps[_pos++] = ((uint32_t)v) & 0xFF;
-				_ps[_pos++] = (((uint32_t)v) >> 8) & 0xFF;
-				_ps[_pos++] = (((uint32_t)v) >> 16) & 0xFF;
-				_ps[_pos++] = (((uint32_t)v) >> 24) & 0xFF;
-				break;
-			case 8:
-				_ps[_pos++] = ((uint64_t)v) & 0xFF;
-				_ps[_pos++] = (((uint64_t)v) >> 8) & 0xFF;
-				_ps[_pos++] = (((uint64_t)v) >> 16) & 0xFF;
-				_ps[_pos++] = (((uint64_t)v) >> 24) & 0xFF;
-				_ps[_pos++] = (((uint64_t)v) >> 32) & 0xFF;
-				_ps[_pos++] = (((uint64_t)v) >> 40) & 0xFF;
-				_ps[_pos++] = (((uint64_t)v) >> 48) & 0xFF;
-				_ps[_pos++] = (((uint64_t)v) >> 56) & 0xFF;
-				break;
-			default:
-				throw (int)2;
-			}
+			memcpy(_ps + _pos, &v, sizeof(T)); // Let the compiler optimize unaligned memory
+			_pos += sizeof(T);
 			return *this;
 		};
 
@@ -152,96 +124,25 @@ namespace ec
 		{
 			if (_pos + sizeof(T) > _size)
 				throw (int)1;
-			if (isbig()) { // big_endian,direct copy
-				memcpy(&v, _ps + _pos, sizeof(T)); // Let the compiler optimize
-				_pos += sizeof(T);
-				return *this;
-			}
-			int c = sizeof(T);
-			switch (c) {
-			case 1:
-				v = (T)_ps[_pos++];
-				break;
-			case 2:
-			{
-				uint16_t uv;
-				uv = _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				v = (T)uv;
-			}break;
-			case 4:
-			{
-				uint32_t uv;
-				uv = _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				v = (T)uv;
-			}break;
-			case 8:
-			{
-				uint64_t uv;
-				uv = _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				v = (T)uv;
-			}break;
-			default:
-				throw (int)2;
-			}
-			return *this;
-		};
-
-		template < typename T > cStream & operator > (T* pv) // read as big_endian
-		{
-			if (_pos + sizeof(T) > _size)
-				throw (int)1;
-			if (isbig()) { // big_endian,direct copy
-				memcpy(pv, _ps + _pos, sizeof(T)); // Let the compiler optimize
-				_pos += sizeof(T);
-				return *this;
-			}
-			int c = sizeof(T);
-			switch (c) {
-			case 1:
-				*pv = (T)_ps[_pos++];
-				break;
-			case 2:
-			{
-				uint16_t uv;
-				uv = _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				*pv = (T)uv;
-			}break;
-			case 4:
-			{
-				uint32_t uv;
-				uv = _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				*pv = (T)uv;
-			}break;
-			case 8:
-			{
-				uint64_t uv;
-				uv = _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				uv = (uv << 8) | _ps[_pos++];
-				*pv = (T)uv;
-			}break;
-			default:
-				throw (int)2;
+			memcpy(&v, _ps + _pos, sizeof(T)); // Let the compiler optimize unaligned memory
+			_pos += sizeof(T);
+			if (!isbig()) { // little_endian,swap
+				int c = sizeof(T);
+				switch (c) {
+				case 1:
+					break;
+				case 2:
+					v = (T)bswap_16((uint16_t)v);
+					break;
+				case 4:
+					v = (T)bswap_32((uint32_t)v);
+					break;
+				case 8:
+					v = (T)bswap_64((uint64_t)v);
+					break;
+				default:
+					throw (int)2;
+				}
 			}
 			return *this;
 		};
@@ -250,39 +151,26 @@ namespace ec
 		{
 			if (_pos + sizeof(T) > _size)
 				throw (int)1;
-			if (isbig()) { // big_endian,direct copy
-				memcpy(_ps + _pos, &v, sizeof(T)); // Let the compiler optimize
-				_pos += sizeof(T);
-				return *this;
+			if (!isbig()) { // little_endian,swap
+				int c = sizeof(T);
+				switch (c) {
+				case 1:
+					break;
+				case 2:
+					v = (T)bswap_16((uint16_t)v);
+					break;
+				case 4:
+					v = (T)bswap_32((uint32_t)v);
+					break;
+				case 8:
+					v = (T)bswap_64((uint64_t)v);
+					break;
+				default:
+					throw (int)2;
+				}
 			}
-			int c = sizeof(T);
-			switch (c) {
-			case 1:
-				_ps[_pos++] = (uint8_t)v;
-				break;
-			case 2:
-				_ps[_pos++] = (((uint16_t)v) >> 8) & 0xFF;
-				_ps[_pos++] = (((uint16_t)v) & 0xFF);
-				break;
-			case 4:
-				_ps[_pos++] = (((uint32_t)v) >> 24) & 0xFF;
-				_ps[_pos++] = (((uint32_t)v) >> 16) & 0xFF;
-				_ps[_pos++] = (((uint32_t)v) >> 8) & 0xFF;
-				_ps[_pos++] = ((uint32_t)v) & 0xFF;
-				break;
-			case 8:
-				_ps[_pos++] = (((uint64_t)v) >> 56) & 0xFF;
-				_ps[_pos++] = (((uint64_t)v) >> 48) & 0xFF;
-				_ps[_pos++] = (((uint64_t)v) >> 40) & 0xFF;
-				_ps[_pos++] = (((uint64_t)v) >> 32) & 0xFF;
-				_ps[_pos++] = (((uint64_t)v) >> 24) & 0xFF;
-				_ps[_pos++] = (((uint64_t)v) >> 16) & 0xFF;
-				_ps[_pos++] = (((uint64_t)v) >> 8) & 0xFF;
-				_ps[_pos++] = ((uint64_t)v) & 0xFF;
-				break;
-			default:
-				throw (int)2;
-			}
+			memcpy(_ps + _pos, &v, sizeof(T)); // Let the compiler optimize unaligned memory
+			_pos += sizeof(T);
 			return *this;
 		};
 
@@ -362,6 +250,3 @@ namespace ec
 		uint8_t* _ps;
 	};
 };
-
-
-

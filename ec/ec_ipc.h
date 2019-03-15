@@ -116,7 +116,7 @@ namespace ec {
 			ec::cStream ss((void*)pu, pin->size());
 			t_head h;
 			try {
-				ss > &h.sync > &h.flag > &h.msglen;
+				ss > h.sync > h.flag > h.msglen;
 			}
 			catch (int) {
 			}
