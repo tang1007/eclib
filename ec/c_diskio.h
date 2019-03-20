@@ -3,7 +3,7 @@
 \file c_diskio.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2019.1.27
+\update 2019.3.20
 
 disk io tools
 
@@ -199,7 +199,8 @@ namespace ec
 		/*!
 		\brief lock read whole file for windows
 		*/
-		static bool	LckRead(const char* utf8file, vector<char> *pout, long long offset = 0, long long lsize = 0)
+		template<class _Tp>
+		static bool	LckRead(const char* utf8file, _Tp *pout, long long offset = 0, long long lsize = 0)		
 		{
 			wchar_t sfile[1024];
 			int n = MultiByteToWideChar(CP_UTF8, 0, utf8file, -1, sfile, sizeof(sfile) / sizeof(wchar_t));
@@ -401,7 +402,8 @@ namespace ec
 		S_IWOTH  00002 others have write permission
 		S_IXOTH  00001 others have execute permission
 		*/
-		static bool	LckRead(const char* utf8file, vector<char> *pout, long long offset = 0, long long lsize = 0)
+		template<class _Tp>
+		static bool	LckRead(const char* utf8file, _Tp *pout, long long offset = 0, long long lsize = 0)
 		{
 			int nfd = ::open(utf8file, O_RDONLY, S_IROTH | S_IRUSR | S_IRGRP);
 			if (nfd == -1)
