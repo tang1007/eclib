@@ -1,7 +1,9 @@
 ﻿/*!
 \file minimsgsrv.h
 \author	kipway@outlook.com
-\update 2018.9.28  delete log
+\update 
+2019.3.20  update as ec::cStream update
+2018.9.28  delete log
 
 eclib class mini message server and auto reconnect client
 
@@ -99,9 +101,9 @@ namespace ec
 				return 0;
 			ec::cStream ss((void*)pu, _rbuf.size());
 			t_head h;
-			ss > &h.sync;
-			ss > &h.flag;
-			ss > &h.msglen;
+			ss > h.sync;
+			ss > h.flag;
+			ss > h.msglen;
 			if (h.sync != MINI_PKG_FLAG || h.flag != 0x10 || h.msglen > MINI_MSG_MAXSIZE) 				
 				return -1;			
 			if (h.msglen + 6 > _rbuf.size())

@@ -2,7 +2,8 @@
 /*!
 \file c_xstorage.h
 \author	kipway@outlook.com
-\update 2018.5.16
+\update 
+2019.3.20  update as ec::cStream update
 
 eclib class extend storage
 
@@ -252,9 +253,9 @@ namespace ec
                 memset(&_head, 0, sizeof(_head));
                 try
                 {
-                    ss > &_head.version > &_head.allocpages;
+                    ss > _head.version > _head.allocpages;
                     ss.read(_head.sappid, sizeof(_head.sappid)).read(_head.res, sizeof(_head.res));
-                    ss > &_head.crc32;
+                    ss > _head.crc32;
                 }
                 catch (int)
                 {
@@ -589,18 +590,18 @@ namespace ec
                 {
                     ss.setpos((1 + pdir->pos_e) * sizeof(t_entry));
 
-                    ss > &pdir->entry.d_type;
+                    ss > pdir->entry.d_type;
                     if (pdir->entry.d_type == ECSTG_ENTRY_FILE || pdir->entry.d_type == ECSTG_ENTRY_DIR)
                     {
-                        ss > &pdir->entry.res[0] > &pdir->entry.res[1] > &pdir->entry.res[2];
-                        ss > &pdir->entry.pgno_in;
-                        ss > &pdir->entry.size;
-                        ss > &pdir->entry.ures;
+                        ss > pdir->entry.res[0] > pdir->entry.res[1] > pdir->entry.res[2];
+                        ss > pdir->entry.pgno_in;
+                        ss > pdir->entry.size;
+                        ss > pdir->entry.ures;
                         ss.read(pdir->entry.d_name, sizeof(pdir->entry.d_name));
                         pdir->pos_e++;
                         if (pdir->pos_e >= ECSTG_PG_ENTRYS) {
                             ss.setpos(4);
-                            ss > &pdir->pgno_e;
+                            ss > pdir->pgno_e;
                             pdir->pos_e = 0;
                         }
                         return &pdir->entry;
@@ -608,7 +609,7 @@ namespace ec
                     pdir->pos_e++;
                 }
                 ss.setpos(4);
-                ss > &pdir->pgno_e;
+                ss > pdir->pgno_e;
                 pdir->pos_e = 0;
             }
             pdir->pos_e = -1;
@@ -669,12 +670,12 @@ namespace ec
                 if (ECSTG_PAGE_SIZE != ReadFrom(static_cast<long long>(upgnext) * ECSTG_PAGE_SIZE, pg, ECSTG_PAGE_SIZE))
                     return false;
                 ss.setpos(0);
-                ss > &utype > &upgnext;
+                ss > utype > upgnext;
                 if (utype != ECSTG_PAGE_FAT)
                     return false;
                 for (i = 0; i < ECSTG_PG_FATPGS; i++)
                 {
-                    ss > &upg;
+                    ss > upg;
                     if (upg == ECSTG_PAGE_INVALIDATE)
                         return true;
                     pout->Add(upg);
@@ -698,7 +699,7 @@ namespace ec
                 if (ECSTG_PAGE_SIZE != ReadFrom(static_cast<long long>(upgnext) * ECSTG_PAGE_SIZE, pg, ECSTG_PAGE_SIZE))
                     return false;
                 ss.setpos(0);
-                ss > &utype > &upgnext;
+                ss > utype > upgnext;
                 if (utype != ECSTG_PAGE_FAT)
                     return false;
 
@@ -771,7 +772,7 @@ namespace ec
                 if (ECSTG_PAGE_SIZE != ReadFrom(static_cast<long long>(pgnext) * ECSTG_PAGE_SIZE, pgtmp.pg, ECSTG_PAGE_SIZE))
                     return ECSTG_PAGE_INVALIDATE;
                 ss.setpos(0);
-                ss > &type > &pgnext;
+                ss > type > pgnext;
                 if (type != ECSTG_PAGE_DIR)
                     return ECSTG_PAGE_INVALIDATE;
                 pgs.Add(&pgtmp, 1);
@@ -788,7 +789,7 @@ namespace ec
                 {
                     ss.setpos((j + 1) * sizeof(t_entry));
                     ss >> di.type >> di.res[0] >> di.res[1] >> di.res[2];
-                    ss > &di.pageno > &di.size > &di.ures;
+                    ss > di.pageno > di.size > di.ures;
                     ss.read(di.name, sizeof(di.name));
                     if (di.type == ECSTG_ENTRY_EMPTY)
                     {
@@ -842,7 +843,7 @@ namespace ec
                     return ECSTG_PAGE_INVALIDATE;
                 ss.attach(pgtmp.pg, ECSTG_PAGE_SIZE);
                 ss.setpos(0);
-                ss > &type > &pgnext;
+                ss > type > pgnext;
                 if (type != ECSTG_PAGE_DIR)
                     return ECSTG_PAGE_INVALIDATE;
                 pgs.Add(&pgtmp, 1);

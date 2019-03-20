@@ -1,7 +1,8 @@
 /*!
 \file c_tls12.h
 \author	kipway@outlook.com
-\update 2018.8.2 
+\update 
+2019.3.20 update as cStream update 
 
 eclib TLS1.2(rfc5246) server and client class
 support:
@@ -1196,7 +1197,7 @@ namespace ec
                 ss.setpos(6).read(_clientrand, 32) >> uct; //session id len
                 if (uct > 0)
                     ss.setpos(ss.getpos() + uct);
-                ss > &cipherlen;
+                ss > cipherlen;
             }
             catch (int) { return false; }
             if (ss.getpos() + cipherlen > size)
