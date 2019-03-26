@@ -2,7 +2,8 @@
 \file c11_websocket.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2019.1.22
+\update 2019.3.25
+2019.3.25 update http parse
 
 eclib websocket protocol
 http protocol only support get and head. websocket protocol support Sec-WebSocket-Version:13
@@ -33,7 +34,7 @@ limitations under the License.
 #include "c_diskio.h"
 #include "c11_keyval.h"
 #include "c_base64.h"
-
+#include "c11_http.h"
 #include "c_sha1.h"
 #include "zlib/zlib.h"
 
@@ -72,19 +73,6 @@ limitations under the License.
 
 namespace ec
 {
-	enum HTTPERROR
-	{
-		he_ok = 0,
-		he_waitdata,
-		he_failed,
-		he_method,
-		he_url,
-		he_ver,
-	};
-	static const char* http_sret404 = "http/1.1 404  not found!\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:9\r\n\r\nnot found";
-	static const char* http_sret404outsize = "http/1.1 404  over size!\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:15\r\n\r\nfile over size!";
-	static const char* http_sret400 = "http/1.1 400  Bad Request!\r\nConnection: keep-alive\r\nContent-type:text/plain\r\nContent-Length:11\r\n\r\nBad Request";
-
 	struct t_httpmime
 	{
 		char sext[16];
@@ -298,7 +286,7 @@ namespace ec
 		return true;
 	}
 
-	inline bool IsDir(const char* s)
+	static bool IsDir(const char* s)
 	{
 #ifdef _WIN32
 		struct _stat st;
@@ -316,7 +304,7 @@ namespace ec
 		return false;
 #endif
 	}
-	inline const char *GetFileExtName(const char*s)
+	static const char *GetFileExtName(const char*s)
 	{
 		const char *pr = NULL;
 		while (*s)
@@ -478,97 +466,36 @@ namespace ec
 			_reqargs[0] = '\0';
 			_version[0] = '\0';
 			_sline[0] = '\0';
+			_headers.reset();
+			_txthead.clear();
 		}
-	protected:
-		int NextLine(const char* in, size_t sizein, size_t &pos, char *out, size_t sizeout)//return -1:err; 0:wait ; > 0 linesize
-		{
-			size_t i = 0;
-			while (pos < sizein) {
-				if (in[pos] == '\r')
-					pos++;
-				else if (in[pos] == '\n') {
-					if (i >= sizeout)
-						return -1;
-					out[i++] = in[pos++];
-					out[i] = 0;
-					return (int)i;
-				}
-				else {
-					out[i++] = in[pos++];
-					if (i >= sizeout)
-						return -1;
-				}
-			}
-			return 0;
-		}
-
-		int GetContextLength()
-		{
-			char sval[16] = { 0 };
-			if (!_headers.get("Context-Length", sval, sizeof(sval)))
-				return 0;
-			return atoi(sval);
-		}
-
 	public:
 		int  HttpParse(const char* stxt, size_t usize, size_t &sizedo)
 		{
-			if (usize < 3)
-				return he_waitdata;
 			initbuf();
-			int nret;
-			size_t pos = 0;
-			nret = NextLine(stxt, usize, pos, _sline, sizeof(_sline)); // first line
-			if (nret < 0)
+			http::package r;
+			int nr = r.parse(stxt, usize);
+			if (nr < 0)
 				return he_failed;
-			else if (nret == 0)
+			if(nr == 0)
 				return he_waitdata;
-			char surl[512];
-			cStrSplit sp(_sline);
-			if (!sp.next("\x20\t", _method, sizeof(_method)) || !sp.next("\x20\t", surl, sizeof(surl))
-				|| !sp.next("\x20\t", _version, sizeof(_version)))
+			if (!r.GetUrl(_request, sizeof(_request)) || !r.GetMethod(_method, sizeof(_method)) ||
+				r._body._size > SIZE_HTTPMAXREQUEST)
 				return he_failed;
-			if (str_icmp("get", _method) && str_icmp("head", _method))
-				return he_failed;
-			sp.reset(surl);
-			sp.next("?", _request, sizeof(_request));
-			sp.next("?", _reqargs, sizeof(_reqargs));
-
-			size_t poshead = pos, poshead_e = 0; //do head
-			do {
-				nret = NextLine(stxt, usize, pos, _sline, sizeof(_sline));
-				if (_sline[0] == '\n')
-					break;
-			} while (nret > 0);
-			if (nret < 0)
-				return he_failed;
-			else if (nret == 0)
-				return he_waitdata;
-			if (pos - poshead >= SIZE_MAX_HTTPHEAD)
-				return he_failed;
-
-			_txthead.clear();
-			_txthead.add(stxt + poshead, pos - poshead);
-			_headers.init(_txthead.data(), _txthead.size());
-
-			_nprotocol = PROTOCOL_HTTP;
-
-			_body.clear(size_t(0)); // do body
-			int bodylength = GetContextLength();
-			if (bodylength < 0)
-				return  he_failed;
-			if (!bodylength) {
-				sizedo = pos;
-				return he_ok;
+			strcpy(_version, "http/1.1");
+			if (r._head.size() > 0) {
+				size_t n = (size_t)(r._body._s - r._head[0]._key._s);
+				if (n + 1 > _txthead.capacity())
+					return he_failed;
+				_txthead.add(r._head[0]._key._s, n);
+				_headers.init(_txthead.data(), _txthead.size());
 			}
-			if (pos + bodylength > usize)
-				return he_waitdata;
-
-			_body.add(stxt + pos, bodylength);
-			sizedo = pos + bodylength;
+			if (r._body._size)
+				_body.add(r._body._s,r._body._size);
+			sizedo = (r._body._s - stxt) + r._body._size;
 			return he_ok;
 		}
-		void Resetwscomp()
+		inline void Resetwscomp()
 		{
 			_body.clear((size_t)0);
 		}
@@ -578,11 +505,10 @@ namespace ec
 			return CheckHeadFiled("Connection", "keep-alive");
 		}
 
-		bool GetWebSocketKey(char sout[], int nsize)
+		inline bool GetWebSocketKey(char sout[], int nsize)
 		{
-			if (!CheckHeadFiled("Connection", "Upgrade") || !CheckHeadFiled("Upgrade", "websocket"))
-				return false;
-			return _headers.get("Sec-WebSocket-Key", sout, nsize);
+			return (CheckHeadFiled("Connection", "Upgrade") && CheckHeadFiled("Upgrade", "websocket")
+				&& _headers.get("Sec-WebSocket-Key", sout, nsize));
 		}
 
 		inline bool GetHeadFiled(const char* sname, char sval[], size_t size)
@@ -1140,7 +1066,7 @@ namespace ec
 			}
 			size_t flen = ec::IO::filesize(sfile);
 			if (flen > MAX_FILESIZE_HTTP_DOWN) {
-				httpreterr(ucid, http_sret404outsize);
+				httpreterr(ucid, http_sret413);
 				return pPkg->HasKeepAlive();
 			}
 			
