@@ -1064,7 +1064,7 @@ namespace ec
 				httpreterr(ucid, http_sret404);
 				return pPkg->HasKeepAlive();
 			}
-			size_t flen = ec::IO::filesize(sfile);
+			size_t flen = (size_t)ec::IO::filesize(sfile);
 			if (flen > MAX_FILESIZE_HTTP_DOWN) {
 				httpreterr(ucid, http_sret413);
 				return pPkg->HasKeepAlive();

@@ -255,7 +255,7 @@ namespace ec {
 		}
 		void erase(size_type pos, size_type size = 1) 
 		{
-			if (!size || !_pbuf || pos >= _usize || !size)
+			if (!_pbuf || pos >= _usize || !size)
 				return;
 			if (pos + size >= _usize)
 				_usize = pos;
