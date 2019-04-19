@@ -564,7 +564,7 @@ namespace ec
 	class cRpcBaseThread :public cTcpSvrWorkThread
 	{
 	public:
-		cRpcBaseThread(cRpcClientMap* pcli) : _msgr(256 * 1024), _msgs(256 * 1024), _putmsg(256 * 1024)
+		cRpcBaseThread(cRpcClientMap* pcli) : _msgr(256 * 1024), _msgs(256 * 1024), _putmsg(256 * 1024), _buselz4(true)
 		{
 			_pcli = pcli;
 			memset(_srvname, 0, sizeof(_srvname));
@@ -580,6 +580,9 @@ namespace ec
 		{
 			strncpy(_srvname, srvname, sizeof(_srvname));
 		}
+		inline void setnolz4() {
+			_buselz4 = false;
+		}
 	protected:
 		virtual int _OnNotify(t_rpcnotify* pnotify) = 0;//必须处理connect,login,logout;可选处理selfmsg,complete,opterr
 		virtual int _OnMsg(RPCMSGTYPE type, unsigned int ucid, const char* usr, const unsigned char *pmsg, size_t msglen, void** presult, size_t* resultlen) = 0; //消息处理回调
@@ -592,7 +595,7 @@ namespace ec
 		cReUseMem _cpbufc; //压缩内存
 		cReUseMem _cpbufu; //解压内存
 		tArray<unsigned char> _putmsg;//!<报文推送缓冲区
-
+		bool _buselz4; //使用lz4压缩
 	private:
 		bool MakePkg(const void* pd, size_t size, RPCMSGTYPE msgtype, RPCCOMPRESS compress, unsigned int seqno, const unsigned char* pmask, tArray<unsigned char>* pPkg)
 		{
@@ -899,7 +902,7 @@ namespace ec
 			if (presult && sizeresult) //有应答，自动按照发送数据长度选择压缩方式
 			{
 				RPCCOMPRESS cp = rpccomp_none;
-				if (sizeresult > 1024)
+				if (_buselz4 && sizeresult > 1024)
 					cp = rpccomp_lz4;
 				MakePkg(presult, sizeresult, rpcmsg_reply, cp, seqno, usrinfo._pswsha1, pout);//加密打包
 			}
@@ -976,7 +979,7 @@ namespace ec
 				return -1; //无此用户或该用户没有登录
 
 			RPCCOMPRESS comp = rpccomp_none;
-			if (usize > 512)
+			if (_buselz4 && usize > 512)
 				comp = rpccomp_lz4;
 			unsigned int seqno = (unsigned int)ec::atomic_addlong(&_pcli->_lseqno, 1);
 			_putmsg.ClearData();
