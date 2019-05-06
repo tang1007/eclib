@@ -613,7 +613,7 @@ namespace ec
 			size_t ulen = size;
 			if (compress == rpccomp_lz4)
 			{
-				ulen = size + (size / 1024) * 32 + 1024;
+				ulen = LZ4_compressBound((int)size) + 8;// size + (size / 1024) * 32 + 1024;
 				pdata = _cpbufc.Alloc(ulen);
 				if (pdata && encode_lz4(pd, size, pdata, &ulen))
 					ph->comp = rpccomp_lz4; //lz4压缩
@@ -1021,7 +1021,7 @@ namespace ec
 			cReUseMem cpbufc; //压缩内存
 			if (compress == rpccomp_lz4)
 			{
-				ulen = size + (size / 1024) * 32 + 1024;
+				ulen = LZ4_compressBound((int)size) + 8;// size + (size / 1024) * 32 + 1024;
 				pdata = cpbufc.Alloc(ulen);
 				if (pdata && encode_lz4(pd, size, pdata, &ulen))
 					ph->comp = rpccomp_lz4; //lz4压缩
@@ -1267,7 +1267,7 @@ namespace ec
 			size_t ulen = size;
 			if (compress == rpccomp_lz4)
 			{
-				ulen = size + (size / 1024) * 32 + 1024;
+				ulen = LZ4_compressBound((int)size) + 8; //size + (size / 1024) * 32 + 1024;
 				pdata = _cpbufc.Alloc(ulen);
 				if (pdata && encode_lz4(pd, size, pdata, &ulen))
 					ph->comp = rpccomp_lz4; //lz4压缩
@@ -1775,7 +1775,7 @@ namespace ec
 			size_t ulen = size;
 			if (compress == rpccomp_lz4)
 			{
-				ulen = size + (size / 1024) * 32 + 1024;
+				ulen = LZ4_compressBound((int)size) + 8; //size + (size / 1024) * 32 + 1024;
 				pdata = _cpbufc.Alloc(ulen);
 				if (pdata && encode_lz4(pd, size, pdata, &ulen))
 					ph->comp = rpccomp_lz4; //lz4压缩

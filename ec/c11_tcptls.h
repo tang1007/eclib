@@ -205,6 +205,15 @@ namespace ec {
 			return _nstatus;
 		}
 	protected:
+		bool set_serverca(const char* srvcafile) 
+		{
+			if (srvcafile) {
+				if (!_tls.SetServerCa(srvcafile))
+					return false;
+			}
+			return true;
+		}
+	protected:
 		void  onrecv(const void* pdata, size_t bytesize) {
 			vector<uint8_t> pkg(1024 * 32, base_::_pmem);
 			int nst = _tls.OnTcpRead(pdata, bytesize, &pkg);

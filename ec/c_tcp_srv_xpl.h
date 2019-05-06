@@ -111,11 +111,12 @@ namespace ec
 			return nerr > 0 ? (int)usize : -1;
 		};
 
-		
+
 	protected:
 		virtual	void dojob()
 		{
 			t_xpoll_event evt;
+			_watchdog = 0;
 			if (!_ppoll->get_event(&evt))
 				return;
 			if (XPOLL_EVT_OPT_READ == evt.opt) {
@@ -136,7 +137,7 @@ namespace ec
 			}
 			else if (XPOLL_EVT_OPT_SEND == evt.opt) {
 				if (evt.pdata)
-					_pmem->mem_free(evt.pdata);				
+					_pmem->mem_free(evt.pdata);
 			}
 			else
 				DoSelfMsg(evt.ucid, evt.opt); //自定义消息
@@ -327,8 +328,8 @@ namespace ec
 				m_pThread[i] = NULL;
 			}
 			m_uThreads = 0;
-		}	
-	public:		
+		}
+	public:
 
 		bool	Start(unsigned short wport, unsigned int uThreads, bool bkeepalivefast = false, bool busenagle = true)
 		{
@@ -414,7 +415,7 @@ namespace ec
 		-1: no ucid or IO error ,call OnRemovedUCID
 		*/
 		int	SendToUcid(unsigned int ucid, const void* pbuf, unsigned int usize)
-		{			
+		{
 			if (!pbuf || !usize)
 				return 0;
 			vector<uint8_t> vd(usize + 8 - usize % 8, _pmem);

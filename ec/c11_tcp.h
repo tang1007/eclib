@@ -49,6 +49,11 @@ namespace ec
 			memset(&_xitem, 0, sizeof(_xitem));
 			_xitem.fd = INVALID_SOCKET;
 		}
+	protected:
+		void set_tcp_param(const char* sip, uint16_t port) {
+			str_lcpy(_sip, sip, sizeof(_sip));
+			_port = port;
+		}		
 	public:
 		bool open(const char* sip, uint16_t port)
 		{
