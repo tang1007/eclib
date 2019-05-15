@@ -2,7 +2,7 @@
 \file c11_rpc.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2019.2.23
+\update 2019.5.14
 
 eclibe Asynchronous Remote Procedure Call  template class for windows & linux
 
@@ -288,6 +288,7 @@ namespace ec {
 			_rbuf.erase(0, sizemsg + sizeof(t_rpcpkg));
 			_rbuf.shrink(0);
 			unsigned char* puc = pout->data() + sizeof(t_rpcpkg);
+			pkg = (t_rpcpkg*)pout->data();
 			if (pkg->type >= rpcmsg_request) {
 				register unsigned int i;
 				if (!(pkg->cflag & 0x01)) {
@@ -924,6 +925,8 @@ namespace ec {
 					break;
 				nr = DoLeftData(&msgr);
 			};
+			if (nr < 0)
+				_rbuf.clear();
 			_rbuf.shrink(0);
 		};
 		void onconnect() {
@@ -955,6 +958,7 @@ namespace ec {
 			pout->add(pu, sizemsg + sizeof(t_rpcpkg));
 			_rbuf.erase(0, sizemsg + sizeof(t_rpcpkg));
 			unsigned char* puc = pout->data() + sizeof(t_rpcpkg);
+			pkg = (t_rpcpkg*)pout->data();
 			if (pkg->type >= rpcmsg_request) {
 				if (!(pkg->cflag & 0x01)) { // Decrypt
 					unsigned int *pu4 = (unsigned int*)puc, u4 = sizemsg / 4;
