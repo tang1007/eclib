@@ -288,6 +288,7 @@ namespace ec
 			pout->Add(pu, sizemsg + sizeof(t_rpcpkg));
 			_rbuf.LeftMove(sizemsg + sizeof(t_rpcpkg));
 			unsigned char* puc = pout->GetBuf() + sizeof(t_rpcpkg);
+			pkg = (t_rpcpkg*)pout->data();
 			if (pkg->type >= rpcmsg_request) //应用层消息需要解密
 			{
 				register unsigned int i;
@@ -1872,6 +1873,7 @@ namespace ec
 			pout->Add(pu, sizemsg + sizeof(t_rpcpkg));
 			_rbuf.LeftMove(sizemsg + sizeof(t_rpcpkg));
 			unsigned char* puc = pout->GetBuf() + sizeof(t_rpcpkg);
+			pkg = (t_rpcpkg*)pout->data();
 			if (pkg->type >= rpcmsg_request) //应用层消息需要解密
 			{
 				register unsigned int i;
