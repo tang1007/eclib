@@ -202,7 +202,7 @@ namespace ec
 #ifdef _WIN32
 				shutdown(_xitem.fd, SD_BOTH);
 #else
-				shutdown(_xitem.fd, SHUT_WR);
+				shutdown(_xitem.fd, SHUT_RDWR);
 #endif
 				::closesocket(_xitem.fd);
 				_xitem.fd = INVALID_SOCKET;
@@ -634,7 +634,7 @@ namespace ec
 #ifdef _WIN32
 				shutdown(_fd_listen, SD_BOTH);
 #else
-				shutdown(_fd_listen, SHUT_WR);
+				shutdown(_fd_listen, SHUT_RDWR);
 #endif
 				::closesocket(_fd_listen);
 
@@ -791,7 +791,7 @@ namespace ec
 #ifdef _WIN32
 				shutdown(sAccept, SD_BOTH);
 #else
-				shutdown(sAccept, SHUT_WR);
+				shutdown(sAccept, SHUT_RDWR);
 #endif
 				::closesocket(sAccept);
 				return;

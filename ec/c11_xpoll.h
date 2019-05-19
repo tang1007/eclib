@@ -765,7 +765,7 @@ namespace ec {
 				shutdown(pi->fd, SD_BOTH);
 				::closesocket(pi->fd);
 #else
-				shutdown(pi->fd, SHUT_WR);
+				shutdown(pi->fd, SHUT_RDWR);
 				::close(pi->fd);
 #endif
 				pi->fd = INVALID_SOCKET;
