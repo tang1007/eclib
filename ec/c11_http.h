@@ -273,7 +273,7 @@ namespace ec
 			{
 				clear();
 				if (!s || !size)
-					return e_err;
+					return e_wait;
 				txt _s(s, size);
 				int ne;
 				txt l;
