@@ -3,7 +3,7 @@
 \brief parse json from string or file
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2018.11.15
+\update 2019.5.27
 
 eclibe parse json for windows & linux
 
@@ -176,7 +176,7 @@ namespace ec {
 			bool exist(const char* key, size_t keysize) {
 				size_t i, n = _kvs.size();
 				for (i = 0; i < n; i++) {
-					if (ec::str_ineq(_kvs[i].key, key, keysize))
+					if (ec::str_ineq(_kvs[i].key, key, keysize, true))
 						return true;
 				}
 				return false;

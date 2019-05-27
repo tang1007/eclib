@@ -2,7 +2,7 @@
 \file c_str.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2019.1.9
+\update 2019.5.27
 
 eclib  string
 
@@ -135,7 +135,7 @@ namespace ec
 		return *s1 == '\0' && *s2 == '\0';
 	}
 
-	inline bool str_neq(const char* s1, const char* s2, size_t n)
+	inline bool str_neq(const char* s1, const char* s2, size_t n, bool alls1 = false)
 	{
 		if (!s1 || !s2)
 			return false;
@@ -145,10 +145,12 @@ namespace ec
 				return false;
 			i++;
 		}
+		if (alls1)
+			return i == n && !*s1;
 		return i == n;
 	}
 
-	inline bool str_ineq(const char* s1, const char* s2, size_t n)
+	inline bool str_ineq(const char* s1, const char* s2, size_t n, bool alls1 = false)
 	{
 		if (!s1 || !s2)
 			return false;
@@ -160,6 +162,8 @@ namespace ec
 			s2++;
 			i++;
 		}
+		if (alls1)
+			return i == n && !*s1;
 		return i == n;
 	}
 
