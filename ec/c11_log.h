@@ -346,7 +346,7 @@ namespace ec
 					ido++;
 				}
 				o[i * 3] = '\0';
-				append(level,"%s", o);
+				append(level,"%s\n", o);
 			}
 		}
 

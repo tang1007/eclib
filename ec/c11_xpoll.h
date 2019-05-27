@@ -496,7 +496,7 @@ namespace ec {
 			memset(&info, 0, sizeof(info));
 			_memread.getinfo(&info);
 			if (info.err_s || info.err_m || info.err_l)
-				_plog->add(CLOG_DEFAULT_ERR, "% error,sysblks=%d,s=%d,m=%d,l=%d", swho, info.sysblks, info.err_s, info.err_m, info.err_l);
+				_plog->add(CLOG_DEFAULT_ERR, "%s error,sysblks=%d,s=%d,m=%d,l=%d", swho, info.sysblks, info.err_s, info.err_m, info.err_l);
 			else
 				_plog->add(CLOG_DEFAULT_DBG, "%s infos,sysblks=%d,s=%d,m=%d,l=%d", swho, info.sysblks, info.err_s, info.err_m, info.err_l);
 			_plog->add(CLOG_DEFAULT_DBG, "%s:\n  s  %8d:%6d/%6d\n  m  %8d:%6d/%6d\n  l  %8d:%6d/%6d\n", swho, info.sz_s, info.stk_s, info.blk_s,

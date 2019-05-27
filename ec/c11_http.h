@@ -19,6 +19,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 #include <string.h>
 #include <ctype.h>
 #include "c11_array.h"
+#include "zlib/zlib.h"
 namespace ec
 {
 	enum HTTPERROR
@@ -119,7 +120,7 @@ namespace ec
 					_size--;
 				}
 			}
-			bool ieq(const char* s) // Case insensitive equal
+			bool ieq(const char* s) const// Case insensitive equal
 			{
 				if (!s || !_s || !_size)
 					return false;
@@ -133,6 +134,14 @@ namespace ec
 					i++;
 				}
 				return !*s;
+			}
+			int get(char *pout, size_t sizeout) const // return get chars
+			{
+				if (!_s || _size >= sizeout)
+					return 0;
+				memcpy(pout, _s, _size);
+				pout[_size] = 0;
+				return (int)_size;
 			}
 			bool get2c(txt* pout, const char c) // get to c and skip c
 			{
@@ -227,9 +236,9 @@ namespace ec
 			int parse(const char* sl, size_t size)// return <0 : error ; >0 : line size
 			{
 				if (!sl || !size)
-					return e_err;
+					return e_wait;
 				txt _s(sl, size);
-				if (!_s.get2sp(&_method) || (!_method.ieq("get") && !_method.ieq("head")))
+				if (!_s.get2sp(&_method) || (!_method.ieq("get") && !_method.ieq("head") && !_method.ieq("put") && !_method.ieq("post")))
 					return e_method;
 				_s.skip();
 				if (!_s.get2sp(&_url))
@@ -343,7 +352,6 @@ namespace ec
 					return "none";
 				return s[n];
 			}
-			
 			bool GetHeadFiled(const char* skey, char sval[], size_t size)
 			{
 				txt* pt = getattr(skey);
@@ -360,8 +368,8 @@ namespace ec
 				if (!pt)
 					return false;
 				size_t pos = 0;
-				while (str_getnext(",", pt->_s, pt->_size, pos, sv, sizeof(sv))) {
-					if (!str_icmp(sv, sval))
+				while (ec::str_getnext(",", pt->_s, pt->_size, pos, sv, sizeof(sv))) {
+					if (!ec::str_icmp(sv, sval))
 						return true;
 				}
 				return false;
@@ -379,6 +387,11 @@ namespace ec
 			{
 				return _req._method.ieq(key);
 			}
+			bool GetMethod(char *sout, size_t sizeout)
+			{
+				*sout = 0;
+				return _req._method.get(sout, sizeout) > 0;
+			}
 			bool GetUrl(char sout[], size_t size)
 			{
 				size_t i = 0u;
@@ -391,13 +404,161 @@ namespace ec
 				sout[i] = 0;
 				return i > 0;
 			}
-			bool GetMethod(char sout[], size_t size)
+
+			template<class _Tp>
+			static int encode_body(const void *pSrc, size_t size_src, ec::vector<_Tp>* pout, bool gzip = false)
 			{
-				if (size + 1 < _req._method._size)
+				z_stream stream;
+				int err;
+				char outbuf[32 * 1024];
+
+				stream.next_in = (z_const Bytef *)pSrc;
+				stream.avail_in = (uInt)size_src;
+
+				stream.zalloc = (alloc_func)0;
+				stream.zfree = (free_func)0;
+				stream.opaque = (voidpf)0;
+
+				err = deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, gzip ? 31 : MAX_WBITS, 8, Z_DEFAULT_STRATEGY); // windowBits <0 deflate;  8~15 zlib format; > 15 gzip format; abs() <=MAX_WBITS
+				if (err != Z_OK)
+					return err;
+				uLong uout = 0;
+				stream.avail_out = 0;
+				while (!stream.avail_out) {
+					stream.next_out = (unsigned char*)outbuf;
+					stream.avail_out = (unsigned int)sizeof(outbuf);
+					err = deflate(&stream, Z_SYNC_FLUSH);
+					if (err != Z_OK)
+						break;
+					if (!pout->add((_Tp*)outbuf, stream.total_out - uout)) {
+						err = Z_MEM_ERROR;
+						break;
+					}
+					uout += stream.total_out - uout;
+				}
+				deflateEnd(&stream);
+				return err;
+			}
+
+			template<class _Tp>
+			static int decode_body(const void *pSrc, size_t size_src, ec::vector<_Tp>* pout, bool gzip = false)
+			{
+				z_stream stream;
+				int err;
+				char outbuf[32 * 1024];
+
+				stream.next_in = (z_const Bytef *)pSrc;
+				stream.avail_in = (uInt)size_src;
+
+				stream.zalloc = (alloc_func)0;
+				stream.zfree = (free_func)0;
+				stream.opaque = (voidpf)0;
+
+				err = inflateInit2(&stream, gzip ? 31 : MAX_WBITS);// windowBits <0 deflate;  8~15 zlib format; > 15 gzip format; abs() <=MAX_WBITS
+				if (err != Z_OK)
+					return err;
+				uLong uout = 0;
+				while (stream.avail_in > 0) {
+					stream.next_out = (unsigned char*)outbuf;
+					stream.avail_out = (unsigned int)sizeof(outbuf);
+					err = inflate(&stream, Z_SYNC_FLUSH);
+					if (err != Z_OK)
+						break;
+					if (!pout->add((_Tp*)outbuf, stream.total_out - uout)) {
+						err = Z_MEM_ERROR;
+						break;
+					}
+					uout += stream.total_out - uout;
+				}
+				inflateEnd(&stream);
+				return err;
+			}
+
+			bool make(ec::vector<char>* pout, int statuscode, const char* statusmsg,
+				const char* Content_type, const char* headers, const char* pbody, size_t bodysize)
+			{
+				pout->clear();
+				const char* sc;
+				char s[256];
+				int n = snprintf(s, sizeof(s), "HTTP/1.1 %d %s\r\n", statuscode, statusmsg);
+				if (n >= (int)sizeof(s))
 					return false;
-				memcpy(sout, _req._method._s, _req._method._size);
-				sout[_req._method._size] = 0;
+				pout->add(s, n);
+				if (HasKeepAlive()) {
+					sc = "Connection: keep-alive\r\n";
+					pout->add(sc, strlen(sc));
+				}
+				if (headers && *headers)
+					pout->add(headers, strlen(headers));
+
+				if (!pbody || !bodysize) {
+					pout->add("\r\n", 2);
+					return true;
+				}
+				if (Content_type && *Content_type) {
+					n = snprintf(s, sizeof(s), "Content-type: %s\r\n", Content_type);
+					if (n >= (int)sizeof(s))
+						return false;
+					pout->add(s, n);
+				}
+				else {
+					sc = "Content-type: application/octet-stream\r\n";
+					pout->add(sc, strlen(sc));
+				}
+				int bdeflate = 0;
+				if (GetHeadFiled("Accept-Encoding", s, sizeof(s))) {
+					char sencode[16] = { 0 };
+					size_t pos = 0;
+					while (ec::str_getnext(";,", s, strlen(s), pos, sencode, sizeof(sencode))) {
+						if (!ec::str_icmp("gzip", sencode)) {
+							sc = "Content-Encoding: gzip\r\n";
+							pout->add(sc, strlen(sc));
+							bdeflate = 2;
+							break;
+						}
+						if (!ec::str_icmp("deflate", sencode) && !bdeflate) {
+							sc = "Content-Encoding: deflate\r\n";
+							pout->add(sc, strlen(sc));
+							bdeflate = 1;
+						}
+					}
+				}
+				size_t poslen = pout->size(), sizehead;
+				snprintf(s, sizeof(s), "Content-Length: %9d\r\n\r\n", (int)bodysize);
+				pout->add(s, strlen(s));
+				sizehead = pout->size();
+				if (bdeflate) {
+					if (Z_OK != encode_body(pbody, bodysize, pout, bdeflate == 2))
+						return false;
+					snprintf(s, sizeof(s), "Content-Length: %9d\r\n\r\n", (int)(pout->size() - sizehead));
+					memcpy(pout->data() + poslen, s, strlen(s));
+				}
+				else
+					pout->add(pbody, bodysize);
 				return true;
+			}
+			int get_basic_auth(char *sname, size_t sizename, char* pswd, size_t sizepswd)
+			{
+				char  smode[32], skp[128], kv[128];
+				smode[0] = 0;
+				skp[0] = 0;
+				kv[0] = 0;
+				if (!GetHeadFiled("Authorization", kv, sizeof(kv)))
+					return 401;
+				int n = (int)strlen(kv);
+				if (n >= (int)sizeof(skp))
+					return 401;
+				size_t pos = 0;
+				if (!ec::str_getnextstring('\x20', kv, n, pos, smode, sizeof(smode)) || !ec::str_getnextstring('\n', kv, n, pos, skp, sizeof(skp)))
+					return 401;
+				if (!ec::str_ieq("Basic", smode))
+					return 401;
+				n = ec::decode_base64(kv, skp, (int)strlen(skp));
+				if (n < 0)
+					return 401;
+				kv[n] = 0;
+				pos = 0;
+				return (ec::str_getnextstring(':', kv, n, pos, sname, sizename) && ec::str_getnextstring('\n', kv, n, pos, pswd, sizepswd)) ? 0 : 401;
 			}
 		};
 	}// http
