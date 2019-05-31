@@ -492,7 +492,7 @@ namespace ec {
 			const char* getval(const char* key, size_t *psize, KVTYPE* pvt = nullptr) {
 				size_t i, n = _kvs.size();
 				for (i = 0; i < n; i++) {
-					if (_kvs[i].key && _kvs[i].klen && ec::str_ineq(_kvs[i].key, key, _kvs[i].klen)) {
+					if (_kvs[i].key && _kvs[i].klen && ec::str_ineq( key, _kvs[i].key,_kvs[i].klen, true)) {
 						if (pvt)
 							*pvt = vtype(_kvs[i].val);
 						*psize = _kvs[i].vlen;
