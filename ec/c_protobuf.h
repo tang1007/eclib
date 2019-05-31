@@ -56,7 +56,7 @@ namespace ec
 		}
 		inline int64_t de_zigzag64(uint64_t v) const
 		{
-			return (int)((v >> 1) ^ (-(int64_t)(v & 1)));
+			return (int64_t)((v >> 1) ^ (-(int64_t)(v & 1)));
 		}
 		template<class _Tp>
 		inline bool get_varint(const uint8_t* &pd, int &len, _Tp &out) const  //get Varint (Base 128 Varints)
