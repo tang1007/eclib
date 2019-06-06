@@ -64,7 +64,7 @@ namespace ec
 			int nbit = 0;
 			out = 0;
 			do {
-				out |= (*pd & 0x7F) << nbit;
+				out |= (*pd & (_Tp)0x7F) << nbit;
 				if (!(*pd & 0x80)) {
 					pd++;
 					len--;
