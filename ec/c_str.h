@@ -87,24 +87,24 @@ namespace ec
 		char* sr = sd;
 		while (count && (*sd++ = *ss++) != '\0')
 			count--;
-		if(!count)
+		if (!count)
 			*sd = '\0';
 		return sr;
 	};
 
 	inline size_t str_lcpy(char* sd, const char* ss, size_t count)// like strlcpy for linux,add null to the end of sd
-	{		
+	{
 		size_t n = count;
 		if (!sd)
 			return 0;
-		if (!ss || !(*ss) || !count){
-			if(sd)
+		if (!ss || !(*ss) || !count) {
+			if (sd)
 				*sd = '\0';
 			return 0;
 		}
 		while (count && (*sd++ = *ss++) != '\0')
 			count--;
-		if (!count){
+		if (!count) {
 			count = 1;
 			*--sd = '\0';
 		}
@@ -377,8 +377,42 @@ namespace ec
 					break;
 				sout[n++] = (char)((h << 4) | l);
 			}
+			else if (*url == '+') {
+				sout[n++] = 32;
+				url++;
+			}
 			else
 				sout[n++] = *url++;
+		}
+		sout[n] = 0;
+		return n;
+	}
+
+	inline  int utf82url(const char* url, char sout[], int noutsize)
+	{
+		int n = 0;
+		unsigned char h, l, *p = (unsigned char*)url;
+		while (*p && n < noutsize - 3) {
+			if (*p == '\x20') {
+				sout[n++] = '+';
+				p++;
+			}
+			else if (*p & 0x80) {
+				sout[n++] = '%';
+				h = (*p & 0xF0) >> 4;
+				l = *p & 0x0F;
+				if (h >= 10)
+					sout[n++] = 'A' + h - 10;
+				else
+					sout[n++] = '0' + h;
+				if (l >= 10)
+					sout[n++] = 'A' + l - 10;
+				else
+					sout[n++] = '0' + l;
+				p++;
+			}
+			else
+				sout[n++] = (char)*p++;
 		}
 		sout[n] = 0;
 		return n;
@@ -884,6 +918,6 @@ namespace ec
 			pd[i] ^= (umask >> ((i % 4) * 8)) & 0xFF;
 	}
 
-};//namespace ec
+	};//namespace ec
 #endif //C_STR_H
 
