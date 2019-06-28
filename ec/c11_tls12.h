@@ -216,7 +216,7 @@ namespace ec
 			unsigned char sout[1024 * 20], iv[AES_BLOCK_SIZE], *pkey = _key_sw, *pkmac = _key_swmac;
 			AES_KEY aes_d;
 			int nkeybit = 128;
-			if (_cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA256)
+			if (_cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA256 || _cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA)
 				nkeybit = 256;
 
 			if (_bserver)
@@ -304,7 +304,7 @@ namespace ec
 
 				AES_KEY aes_e;
 				int nkeybit = 128;
-				if (_cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA256)
+				if (_cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA256 || _cipher_suite == TLS_RSA_WITH_AES_256_CBC_SHA)
 					nkeybit = 256;
 				if (AES_set_encrypt_key(pkeyw, nkeybit, &aes_e) < 0)
 					return -1;
