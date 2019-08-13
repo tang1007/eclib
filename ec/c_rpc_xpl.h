@@ -799,7 +799,7 @@ namespace ec
 				if (nr != 0) //错误
 				{
 					sret = "onconnect,%d,error!";
-					MakePkg(sret, strlen(sret), rpcmsg_sh, rpccomp_none, seqno, NULL, pout);
+					MakePkg(sret, strlen(sret), rpcmsg_sh, rpccomp_none, seqno, NULL, pout);					
 					return nr;
 				}
 				char sinfo[44];
