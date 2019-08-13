@@ -128,8 +128,10 @@ namespace ec
 					OnConnect(evt.ucid, sip);
 				}
 				else if (XPOLL_EVT_ST_OK == evt.status) {
-					if (evt.pdata)
-						OnReadBytes(evt.ucid, evt.pdata, evt.ubytes);
+					if (evt.pdata){
+						if (!OnReadBytes(evt.ucid, evt.pdata, evt.ubytes)) 
+							_ppoll->post_msg(evt.ucid, nullptr, 0);// disconnect
+					}
 				}
 				else if (XPOLL_EVT_ST_ERR == evt.status || XPOLL_EVT_ST_CLOSE == evt.status) {
 					OnClientDisconnect(evt.ucid, 0, 0);
