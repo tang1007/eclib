@@ -1124,7 +1124,7 @@ namespace ec
 			if (_plog) {
 				ec::Array<char, 1024> ao;
 				char stmp[32];
-				for (i = 0; i < cipherlen && i < 32; i += 2) {
+				for (i = 0; i < cipherlen && i < 64; i += 2) {
 					snprintf(stmp, sizeof(stmp), "(%02X,%02X) ", pch[i], pch[i + 1]);
 					ao.add(stmp, strlen(stmp));
 				}

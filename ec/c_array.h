@@ -96,7 +96,10 @@ namespace ec {
 		{
 			return _pbuf[pos];
 		}
-
+		inline value_type valat(size_type pos)
+		{
+			return _pbuf[pos];
+		}
 		inline value_type* data()
 		{
 			return _pbuf;
