@@ -33,7 +33,8 @@ limitations under the License.
 #include <algorithm>
 #include <functional>
 #endif
-namespace ec {
+namespace ec
+{
 	template<class _Ty>
 	class tArray
 	{
@@ -41,7 +42,8 @@ namespace ec {
 		typedef size_t	size_type;
 		typedef _Ty	 value_type;
 		typedef _Ty* iterator;
-		tArray(size_type ugrownsize) {
+		tArray(size_type ugrownsize)
+		{
 			_pbuf = 0;
 			_usize = 0;
 			_ubufsize = 0;
@@ -57,10 +59,13 @@ namespace ec {
 			set_grow(ugrownsize);
 			add(pval, size);
 		};
-		~tArray() {
-			if (_pbuf)
-			{
+		~tArray()
+		{
+			if (_pbuf) {
 				free(_pbuf);
+				_pbuf = 0;
+				_usize = 0;
+				_ubufsize = 0;
 			}
 		};
 	protected:
@@ -104,10 +109,12 @@ namespace ec {
 		{
 			return _pbuf;
 		}
-		inline size_type size() {
+		inline size_type size()
+		{
 			return _usize;
 		}
-		inline void clear() {
+		inline void clear()
+		{
 			_usize = 0;
 		}
 		inline void clear(size_type shrinksize)
@@ -119,8 +126,7 @@ namespace ec {
 		{
 			if (!_pbuf || _ubufsize <= size)
 				return;
-			if (!size && !_usize)
-			{
+			if (!size && !_usize) {
 				free(_pbuf);
 				_pbuf = 0;
 				_ubufsize = 0;
@@ -137,7 +143,8 @@ namespace ec {
 			_pbuf = pnew;
 			_ubufsize = size;
 		}
-		inline size_type capacity() {
+		inline size_type capacity()
+		{
 			return _ubufsize;
 		}
 		bool add(const value_type &obj)
@@ -152,8 +159,7 @@ namespace ec {
 		{
 			if (!_grown(size))
 				return false;
-			for (size_type i = 0; i < size; i++)
-			{
+			for (size_type i = 0; i < size; i++) {
 				*(_pbuf + _usize) = obj;
 				_usize++;
 			}
@@ -225,12 +231,11 @@ namespace ec {
 			_usize += usize;
 			return true;
 		}
-		bool replace(size_type pos, size_type rsize, const value_type *pbuf, size_type usize) 
+		bool replace(size_type pos, size_type rsize, const value_type *pbuf, size_type usize)
 		{
 			if (!rsize)
 				return insert(pos, pbuf, usize);  // insert
-			if (!pbuf || !usize) //delete
-			{
+			if (!pbuf || !usize) { //delete
 				if (pos + rsize >= _usize) {
 					_usize = pos;
 					return true;
@@ -241,8 +246,7 @@ namespace ec {
 			}
 			if (pos >= _usize) // add
 				return add(pbuf, usize);
-			if (pos + rsize >= _usize)//outof end
-			{
+			if (pos + rsize >= _usize) { //outof end
 				_usize = pos;
 				return add(pbuf, usize);
 			}
@@ -256,7 +260,7 @@ namespace ec {
 			_usize = _usize + usize - rsize;
 			return true;
 		}
-		void erase(size_type pos, size_type size = 1) 
+		void erase(size_type pos, size_type size = 1)
 		{
 			if (!_pbuf || pos >= _usize || !size)
 				return;
@@ -266,7 +270,7 @@ namespace ec {
 				memmove(_pbuf + pos, _pbuf + pos + size, (_usize - (pos + size)) * sizeof(value_type));
 				_usize -= size;
 			}
-		}		
+		}
 #if (0 != USE_ECLIB_C11)
 		inline void sort(bool(*cmp)(const value_type& v1, const value_type& v2)) noexcept
 		{
@@ -307,11 +311,11 @@ namespace ec {
 		};
 		inline bool Add(value_type obj)
 		{
-			return add(obj);			
+			return add(obj);
 		}
 		inline bool Add(const value_type *pbuf, size_type usize = 1)
 		{
-			return add(pbuf, usize);			
+			return add(pbuf, usize);
 		};
 		value_type*	GetAt(size_type pos)
 		{
@@ -319,20 +323,24 @@ namespace ec {
 				return &_pbuf[pos];
 			return 0;
 		}
-		void SetGrowSize(size_type ugrowsize) {
+		void SetGrowSize(size_type ugrowsize)
+		{
 			_ugrown = ugrowsize;
 			if (_ugrown % 4)
 				_ugrown += 4 - (_ugrown % 4);
 			if (_ugrown > max_size())
 				_ugrown = max_size();
 		};
-		inline void set_grow(size_type ugrowsize) {
+		inline void set_grow(size_type ugrowsize)
+		{
 			SetGrowSize(ugrowsize);
 		}
-		inline void	ClearData() {
+		inline void	ClearData()
+		{
 			_usize = 0;
 		};
-		bool DeleteAt(size_type pos, value_type& item) {
+		bool DeleteAt(size_type pos, value_type& item)
+		{
 			if (!_pbuf || pos >= _usize)
 				return false;
 			item = _pbuf[pos];
@@ -341,27 +349,27 @@ namespace ec {
 			_usize--;
 			return true;
 		}
-		inline void LeftMove(size_type  n) 
+		inline void LeftMove(size_type  n)
 		{
-			erase(0, n);			
-		};		
+			erase(0, n);
+		};
 		inline void  ClearAndFree(size_type sizemin)//clear data, if _ubufsize > sizemin free _pbuf
 		{
 			clear();
 			if (capacity() > sizemin)
 				shrink(0);
-		}		
+		}
 		inline void ReduceMem(size_type itemsize)//shrink buffer to itemsize,keep data
 		{
 			shrink(itemsize);
 		}
 		inline bool InsertAt(size_type pos, const value_type *pbuf, size_type usize)
 		{
-			return insert(pos, pbuf, usize);			
+			return insert(pos, pbuf, usize);
 		}
 		inline bool Replace(size_type pos, size_type rsize, const value_type *pbuf, size_type usize)
 		{
-			return replace(pos, rsize, pbuf, usize);			
+			return replace(pos, rsize, pbuf, usize);
 		}
 		inline bool Delete(size_type pos, size_type rsize)
 		{
